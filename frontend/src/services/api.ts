@@ -1885,6 +1885,35 @@ export interface StudentSupportTicketItem {
     updatedAt: string;
 }
 
+export interface AdminActionableAlertItem {
+    _id: string;
+    title: string;
+    message: string;
+    category: 'general' | 'exam' | 'update';
+    publishAt: string;
+    createdAt: string;
+    linkUrl?: string;
+    isRead: boolean;
+    targetRole?: 'student' | 'admin' | 'moderator' | 'all';
+}
+
+export interface AdminProfileUpdateRequestItem {
+    _id: string;
+    status: 'pending' | 'approved' | 'rejected';
+    requested_changes: Record<string, unknown>;
+    currentValues: Record<string, unknown>;
+    admin_feedback?: string;
+    createdAt: string;
+    updatedAt: string;
+    reviewed_at?: string | null;
+    student_id?: {
+        _id: string;
+        username?: string;
+        email?: string;
+        full_name?: string;
+    } | string;
+}
+
 export interface AdminNotificationItem {
     _id: string;
     title: string;
@@ -2420,8 +2449,12 @@ export const getStudentMeResources = (params: { category?: string; q?: string } 
     api.get<StudentHubResourcesResponse>('/students/me/resources', { params });
 export const getStudentNotices = () => api.get<{ items: StudentNoticeItem[] }>('/student/notices');
 export const getStudentSupportTickets = () => api.get<{ items: StudentSupportTicketItem[] }>('/student/support-tickets');
+export const getStudentSupportTicket = (id: string) =>
+    api.get<{ item: StudentSupportTicketItem }>(`/student/support-tickets/${id}`);
 export const createStudentSupportTicket = (data: { subject: string; message: string; priority?: 'low' | 'medium' | 'high' | 'urgent' }) =>
     api.post<{ item: StudentSupportTicketItem; message: string }>('/student/support-tickets', data);
+export const replyStudentSupportTicket = (id: string, message: string) =>
+    api.post<{ item: StudentSupportTicketItem; message: string }>(`/student/support-tickets/${id}/reply`, { message });
 
 /* ── Student Dashboard Full (Premium) ── */
 export const getStudentDashboardFull = () => api.get<StudentDashboardFullResponse>('/student/dashboard-full');
@@ -2976,7 +3009,12 @@ export const adminGetStudents = (params: AdminStudentFilter) => api.get<{
     summary: Record<string, number>;
 }>(`/${ADMIN_PATH}/students`, { params });
 
-export const adminExportStudents = (params?: AdminStudentFilter) => api.get<any[]>(`/${ADMIN_PATH}/export-students`, { params });
+export const adminExportStudents = (
+    params: (AdminStudentFilter & { format?: 'csv' | 'xlsx' }) | undefined = undefined
+) => api.get(`/${ADMIN_PATH}/export-students`, {
+    params: { ...params, format: params?.format || 'xlsx' },
+    responseType: 'blob',
+});
 
 export const adminCreateStudent = (data: Record<string, unknown>) =>
     api.post(`/${ADMIN_PATH}/students`, data);
@@ -2996,17 +3034,13 @@ export const adminGetStudentExams = (id: string) =>
 export const adminGetStudentGroups = () =>
     api.get<{ items: AdminStudentGroup[]; lastUpdatedAt: string }>(`/${ADMIN_PATH}/student-groups`);
 
-export const adminExportStudentGroups = () =>
-    api.get<Array<{
-        name: string;
-        slug: string;
-        batchTag?: string;
-        description?: string;
-        isActive: boolean;
-        studentCount: number;
-        createdAt?: string;
-        updatedAt?: string;
-    }>>(`/${ADMIN_PATH}/student-groups/export`);
+export const adminExportStudentGroups = (
+    params: { q?: string; format?: 'csv' | 'xlsx' } = {}
+) =>
+    api.get(`/${ADMIN_PATH}/student-groups/export`, {
+        params: { ...params, format: params.format || 'xlsx' },
+        responseType: 'blob',
+    });
 
 export const adminImportStudentGroups = (formData: FormData) =>
     api.post<{
@@ -3400,6 +3434,15 @@ export const adminUpdateSupportTicketStatus = (id: string, data: {
 export const adminReplySupportTicket = (id: string, message: string) =>
     api.post<{ item: AdminSupportTicketItem; message: string }>(`/${ADMIN_PATH}/support-tickets/${id}/reply`, { message });
 
+export const adminGetActionableAlerts = (params: { page?: number; limit?: number } = {}) =>
+    api.get<{ items: AdminActionableAlertItem[]; total: number; unreadCount: number; page: number; pages: number }>(
+        `/${ADMIN_PATH}/alerts/feed`,
+        { params },
+    );
+
+export const adminMarkActionableAlertsRead = (ids?: string[]) =>
+    api.post<{ updated: number }>(`/${ADMIN_PATH}/alerts/mark-read`, ids?.length ? { ids } : {});
+
 export const adminRunBackup = (data?: { type?: 'full' | 'incremental'; storage?: 'local' | 's3' | 'both' }) =>
     api.post<{ item: AdminBackupJobItem; message: string }>(`/${ADMIN_PATH}/backups/run`, data || {});
 
@@ -3411,6 +3454,9 @@ export const adminRestoreBackup = (id: string, confirmation: string) =>
         `/${ADMIN_PATH}/backups/${id}/restore`,
         { confirmation },
     );
+
+export const adminDownloadBackup = (id: string) =>
+    api.get(`/${ADMIN_PATH}/backups/${id}/download`, { responseType: 'blob' });
 
 export const getAdminBackupDownloadUrl = (id: string) => resolveApiUrl(`/${ADMIN_PATH}/backups/${id}/download`);
 
@@ -3844,7 +3890,7 @@ export const adminNewsV2ExportNews = (
         : options;
     return api.get(`/${ADMIN_PATH}/news/export`, {
         params: {
-            type: resolved.format || 'xlsx',
+            format: resolved.format || 'xlsx',
             status: resolved.status || undefined,
             dateRange: resolved.dateRange || undefined,
             sourceId: resolved.sourceId || undefined,
@@ -3970,6 +4016,8 @@ export const getResourceBySlug = (slug: string) =>
 /* â”€â”€ Admin â€” Contact Messages â”€â”€ */
 export const adminGetContactMessages = (params: Record<string, string | number> = {}) =>
     api.get(`/${ADMIN_PATH}/contact-messages`, { params });
+export const adminUpdateContactMessage = (id: string, data: { isRead?: boolean; isReplied?: boolean }) =>
+    api.patch<{ item: Record<string, unknown>; message: string }>(`/${ADMIN_PATH}/contact-messages/${id}`, data);
 export const adminDeleteContactMessage = (id: string) =>
     api.delete(`/${ADMIN_PATH}/contact-messages/${id}`);
 
@@ -3981,22 +4029,28 @@ export const adminUpdateSettings = (data: Record<string, unknown>) =>
 
 
 /* â”€â”€ Admin â€” Data Exports â”€â”€ */
-export const adminExportNews = () =>
-    api.get(`/${ADMIN_PATH}/export-news`);
-export const adminExportSubscriptionPlans = (type: 'csv' | 'xlsx' = 'xlsx') =>
+export const adminExportNews = (format: 'csv' | 'xlsx' = 'xlsx') =>
+    api.get(`/${ADMIN_PATH}/news/export`, {
+        params: { format },
+        responseType: 'blob',
+    });
+export const adminExportSubscriptionPlans = (format: 'csv' | 'xlsx' = 'xlsx') =>
     api.get(`/${ADMIN_PATH}/subscription-plans/export`, {
-        params: { type },
+        params: { format },
         responseType: 'blob',
     });
 export const adminExportSubscriptionPlansLegacyJson = () =>
     api.get(`/${ADMIN_PATH}/export-subscription-plans`);
-export const adminExportSubscriptions = (type: 'csv' | 'xlsx' = 'xlsx', status?: UserSubscriptionStatus['status']) =>
+export const adminExportSubscriptions = (format: 'csv' | 'xlsx' = 'xlsx', status?: UserSubscriptionStatus['status']) =>
     api.get(`/${ADMIN_PATH}/subscriptions/export`, {
-        params: { type, ...(status ? { status } : {}) },
+        params: { format, ...(status ? { status } : {}) },
         responseType: 'blob',
     });
-export const adminExportUniversities = () =>
-    api.get(`/${ADMIN_PATH}/export-universities`);
+export const adminExportUniversities = (params: Record<string, string | number> = {}) =>
+    api.get(`/${ADMIN_PATH}/universities/export`, {
+        params: { ...params, format: params['format'] || 'xlsx' },
+        responseType: 'blob',
+    });
 export const adminExportStudentExamHistory = (format: 'csv' | 'xlsx' = 'xlsx') =>
     api.get(`/${ADMIN_PATH}/export/student-exam-history`, { params: { format }, responseType: 'blob' });
 
@@ -4194,7 +4248,8 @@ export const uploadStudentDocument = (data: FormData) => api.post('/student/prof
 export const getStudentApplications = () => api.get('/student/applications');
 export const createStudentApplication = (data: { university_id: string, program: string }) => api.post('/student/applications', data);
 
-export const adminGetProfileUpdateRequests = (params: any = {}) => api.get(`/${ADMIN_PATH}/students/profile-requests`, { params });
+export const adminGetProfileUpdateRequests = (params: any = {}) =>
+    api.get<{ items: AdminProfileUpdateRequestItem[] }>(`/${ADMIN_PATH}/students/profile-requests`, { params });
 export const adminApproveProfileUpdateRequest = (id: string) => api.post(`/${ADMIN_PATH}/students/profile-requests/${id}/approve`);
 export const adminRejectProfileUpdateRequest = (id: string, feedback?: string) => api.post(`/${ADMIN_PATH}/students/profile-requests/${id}/reject`, { feedback });
 

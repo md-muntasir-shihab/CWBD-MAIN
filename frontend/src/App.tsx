@@ -67,8 +67,6 @@ import {
     AdminUniversitiesPage,
     AdminExamsPage,
     AdminQuestionBankPage,
-    AdminStudentsPage,
-    AdminStudentGroupsPage,
     AdminResourcesPage,
     AdminSupportCenterPage,
     AdminStudentsMgmtPage,
@@ -78,11 +76,11 @@ import {
     AdminStudentCrmTimelinePage,
     AdminStudentWeakTopicsPage,
     AdminStudentMgmtDetailPage,
-    AdminStudentDetailPage,
     AdminStudentGroupsV2Page,
     AdminStudentGroupDetailPage,
     AdminNotificationCenterPage,
     AdminNotificationCenterEmbeddedPage,
+    AdminProfileRequestsPage,
     AdminStudentSettingsPage,
     AdminStudentSettingsEmbeddedPage,
     AdminContactPage,
@@ -127,6 +125,7 @@ import StudentPayments from './pages/student/StudentPayments';
 import StudentNotifications from './pages/student/StudentNotifications';
 import StudentResources from './pages/student/StudentResources';
 import StudentSupport from './pages/student/StudentSupport';
+import StudentSupportThread from './pages/student/StudentSupportThread';
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -329,8 +328,8 @@ export default function App() {
                                 <Route path={ADMIN_PATHS.exams} element={<AdminExamsPage />} />
                                 <Route path={ADMIN_PATHS.questionBank} element={<AdminQuestionBankPage />} />
                                 <Route path={adminUi('question-bank/*')} element={<AdminQuestionBankPage />} />
-                                <Route path={ADMIN_PATHS.students} element={<AdminStudentsPage />} />
-                                <Route path={ADMIN_PATHS.studentGroups} element={<AdminStudentGroupsPage />} />
+                                <Route path={ADMIN_PATHS.students} element={<Navigate to={adminUi('student-management/list')} replace />} />
+                                <Route path={ADMIN_PATHS.studentGroups} element={<Navigate to={adminUi('student-management/groups')} replace />} />
                                 <Route path={adminUi('subscription-plans')} element={<AdminSubscriptionPlansPage />} />
                                 <Route path={adminUi('subscription-plans/new')} element={<AdminSubscriptionPlansPage />} />
                                 <Route path={adminUi('subscription-plans/:id/edit')} element={<AdminSubscriptionPlansPage />} />
@@ -386,14 +385,15 @@ export default function App() {
                                     <Route path="audiences" element={<AdminStudentAudiencesPage />} />
                                     <Route path="crm-timeline" element={<AdminStudentCrmTimelinePage />} />
                                     <Route path="weak-topics" element={<AdminStudentWeakTopicsPage />} />
+                                    <Route path="profile-requests" element={<AdminProfileRequestsPage />} />
                                     <Route path="notifications" element={<AdminNotificationCenterEmbeddedPage />} />
                                     <Route path="settings" element={<AdminStudentSettingsEmbeddedPage />} />
                                     <Route path="students/:id" element={<AdminStudentMgmtDetailPage />} />
                                 </Route>
                                 {/* New Student Management System v2 */}
-                                <Route path={adminUi('students-v2')} element={<AdminStudentsMgmtPage />} />
-                                <Route path={adminUi('students-v2/:id')} element={<AdminStudentDetailPage />} />
-                                <Route path={adminUi('student-groups-v2')} element={<AdminStudentGroupsV2Page />} />
+                                <Route path={adminUi('students-v2')} element={<Navigate to={adminUi('student-management/list')} replace />} />
+                                <Route path={adminUi('students-v2/:id')} element={<Navigate to={adminUi('student-management/list')} replace />} />
+                                <Route path={adminUi('student-groups-v2')} element={<Navigate to={adminUi('student-management/groups')} replace />} />
                                 <Route path={adminUi('notification-center')} element={<AdminNotificationCenterPage />} />
                                 {/* Campaign Platform */}
                                 <Route path={ADMIN_PATHS.notificationTestSend} element={<NotificationTestSendPage />} />
@@ -451,6 +451,7 @@ export default function App() {
                                     <Route path="/notifications" element={<StudentNotifications />} />
                                     <Route path="/student/resources" element={<StudentResources />} />
                                     <Route path="/support" element={<StudentSupport />} />
+                                    <Route path="/support/:ticketId" element={<StudentSupportThread />} />
                                     <Route path="/student/dashboard" element={<StudentDashboard />} />
                                     <Route path="/student/profile" element={<StudentProfile />} />
                                     <Route path="/student/applications" element={<StudentApplications />} />

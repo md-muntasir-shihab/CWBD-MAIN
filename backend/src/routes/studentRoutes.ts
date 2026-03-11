@@ -17,7 +17,13 @@ import {
     getStudentUpcomingExams,
     getStudentDashboardStream,
 } from '../controllers/studentDashboardController';
-import { studentCreateSupportTicket, studentGetNotices, studentGetSupportTickets } from '../controllers/adminSupportController';
+import {
+    studentCreateSupportTicket,
+    studentGetNotices,
+    studentGetSupportTicketById,
+    studentGetSupportTickets,
+    studentReplySupportTicket,
+} from '../controllers/adminSupportController';
 import {
     getStudentMe,
     getStudentMeExamById,
@@ -65,6 +71,8 @@ router.get('/dashboard/stream', getStudentDashboardStream);
 router.get('/notices', studentGetNotices);
 router.post('/support-tickets', studentCreateSupportTicket);
 router.get('/support-tickets', studentGetSupportTickets);
+router.get('/support-tickets/:id', studentGetSupportTicketById);
+router.post('/support-tickets/:id/reply', studentReplySupportTicket);
 router.get('/me', getStudentMe);
 router.get('/me/exams', getStudentMeExams);
 router.get('/me/exams/:examId', getStudentMeExamById);

@@ -22,7 +22,7 @@ export default function SupportShortcuts({ support }: Props) {
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 mb-3">
-                    <Link to="/support/new" className="flex items-center gap-2 p-2.5 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 hover:bg-indigo-100 dark:hover:bg-indigo-500/15 transition">
+                    <Link to="/support" className="flex items-center gap-2 p-2.5 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 hover:bg-indigo-100 dark:hover:bg-indigo-500/15 transition">
                         <PlusCircle className="w-4 h-4 text-indigo-500" />
                         <span className="text-xs font-medium text-indigo-700 dark:text-indigo-300">New Ticket</span>
                     </Link>

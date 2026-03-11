@@ -16,7 +16,7 @@ import { AdminExamsPage as StandaloneExamsPage } from './admin/exams/AdminExamsP
 // StudentsListPage imported via StudentManagementListPage
 import StudentDetailPage from './admin/students/StudentDetailPage';
 import StudentGroupsPageV2 from './admin/students/StudentGroupsPage';
-import NotificationCenterPage from './admin/notifications/NotificationCenterPage';
+import AdminActionAlertsPage from './admin/notifications/AdminActionAlertsPage';
 import StudentSettingsPage from './admin/students/StudentSettingsPage';
 import StudentManagementListPage from './admin/students/StudentManagementListPage';
 import StudentCreatePage from './admin/students/StudentCreatePage';
@@ -26,6 +26,7 @@ import StudentCrmTimelinePage from './admin/students/StudentCrmTimelinePage';
 import StudentWeakTopicsPage from './admin/students/StudentWeakTopicsPage';
 import StudentManagementDetailPage from './admin/students/StudentManagementDetailPage';
 import StudentGroupDetailPage from './admin/students/StudentGroupDetailPage';
+import ProfileUpdateRequestsPage from './admin/students/ProfileUpdateRequestsPage';
 import SubscriptionsV2Page from './admin/subscriptions/SubscriptionsV2Page';
 
 export function AdminDashboardPage() {
@@ -144,6 +145,10 @@ export function AdminStudentWeakTopicsPage() {
     return <StudentWeakTopicsPage />;
 }
 
+export function AdminProfileRequestsPage() {
+    return <ProfileUpdateRequestsPage />;
+}
+
 export function AdminStudentMgmtDetailPage() {
     return <StudentManagementDetailPage />;
 }
@@ -161,11 +166,11 @@ export function AdminStudentGroupDetailPage() {
 }
 
 export function AdminNotificationCenterPage() {
-    return <NotificationCenterPage />;
+    return <AdminActionAlertsPage />;
 }
 
 export function AdminNotificationCenterEmbeddedPage() {
-    return <NotificationCenterPage noShell />;
+    return <AdminActionAlertsPage noShell />;
 }
 
 export function AdminStudentSettingsPage() {

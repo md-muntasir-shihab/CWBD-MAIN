@@ -2,7 +2,7 @@
  * React Query hooks for the Universities module.
  * Supports optional mock-API mode via VITE_USE_MOCK_API.
  */
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   getUniversities,
   getUniversityBySlug,
@@ -89,7 +89,6 @@ export function useUniversities(params: UniversityListParams) {
     },
     staleTime: 60_000,
     refetchInterval: 90_000,
-    placeholderData: keepPreviousData,
   });
 }
 

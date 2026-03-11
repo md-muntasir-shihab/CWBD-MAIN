@@ -8,6 +8,7 @@ import { getStudentDashboardHeader } from '../services/studentDashboardService';
 import { broadcastStudentDashboardEvent } from '../realtime/studentDashboardStream';
 import StudentDashboardConfig from '../models/StudentDashboardConfig';
 import ExamResult from '../models/ExamResult';
+import { createAdminAlert } from '../services/adminAlertService';
 import { computeStudentProfileScore } from '../services/studentProfileScoreService';
 
 // Ensure the profile exists, if not create a default one
@@ -159,6 +160,7 @@ export const getStudentProfile = async (req: AuthRequest, res: ExpressResponse) 
         );
         const dashboardHeader = await getStudentDashboardHeader(req.user._id);
         const celebration = await resolveCelebration(req.user._id);
+        const pendingRequest = await ProfileUpdateRequest.exists({ student_id: req.user._id, status: 'pending' });
         res.json({
             ...profile.toObject(),
             date_of_birth: profile.dob,
@@ -177,6 +179,7 @@ export const getStudentProfile = async (req: AuthRequest, res: ExpressResponse) 
             overall_rank: dashboardHeader.overallRank,
             profile_completion_threshold: dashboardHeader.profileCompletionThreshold,
             profile_eligible_for_exam: dashboardHeader.isProfileEligible,
+            pendingRequest: Boolean(pendingRequest),
             celebration,
         });
     } catch (err: any) {
@@ -291,9 +294,17 @@ export const updateStudentProfile = async (req: AuthRequest, res: ExpressRespons
             // Delete existing pending request if any
             await ProfileUpdateRequest.deleteMany({ student_id: req.user._id, status: 'pending' });
 
-            await ProfileUpdateRequest.create({
+            const request = await ProfileUpdateRequest.create({
                 student_id: req.user._id,
                 requested_changes: requestedUpdates
+            });
+            await createAdminAlert({
+                title: 'Profile approval required',
+                message: `A student submitted ${Object.keys(requestedUpdates).length} profile change${Object.keys(requestedUpdates).length > 1 ? 's' : ''} for review.`,
+                linkUrl: `/__cw_admin__/student-management/profile-requests?requestId=${String(request._id)}`,
+                category: 'update',
+                targetRole: 'admin',
+                createdBy: req.user._id,
             });
             requestMsg = ' Some changes require admin approval and have been sent for review.';
         }

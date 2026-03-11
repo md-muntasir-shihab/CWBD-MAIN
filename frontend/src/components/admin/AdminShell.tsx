@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Bell, ChevronLeft, ChevronRight, LogOut, Menu, Shield, X } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../hooks/useAuth';
 import { useModuleAccess } from '../../hooks/useModuleAccess';
 import ThemeSwitchPro from '../ui/ThemeSwitchPro';
 import { ADMIN_MENU_ITEMS, ADMIN_PATHS, isAdminPathActive, type AdminMenuItem } from '../../routes/adminPaths';
+import { adminGetActionableAlerts, adminMarkActionableAlertsRead } from '../../services/api';
 
 type AdminShellProps = {
     title: string;
@@ -13,14 +15,32 @@ type AdminShellProps = {
 };
 
 export default function AdminShell({ title, description, children }: AdminShellProps) {
+    const queryClient = useQueryClient();
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [collapsed, setCollapsed] = useState(false);
     const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
+    const [notifOpen, setNotifOpen] = useState(false);
+    const notifRef = useRef<HTMLDivElement>(null);
 
     const { user, logout } = useAuth();
     const { hasAnyAccess } = useModuleAccess();
     const location = useLocation();
     const navigate = useNavigate();
+
+    const alertsQuery = useQuery({
+        queryKey: ['admin', 'actionable-alerts', 'shell'],
+        queryFn: async () => (await adminGetActionableAlerts({ page: 1, limit: 8 })).data,
+        staleTime: 30_000,
+    });
+    const markReadMutation = useMutation({
+        mutationFn: async (ids?: string[]) => (await adminMarkActionableAlertsRead(ids)).data,
+        onSuccess: async () => {
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['admin', 'actionable-alerts'] }),
+                queryClient.invalidateQueries({ queryKey: ['admin', 'actionable-alerts', 'shell'] }),
+            ]);
+        },
+    });
 
     const visibleMenuItems = useMemo(() => {
         return ADMIN_MENU_ITEMS.filter((item) => {
@@ -54,6 +74,16 @@ export default function AdminShell({ title, description, children }: AdminShellP
         });
     }, [location.pathname]);
 
+    useEffect(() => {
+        const handleOutside = (event: MouseEvent) => {
+            if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+                setNotifOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleOutside);
+        return () => document.removeEventListener('mousedown', handleOutside);
+    }, []);
+
     const handleLogout = async () => {
         await logout();
         navigate('/__cw_admin__/login');
@@ -61,6 +91,12 @@ export default function AdminShell({ title, description, children }: AdminShellP
 
     const toggleMenu = (key: string) => {
         setExpandedMenus((prev) => ({ ...prev, [key]: !prev[key] }));
+    };
+
+    const openAlert = async (id: string, linkUrl?: string) => {
+        await markReadMutation.mutateAsync([id]);
+        setNotifOpen(false);
+        navigate(linkUrl || ADMIN_PATHS.notificationCenter);
     };
 
     const renderSidebarItem = (item: AdminMenuItem) => {
@@ -166,9 +202,9 @@ export default function AdminShell({ title, description, children }: AdminShellP
                         bg-white/95 dark:bg-gradient-to-b dark:from-slate-950 dark:to-slate-900/80
                         border-r border-slate-200 dark:border-indigo-500/10
                         transition-all duration-300 ease-in-out
-                        ${collapsed ? 'w-64 lg:w-[72px]' : 'w-64'}
-                        ${drawerOpen ? 'translate-x-0' : '-translate-x-full'}
-                        lg:translate-x-0 lg:static
+                        w-64 ${collapsed ? 'lg:w-[72px]' : ''}
+                        ${drawerOpen ? 'translate-x-0 visible pointer-events-auto' : '-translate-x-full invisible pointer-events-none'}
+                        lg:translate-x-0 lg:visible lg:pointer-events-auto lg:sticky lg:top-0 lg:h-screen lg:flex-shrink-0
                     `}
                 >
                     {/* Logo / Brand */}
@@ -245,7 +281,7 @@ export default function AdminShell({ title, description, children }: AdminShellP
                 </aside>
 
                 {/* Main content */}
-                <main className="min-w-0 flex-1">
+                <main className="min-w-0 flex-1 overflow-x-hidden">
                     {/* Header */}
                     <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
                         <div className="flex h-16 items-center justify-between gap-2 px-4 sm:px-6">
@@ -265,13 +301,57 @@ export default function AdminShell({ title, description, children }: AdminShellP
                             </div>
                             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
                                 <ThemeSwitchPro />
-                                <button
-                                    type="button"
-                                    aria-label="Notifications"
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400"
-                                >
-                                    <Bell className="h-4 w-4" />
-                                </button>
+                                <div ref={notifRef} className="relative">
+                                    <button
+                                        type="button"
+                                        aria-label="Notifications"
+                                        onClick={() => setNotifOpen((prev) => !prev)}
+                                        className="relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400"
+                                    >
+                                        <Bell className="h-4 w-4" />
+                                        {Number(alertsQuery.data?.unreadCount || 0) > 0 && (
+                                            <span className="absolute -right-1 -top-1 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+                                                {Number(alertsQuery.data?.unreadCount || 0)}
+                                            </span>
+                                        )}
+                                    </button>
+                                    {notifOpen && (
+                                        <div className="absolute right-0 top-11 z-30 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+                                            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 text-sm font-semibold dark:border-slate-700">
+                                                <span>Admin Alerts</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => navigate(ADMIN_PATHS.notificationCenter)}
+                                                    className="text-xs text-indigo-600 dark:text-indigo-300"
+                                                >
+                                                    Open center
+                                                </button>
+                                            </div>
+                                            <div className="max-h-80 overflow-y-auto">
+                                                {(alertsQuery.data?.items || []).length === 0 ? (
+                                                    <div className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">
+                                                        No actionable alerts right now.
+                                                    </div>
+                                                ) : (alertsQuery.data?.items || []).map((item) => (
+                                                    <button
+                                                        key={item._id}
+                                                        type="button"
+                                                        onClick={() => void openAlert(item._id, item.linkUrl)}
+                                                        className={`block w-full border-b border-slate-200 px-4 py-3 text-left transition hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800 ${
+                                                            item.isRead ? '' : 'bg-indigo-50/70 dark:bg-indigo-500/10'
+                                                        }`}
+                                                    >
+                                                        <p className="text-sm font-semibold text-slate-900 dark:text-white">{item.title}</p>
+                                                        <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{item.message}</p>
+                                                        <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                                                            {new Date(item.publishAt).toLocaleString()}
+                                                        </p>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                                 <button
                                     type="button"
                                     className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-2 py-1 text-xs dark:border-slate-700"

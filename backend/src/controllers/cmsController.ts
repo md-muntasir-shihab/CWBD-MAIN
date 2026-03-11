@@ -594,6 +594,29 @@ export async function adminDeleteContactMessage(req: Request, res: Response): Pr
     }
 }
 
+export async function adminUpdateContactMessage(req: Request, res: Response): Promise<void> {
+    try {
+        const update: Record<string, unknown> = {};
+        if ((req.body as Record<string, unknown>).isRead !== undefined) {
+            update.isRead = Boolean((req.body as Record<string, unknown>).isRead);
+        }
+        if ((req.body as Record<string, unknown>).isReplied !== undefined) {
+            update.isReplied = Boolean((req.body as Record<string, unknown>).isReplied);
+        }
+
+        const msg = await ContactMessage.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true }).lean();
+        if (!msg) {
+            res.status(404).json({ message: 'Message not found' });
+            return;
+        }
+
+        res.json({ item: msg, message: 'Contact message updated' });
+    } catch (err) {
+        console.error('adminUpdateContactMessage error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+}
+
 /* ═══════════════════════════════
    SITE SETTINGS
 ═══════════════════════════════ */

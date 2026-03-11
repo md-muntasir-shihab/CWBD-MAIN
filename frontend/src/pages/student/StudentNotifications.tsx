@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BellRing, CheckCheck } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { getStudentMeNotifications, markStudentMeNotificationsRead } from '../../services/api';
 
 type NotificationFilter = 'all' | 'exam' | 'payment' | 'system';
 
 export default function StudentNotifications() {
     const queryClient = useQueryClient();
+    const navigate = useNavigate();
     const [filter, setFilter] = useState<NotificationFilter>('all');
 
     const notificationsQuery = useQuery({
@@ -20,11 +22,22 @@ export default function StudentNotifications() {
             await queryClient.invalidateQueries({ queryKey: ['student-hub', 'notifications'] });
         },
     });
+    const markOneMutation = useMutation({
+        mutationFn: async (id: string) => (await markStudentMeNotificationsRead([id])).data,
+        onSuccess: async () => {
+            await queryClient.invalidateQueries({ queryKey: ['student-hub', 'notifications'] });
+        },
+    });
 
     const unreadCount = useMemo(
         () => Number(notificationsQuery.data?.unreadCount || 0),
         [notificationsQuery.data?.unreadCount]
     );
+
+    const openItem = async (id: string, linkUrl?: string) => {
+        await markOneMutation.mutateAsync(id);
+        if (linkUrl) navigate(linkUrl);
+    };
 
     return (
         <div className="space-y-5">
@@ -80,7 +93,10 @@ export default function StudentNotifications() {
                             <p className="text-sm text-slate-500">No notifications found.</p>
                         ) : (
                             (notificationsQuery.data?.items || []).map((item) => (
-                                <div key={item._id} className={`rounded-xl border p-4 ${item.isRead
+                                <button
+                                    key={item._id}
+                                    onClick={() => void openItem(item._id, item.linkUrl)}
+                                    className={`w-full rounded-xl border p-4 text-left ${item.isRead
                                     ? 'border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900'
                                     : 'border-indigo-300/50 dark:border-indigo-500/40 bg-indigo-50/60 dark:bg-indigo-500/10'
                                     }`}>
@@ -96,7 +112,7 @@ export default function StudentNotifications() {
                                     <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                                         {new Date(item.publishAt).toLocaleString()}
                                     </div>
-                                </div>
+                                </button>
                             ))
                         )}
                     </div>

@@ -3,7 +3,7 @@ import AdminGuardShell from '../AdminGuardShell';
 import { adminUi } from '../../../lib/appRoutes';
 import {
     UserCog, UserPlus, Import, ClipboardList, Target,
-    MessageSquare, TrendingDown, Bell, Settings,
+    MessageSquare, TrendingDown, Bell, Settings, CheckSquare,
 } from 'lucide-react';
 
 const TABS = [
@@ -14,6 +14,7 @@ const TABS = [
     { to: adminUi('student-management/audiences'), label: 'Audiences', icon: Target },
     { to: adminUi('student-management/crm-timeline'), label: 'CRM Timeline', icon: MessageSquare },
     { to: adminUi('student-management/weak-topics'), label: 'Weak Topics', icon: TrendingDown },
+    { to: adminUi('student-management/profile-requests'), label: 'Profile Requests', icon: CheckSquare },
     { to: adminUi('student-management/notifications'), label: 'Notifications', icon: Bell },
     { to: adminUi('student-management/settings'), label: 'Settings', icon: Settings },
 ] as const;

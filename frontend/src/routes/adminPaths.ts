@@ -51,6 +51,7 @@ export const ADMIN_PATHS = {
     studentMgmtAudiences: adminUi('student-management/audiences'),
     studentMgmtCrmTimeline: adminUi('student-management/crm-timeline'),
     studentMgmtWeakTopics: adminUi('student-management/weak-topics'),
+    studentMgmtProfileRequests: adminUi('student-management/profile-requests'),
     studentMgmtSettings: adminUi('student-management/settings'),
     studentMgmtDetail: adminUi('student-management/students'),  // /:id suffix added by router
     subscriptionsV2: adminUi('subscriptions-v2'),
@@ -230,6 +231,7 @@ export const ADMIN_MENU_ITEMS: AdminMenuItem[] = [
             { key: 'stu-audiences', label: 'Audiences', path: ADMIN_PATHS.studentMgmtAudiences, icon: Target },
             { key: 'stu-crm', label: 'CRM Timeline', path: ADMIN_PATHS.studentMgmtCrmTimeline, icon: MessageSquare },
             { key: 'stu-weak', label: 'Weak Topics', path: ADMIN_PATHS.studentMgmtWeakTopics, icon: TrendingDown },
+            { key: 'stu-profile-requests', label: 'Profile Requests', path: ADMIN_PATHS.studentMgmtProfileRequests, icon: ClipboardList },
             { key: 'stu-notif', label: 'Notification Center', path: ADMIN_PATHS.notificationCenter, icon: Bell },
             { key: 'stu-settings', label: 'Settings', path: ADMIN_PATHS.studentMgmtSettings, icon: Settings },
         ],
@@ -406,7 +408,7 @@ export function routeFromDashboardActionTab(tabId: string): string {
         case 'question-bank':
             return ADMIN_PATHS.questionBank;
         case 'student-management':
-            return ADMIN_PATHS.students;
+            return ADMIN_PATHS.studentMgmtList;
         case 'finance':
             return ADMIN_PATHS.financeDashboard;
         case 'support-tickets':

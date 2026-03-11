@@ -39,7 +39,8 @@ export default function UniversityBrowseShell({
     const categoryFromUrl = searchParams.get('category') || '';
 
     const [search, setSearch] = useState('');
-    const [selectedCategory, setSelectedCategory] = useState(fixedCategory || categoryFromUrl || 'all');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const [selectedCategory, setSelectedCategory] = useState(fixedCategory || categoryFromUrl || '');
     const [selectedCluster, setSelectedCluster] = useState(fixedCluster || '');
     const [sort, setSort] = useState<UniversityCardSort>('closing_soon');
     const [filterOpen, setFilterOpen] = useState(false);
@@ -50,6 +51,13 @@ export default function UniversityBrowseShell({
     const categories = useMemo(() => sortCategories(categoriesQuery.data || []), [categoriesQuery.data]);
     const defaultCategoryFromAdmin = String(homeSettingsQuery.data?.universityDashboard?.defaultCategory || '').trim();
     const showAllCategories = Boolean(homeSettingsQuery.data?.universityDashboard?.showAllCategories);
+
+    useEffect(() => {
+        const timeout = window.setTimeout(() => {
+            setDebouncedSearch(search);
+        }, 350);
+        return () => window.clearTimeout(timeout);
+    }, [search]);
 
     // Set initial category from fixed prop, URL, or admin default
     const initializedRef = useRef(false);
@@ -64,6 +72,10 @@ export default function UniversityBrowseShell({
         }
         if (fixedCategory) { setSelectedCategory(fixedCategory); return; }
         if (categoryFromUrl) {
+            if (categoryFromUrl.trim().toLowerCase() === 'all' && showAllCategories) {
+                setSelectedCategory('all');
+                return;
+            }
             const match = categories.find((c) => c.categoryName === categoryFromUrl);
             if (match) { setSelectedCategory(match.categoryName); return; }
         }
@@ -84,13 +96,20 @@ export default function UniversityBrowseShell({
     // Fallback if selected category doesn't exist
     useEffect(() => {
         if (fixedCategory || !categories.length) return;
-        const isAll = !selectedCategory || selectedCategory.trim().toLowerCase() === 'all';
-        if (isAll) return;
+        const normalizedCategory = selectedCategory.trim().toLowerCase();
+        if (!normalizedCategory) {
+            if (categories[0]) setSelectedCategory(categories[0].categoryName);
+            return;
+        }
+        if (normalizedCategory === 'all') {
+            if (!showAllCategories && categories[0]) setSelectedCategory(categories[0].categoryName);
+            return;
+        }
         const exists = categories.some((c) => c.categoryName === selectedCategory);
         if (!exists && categories[0]) setSelectedCategory(categories[0].categoryName);
-    }, [categories, selectedCategory, fixedCategory]);
+    }, [categories, selectedCategory, fixedCategory, showAllCategories]);
 
-    const activeCategory = fixedCategory || selectedCategory || 'all';
+    const activeCategory = fixedCategory || selectedCategory || '';
     const activeCategoryMeta = useMemo(
         () => categories.find((item) => item.categoryName === activeCategory) || null,
         [categories, activeCategory],
@@ -108,12 +127,22 @@ export default function UniversityBrowseShell({
     const universitiesQuery = useUniversities({
         category: activeCategory,
         clusterGroup: fixedCluster || selectedCluster || undefined,
-        q: search.trim() || undefined,
+        q: debouncedSearch.trim() || undefined,
         sort,
     });
 
     const mappedItems = useMemo(
-        () => universitiesQuery.data || [],
+        () => {
+            const seen = new Set<string>();
+            return (universitiesQuery.data || []).filter((item) => {
+                const candidate = item as unknown as { id?: string; _id?: string; slug?: string; title?: string };
+                const key = String(candidate.id || candidate._id || candidate.slug || candidate.title || '').trim();
+                if (!key) return true;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+        },
         [universitiesQuery.data],
     );
     const animationLevel = homeSettingsQuery.data?.ui?.animationLevel || 'minimal';

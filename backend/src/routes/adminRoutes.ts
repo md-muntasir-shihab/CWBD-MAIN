@@ -120,7 +120,7 @@ import {
     adminGetResources, adminCreateResource, adminUpdateResource, adminDeleteResource,
     adminToggleResourcePublish, adminToggleResourceFeatured,
     adminGetResourceSettings, adminUpdateResourceSettings,
-    adminGetContactMessages, adminDeleteContactMessage,
+    adminGetContactMessages, adminDeleteContactMessage, adminUpdateContactMessage,
     getSiteSettings, updateSiteSettings,
     adminExportNews, adminExportSubscriptionPlans as adminExportSubscriptionPlansLegacy, adminExportUniversities as adminExportUniversitiesLegacy,
     adminGetNewsCategories, adminCreateNewsCategory, adminUpdateNewsCategory,
@@ -385,6 +385,10 @@ import {
     adminToggleNotice,
     adminUpdateSupportTicketStatus,
 } from '../controllers/adminSupportController';
+import {
+    adminGetActionableAlerts,
+    adminMarkActionableAlertsRead,
+} from '../controllers/adminAlertController';
 import {
     adminDownloadBackup,
     adminListBackups,
@@ -968,6 +972,7 @@ router.put('/resource-settings', authorize('superadmin', 'admin', 'moderator'), 
 
 /* ── Contact Messages ── */
 router.get('/contact-messages', authorize('superadmin', 'admin', 'moderator'), adminGetContactMessages);
+router.patch('/contact-messages/:id', authorize('superadmin', 'admin', 'moderator'), adminUpdateContactMessage);
 router.delete('/contact-messages/:id', authorize('superadmin', 'admin'), canDeleteData, adminDeleteContactMessage);
 
 /* ── Banners & Config ── */
@@ -1146,6 +1151,9 @@ router.patch('/notices/:id/toggle', authorize('superadmin', 'admin', 'moderator'
 router.get('/support-tickets', authorize('superadmin', 'admin', 'moderator'), canManageTickets, adminGetSupportTickets);
 router.patch('/support-tickets/:id/status', authorize('superadmin', 'admin', 'moderator'), canManageTickets, adminUpdateSupportTicketStatus);
 router.post('/support-tickets/:id/reply', authorize('superadmin', 'admin', 'moderator'), canManageTickets, adminReplySupportTicket);
+
+router.get('/alerts/feed', authorize('superadmin', 'admin', 'moderator'), adminGetActionableAlerts);
+router.post('/alerts/mark-read', authorize('superadmin', 'admin', 'moderator'), adminMarkActionableAlertsRead);
 
 /* ── Backups ── */
 router.post('/backups/run', authorize('superadmin', 'admin'), canManageBackups, adminRunBackup);

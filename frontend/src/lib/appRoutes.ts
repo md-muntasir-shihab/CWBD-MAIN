@@ -30,7 +30,7 @@ const ADMIN_TAB_ROUTE_MAP: Record<string, string> = {
     'live-monitor': adminUi('live-monitor'),
     'question-bank': adminUi('question-bank'),
     alerts: adminUi('alerts'),
-    'student-management': adminUi('students'),
+    'student-management': adminUi('student-management/list'),
     'students-v2': adminUi('students-v2'),
     'student-groups-v2': adminUi('student-groups-v2'),
     'notification-center': adminUi('notification-center'),
@@ -43,7 +43,7 @@ const ADMIN_TAB_ROUTE_MAP: Record<string, string> = {
     'home-control': adminUi('settings/home-control'),
     contact: adminUi('contact'),
     'file-upload': adminUi('file-upload'),
-    finance: adminUi('payments'),
+    finance: adminUi('finance/dashboard'),
     'support-tickets': adminUi('support-center'),
     backups: adminUi('backups'),
     reports: adminUi('reports'),
@@ -71,7 +71,9 @@ const PATH_TAB_RULES: Array<{ match: (path: string) => boolean; tab: string }> =
     { match: (path) => path.startsWith(adminUi('subscription-plans')), tab: 'subscription-plans' },
     { match: (path) => path.startsWith(adminUi('subscriptions-v2')), tab: 'subscriptions-v2' },
     { match: (path) => path.startsWith(adminUi('support-center')), tab: 'support-tickets' },
+    { match: (path) => path.startsWith(adminUi('finance')), tab: 'finance' },
     { match: (path) => path.startsWith(adminUi('payments')), tab: 'finance' },
+    { match: (path) => path.startsWith(adminUi('student-management')), tab: 'student-management' },
     { match: (path) => path.startsWith(adminUi('students-v2')), tab: 'students-v2' },
     { match: (path) => path.startsWith(adminUi('student-groups-v2')), tab: 'student-groups-v2' },
     { match: (path) => path.startsWith(adminUi('notification-center')), tab: 'notification-center' },
@@ -98,9 +100,9 @@ const PATH_TAB_RULES: Array<{ match: (path: string) => boolean; tab: string }> =
 
 export function adminRouteFromTab(tab: string, subtab?: StudentManagementSubtab): string {
     if (tab === 'student-management') {
-        if (subtab === 'groups') return adminUi('student-groups');
+        if (subtab === 'groups') return adminUi('student-management/groups');
         if (subtab === 'plans') return adminUi('subscription-plans');
-        return adminUi('students');
+        return adminUi('student-management/list');
     }
     return ADMIN_TAB_ROUTE_MAP[tab] || ADMIN_DASHBOARD;
 }

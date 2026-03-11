@@ -61,7 +61,13 @@ import { adminLoginRateLimiter, examStartRateLimiter, examSubmitRateLimiter, log
 import { getProfile, getProfileDashboard, updateProfile } from '../controllers/profileController';
 import { getServices, getServiceDetails } from '../controllers/serviceController';
 import { getCategories as getServiceCategories } from '../controllers/serviceCategoryController';
-import { studentCreateSupportTicket, studentGetNotices, studentGetSupportTickets } from '../controllers/adminSupportController';
+import {
+    studentCreateSupportTicket,
+    studentGetNotices,
+    studentGetSupportTicketById,
+    studentGetSupportTickets,
+    studentReplySupportTicket,
+} from '../controllers/adminSupportController';
 import { updateStudentProfile } from '../controllers/studentController';
 import {
     getMySubscription,
@@ -94,6 +100,7 @@ import {
 import ContactMessage from '../models/ContactMessage';
 import { contactRateLimiter } from '../middlewares/securityRateLimit';
 import { uploadMedia, uploadMiddleware } from '../controllers/mediaController';
+import { createAdminAlert } from '../services/adminAlertService';
 import {
     getPublicFeaturedNews,
     getPublicNewsCategories,
@@ -235,6 +242,14 @@ router.post('/contact', contactRateLimiter, async (req, res) => {
             userAgent: req.headers['user-agent']
         });
 
+        await createAdminAlert({
+            title: 'New contact message',
+            message: `${msg.subject} from ${msg.name}`,
+            linkUrl: `/__cw_admin__/contact?focus=${String(msg._id)}`,
+            category: 'update',
+            targetRole: 'admin',
+        });
+
         res.status(201).json({ message: 'Message sent successfully', id: msg._id });
     } catch (error: any) {
         console.error('Contact form error:', error);
@@ -268,6 +283,8 @@ router.post('/qbank/usage/increment', authenticate, incrementQbankUsage);
 router.get('/student/notices', authenticate, studentGetNotices);
 router.post('/student/support-tickets', authenticate, studentCreateSupportTicket);
 router.get('/student/support-tickets', authenticate, studentGetSupportTickets);
+router.get('/student/support-tickets/:id', authenticate, studentGetSupportTicketById);
+router.post('/student/support-tickets/:id/reply', authenticate, studentReplySupportTicket);
 router.get('/subscriptions/me', authenticate, getMySubscription);
 router.post('/subscriptions/:planId/request-payment', authenticate, subscriptionActionRateLimiter, requestSubscriptionPayment);
 router.post('/subscriptions/:planId/upload-proof', authenticate, subscriptionActionRateLimiter, uploadSubscriptionProof);

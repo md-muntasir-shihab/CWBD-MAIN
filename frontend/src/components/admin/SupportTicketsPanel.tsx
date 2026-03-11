@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
@@ -71,6 +72,7 @@ type NoticeRecipientOption = {
 
 export default function SupportTicketsPanel() {
     const queryClient = useQueryClient();
+    const [searchParams] = useSearchParams();
     const runtimeFlags = useAdminRuntimeFlags();
     const [tab, setTab] = useState<'tickets' | 'notices'>('tickets');
     const [selectedTicket, setSelectedTicket] = useState<AdminSupportTicketItem | null>(null);
@@ -145,6 +147,13 @@ export default function SupportTicketsPanel() {
         const updated = tickets.find((ticket) => ticket._id === selectedTicket._id);
         if (updated) setSelectedTicket(updated);
     }, [tickets, selectedTicket]);
+
+    useEffect(() => {
+        const ticketId = searchParams.get('ticketId');
+        if (!ticketId || tickets.length === 0) return;
+        const target = tickets.find((ticket) => ticket._id === ticketId);
+        if (target) setSelectedTicket(target);
+    }, [searchParams, tickets]);
 
     const reloadSupportData = async () => {
         await Promise.all([
@@ -326,6 +335,15 @@ export default function SupportTicketsPanel() {
                             <p className="text-xs text-slate-400">
                                 Student: <span className="text-slate-200">{getStudentDisplayName(selectedTicket.studentId)}</span>
                             </p>
+                            {selectedTicket.studentId && typeof selectedTicket.studentId !== 'string' && (
+                                <Link
+                                    to={`/__cw_admin__/student-management/students/${selectedTicket.studentId._id}`}
+                                    className="mt-1 inline-flex items-center gap-1 text-xs text-indigo-300 hover:text-indigo-200"
+                                >
+                                    Open student profile
+                                    <ExternalLink className="h-3 w-3" />
+                                </Link>
+                            )}
                         </div>
                     </div>
                     <div className="flex items-center gap-3">

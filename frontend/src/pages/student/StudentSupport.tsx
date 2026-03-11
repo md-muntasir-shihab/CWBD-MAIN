@@ -1,9 +1,11 @@
 import { FormEvent, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createStudentSupportTicket, getStudentNotices, getStudentSupportTickets, trackAnalyticsEvent } from '../../services/api';
 
 export default function StudentSupport() {
     const queryClient = useQueryClient();
+    const navigate = useNavigate();
     const [subject, setSubject] = useState('');
     const [message, setMessage] = useState('');
     const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');
@@ -19,7 +21,7 @@ export default function StudentSupport() {
 
     const createTicketMutation = useMutation({
         mutationFn: async () => (await createStudentSupportTicket({ subject, message, priority })).data,
-        onSuccess: async () => {
+        onSuccess: async (response) => {
             void trackAnalyticsEvent({
                 eventName: 'support_ticket_created',
                 module: 'support',
@@ -30,6 +32,7 @@ export default function StudentSupport() {
             setMessage('');
             setPriority('medium');
             await queryClient.invalidateQueries({ queryKey: ['student-hub', 'support', 'tickets'] });
+            navigate(`/support/${response.item._id}`);
         },
     });
 
@@ -109,10 +112,14 @@ export default function StudentSupport() {
                                 <p className="text-xs text-slate-500">No support tickets yet.</p>
                             ) : (
                                 (ticketsQuery.data?.items || []).map((item) => (
-                                    <div key={item._id} className="rounded-lg border border-slate-200 dark:border-slate-800 p-2.5">
+                                    <Link
+                                        to={`/support/${item._id}`}
+                                        key={item._id}
+                                        className="block rounded-lg border border-slate-200 p-2.5 transition hover:border-indigo-400 hover:bg-indigo-50/60 dark:border-slate-800 dark:hover:border-indigo-500/40 dark:hover:bg-indigo-500/10"
+                                    >
                                         <p className="text-sm font-semibold">{item.subject}</p>
                                         <p className="text-xs text-slate-500 dark:text-slate-400">{item.status}  -  {new Date(item.createdAt).toLocaleDateString()}</p>
-                                    </div>
+                                    </Link>
                                 ))
                             )}
                         </div>

@@ -5,7 +5,7 @@ import { useUniversityCategories } from '../hooks/useUniversityQueries';
 
 export default function UniversityCategoryBrowsePage() {
     const { categorySlug } = useParams<{ categorySlug: string }>();
-    const { data: categories } = useUniversityCategories();
+    const { data: categories, isLoading } = useUniversityCategories();
 
     const match = useMemo(
         () => categories?.find((c) => c.categorySlug === categorySlug) ?? null,
@@ -13,6 +13,14 @@ export default function UniversityCategoryBrowsePage() {
     );
 
     const categoryName = match?.categoryName ?? '';
+
+    if (isLoading) {
+        return (
+            <div className="section-container py-12 text-center">
+                <p className="text-lg font-semibold text-text dark:text-dark-text">Loading category universities...</p>
+            </div>
+        );
+    }
 
     if (!categoryName && categories?.length) {
         return (
