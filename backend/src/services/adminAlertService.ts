@@ -21,6 +21,8 @@ type QueryAlertsInput = {
     limit?: number;
 };
 
+const ADMIN_LINK_PREFIX = /^\/__cw_admin__(\/|$)/i;
+
 function toObjectId(value: string | mongoose.Types.ObjectId | null | undefined): mongoose.Types.ObjectId | null {
     if (!value) return null;
     if (value instanceof mongoose.Types.ObjectId) return value;
@@ -44,8 +46,19 @@ function toObjectIdList(values: Array<string | mongoose.Types.ObjectId> = []): m
 }
 
 function resolveAllowedRoles(role: AlertAudienceRole): NotificationTargetRole[] {
-    if (role === 'moderator') return ['moderator', 'all'];
+    if (role === 'moderator') return ['moderator', 'admin', 'all'];
     return ['admin', 'all'];
+}
+
+function resolveActionableRoleFilter(role: AlertAudienceRole) {
+    const allowed = resolveAllowedRoles(role);
+    const baseRoles = allowed.filter((item) => item !== 'all');
+    return {
+        $or: [
+            { targetRole: { $in: baseRoles } },
+            { targetRole: 'all', linkUrl: ADMIN_LINK_PREFIX },
+        ],
+    };
 }
 
 export async function createAdminAlert(input: CreateAlertInput) {
@@ -93,30 +106,38 @@ export async function queryAdminAlerts(input: QueryAlertsInput) {
 
     const filter: Record<string, unknown> = {
         isActive: true,
-        targetRole: { $in: resolveAllowedRoles(input.role) },
         $or: [
             { targetUserIds: { $exists: false } },
             { targetUserIds: { $size: 0 } },
             { targetUserIds: userId },
         ],
         $and: [
+            resolveActionableRoleFilter(input.role),
             { $or: [{ publishAt: { $exists: false } }, { publishAt: null }, { publishAt: { $lte: now } }] },
             { $or: [{ expireAt: { $exists: false } }, { expireAt: null }, { expireAt: { $gte: now } }] },
         ],
     };
 
-    const [rows, total] = await Promise.all([
+    const [rows, total, allIds] = await Promise.all([
         Notification.find(filter).sort({ publishAt: -1, createdAt: -1 }).skip(skip).limit(limit).lean(),
         Notification.countDocuments(filter),
+        Notification.find(filter).select('_id').lean(),
     ]);
 
     const notificationIds = rows.map((row) => row._id);
+    const allNotificationIds = allIds.map((row) => row._id);
     const reads = notificationIds.length > 0
         ? await AdminNotificationRead.find({
             adminUserId: userId,
             notificationId: { $in: notificationIds },
         }).lean()
         : [];
+    const totalRead = allNotificationIds.length > 0
+        ? await AdminNotificationRead.countDocuments({
+            adminUserId: userId,
+            notificationId: { $in: allNotificationIds },
+        })
+        : 0;
     const readSet = new Set(reads.map((item) => String(item.notificationId)));
 
     const items = rows.map((item) => ({
@@ -134,7 +155,7 @@ export async function queryAdminAlerts(input: QueryAlertsInput) {
     return {
         items,
         total,
-        unreadCount: items.filter((item) => !item.isRead).length,
+        unreadCount: Math.max(0, total - totalRead),
         page,
         pages: Math.max(1, Math.ceil(total / limit)),
     };

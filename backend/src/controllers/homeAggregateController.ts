@@ -588,9 +588,11 @@ export const getAggregatedHomeData = async (req: AuthRequest, res: Response): Pr
             .filter((item) => item.enabled && item.category)
             .sort((a, b) => a.order - b.order);
 
-        const highlightedCategories = highlightedFromUniversitySettings.length > 0
-            ? highlightedFromUniversitySettings
-            : highlightedFromHomeSettings;
+        // Home settings should be the canonical source when explicitly configured.
+        // Fall back to university settings only when home settings are empty.
+        const highlightedCategories = highlightedFromHomeSettings.length > 0
+            ? highlightedFromHomeSettings
+            : highlightedFromUniversitySettings;
 
         const highlightedSet = new Set(highlightedCategories.map((item) => item.category));
         const categoriesWithHighlightRaw = categories.map((item) => ({

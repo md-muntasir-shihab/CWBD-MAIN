@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticate } from '../middlewares/auth';
 import {
     getStudentProfile,
+    getStudentProfileUpdateRequestStatus,
     updateStudentProfile,
     uploadStudentDocument,
     getStudentApplications,
@@ -58,6 +59,7 @@ import { uploadMiddleware } from '../controllers/mediaController';
 
 // Profile Routes
 router.get('/profile', getStudentProfile);
+router.get('/profile-update-request', getStudentProfileUpdateRequestStatus);
 router.put('/profile', updateStudentProfile);
 router.post('/profile/documents', uploadMiddleware.single('file'), uploadStudentDocument);
 router.get('/dashboard', getStudentDashboardAggregateHandler);

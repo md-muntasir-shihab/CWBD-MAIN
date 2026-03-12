@@ -69,9 +69,9 @@ export default function CategoryChipRow({ categories, activeCategory, onCategory
                 className="flex gap-2 overflow-x-auto pb-1.5 scrollbar-hide -mx-1 px-1"
                 role="tablist"
             >
-                {categories.map((item) => (
+                {categories.map((item, index) => (
                     <button
-                        key={item.categoryName}
+                        key={`${item.categorySlug || item.categoryName}-${index}`}
                         type="button"
                         role="tab"
                         aria-selected={activeCategory === item.categoryName}

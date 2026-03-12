@@ -314,6 +314,7 @@ export default function App() {
                                 <Route path="/terms" element={<TermsPage />} />
                                 <Route path="/privacy" element={<PrivacyPage />} />
                                 <Route path="/campusway-secure-admin" element={<Navigate to={ADMIN_DASHBOARD} replace />} />
+                                <Route path="/campusway-secure-admin/*" element={<LegacyAdminRedirect />} />
                                 <Route path="/admin-dashboard" element={<Navigate to={ADMIN_DASHBOARD} replace />} />
 
                                 <Route path={ADMIN_LOGIN} element={<AdminSecretLoginPage />} />

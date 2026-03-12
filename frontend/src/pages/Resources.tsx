@@ -44,8 +44,10 @@ const PAGE_SIZE = 12;
 function ResourceCard({ r, onShare, onAction, onNavigate }: { r: Resource; onShare: (r: Resource) => void; onAction: (r: Resource, action: string) => void; onNavigate?: (r: Resource) => void }) {
     const cfg = TYPE_CONFIG[r.type];
     const Icon = cfg.icon;
-    const href = normalizeInternalOrExternalUrl(r.fileUrl || r.externalUrl || '');
-    const isExternal = isExternalUrl(href || '');
+    const detailHref = r.slug ? `/resources/${r.slug}` : '';
+    const href = detailHref || normalizeInternalOrExternalUrl(r.fileUrl || r.externalUrl || '');
+    const isExternal = !detailHref && isExternalUrl(href || '');
+    const actionLabel = detailHref ? 'View' : cfg.action;
 
     return (
         <div className="card p-4 sm:p-5 flex flex-col gap-3 relative overflow-hidden group">
@@ -75,8 +77,8 @@ function ResourceCard({ r, onShare, onAction, onNavigate }: { r: Resource; onSha
             {/* Tags */}
             {r.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1">
-                    {r.tags.slice(0, 3).map(tag => (
-                        <span key={tag} className="text-[10px] px-2 py-0.5 bg-primary/5 dark:bg-primary/10 text-primary dark:text-primary-300 rounded-full">{tag}</span>
+                    {r.tags.slice(0, 3).map((tag, idx) => (
+                        <span key={`${tag}-${idx}`} className="text-[10px] px-2 py-0.5 bg-primary/5 dark:bg-primary/10 text-primary dark:text-primary-300 rounded-full">{tag}</span>
                     ))}
                 </div>
             )}
@@ -104,10 +106,10 @@ function ResourceCard({ r, onShare, onAction, onNavigate }: { r: Resource; onSha
                     {href ? (
                         <a href={href} target={isExternal ? '_blank' : undefined}
                             rel={isExternal ? 'noopener noreferrer' : undefined}
-                            onClick={() => onAction(r, cfg.action)}
+                            onClick={() => onAction(r, actionLabel)}
                             className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary dark:text-primary-300 hover:text-accent transition-colors min-h-[34px] px-2 rounded-lg hover:bg-primary/5">
-                            {r.type === 'pdf' ? <Download className="w-3 h-3" /> : r.type === 'link' ? <ExternalLink className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                            {cfg.action}
+                            {detailHref ? <Eye className="w-3 h-3" /> : (r.type === 'pdf' ? <Download className="w-3 h-3" /> : r.type === 'link' ? <ExternalLink className="w-3 h-3" /> : <Eye className="w-3 h-3" />)}
+                            {actionLabel}
                         </a>
                     ) : (
                         <button
@@ -129,8 +131,10 @@ function ResourceCard({ r, onShare, onAction, onNavigate }: { r: Resource; onSha
 function FeaturedCard({ r, onShare, onAction, onNavigate }: { r: Resource; onShare: (r: Resource) => void; onAction: (r: Resource, action: string) => void; onNavigate?: (r: Resource) => void }) {
     const cfg = TYPE_CONFIG[r.type];
     const Icon = cfg.icon;
-    const href = normalizeInternalOrExternalUrl(r.fileUrl || r.externalUrl || '');
-    const isExternal = isExternalUrl(href || '');
+    const detailHref = r.slug ? `/resources/${r.slug}` : '';
+    const href = detailHref || normalizeInternalOrExternalUrl(r.fileUrl || r.externalUrl || '');
+    const isExternal = !detailHref && isExternalUrl(href || '');
+    const actionLabel = detailHref ? 'View' : cfg.action;
     return (
         <div className="card p-4 sm:p-5 flex flex-col sm:flex-row items-start gap-4 group hover:border-accent/40 relative">
             <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${cfg.badge}`}>
@@ -153,9 +157,9 @@ function FeaturedCard({ r, onShare, onAction, onNavigate }: { r: Resource; onSha
                 </button>
                 {href ? (
                     <a href={href} target={isExternal ? '_blank' : undefined} rel={isExternal ? 'noopener noreferrer' : undefined}
-                        onClick={() => onAction(r, cfg.action)}
+                        onClick={() => onAction(r, actionLabel)}
                         className="btn-primary py-2.5 px-5 sm:px-3 text-sm sm:text-xs gap-1.5 flex-1 sm:flex-none justify-center">
-                        {cfg.action} {r.type === 'link' ? <ExternalLink className="w-4 h-4 sm:w-3 sm:h-3" /> : <Download className="w-4 h-4 sm:w-3 sm:h-3" />}
+                        {actionLabel} {detailHref ? <Eye className="w-4 h-4 sm:w-3 sm:h-3" /> : (r.type === 'link' ? <ExternalLink className="w-4 h-4 sm:w-3 sm:h-3" /> : <Download className="w-4 h-4 sm:w-3 sm:h-3" />)}
                     </a>
                 ) : (
                     <button

@@ -21,7 +21,8 @@ test.describe('Admin Smoke', () => {
         await expect(page.getByText(/Exam Management|Exams/i).first()).toBeVisible();
 
         await page.goto('/__cw_admin__/students');
-        await expect(page).toHaveURL(/\/__cw_admin__\/students/);
+        // Legacy students route now canonicalizes to student-management/list.
+        await expect(page).toHaveURL(/\/__cw_admin__\/(students|student-management\/list)/);
         await expect(page.getByText(/Student Management/i).first()).toBeVisible();
 
         await page.goto('/__cw_admin__/settings/security-center');

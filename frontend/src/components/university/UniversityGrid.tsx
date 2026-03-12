@@ -112,9 +112,23 @@ export default function UniversityGrid({
     const mergedConfig: HomeUniversityCardConfig = { ...DEFAULT_UNIVERSITY_CARD_CONFIG, ...(config || {}) };
     const effectiveSort: UniversityCardSort = sort ?? mergedConfig.defaultSort;
 
+    const uniqueItems = useMemo(() => {
+        const seen = new Set<string>();
+        const output: UniversityItem[] = [];
+        items.forEach((item, index) => {
+            const primaryKey = String(item.id || item._id || item.slug || '').trim().toLowerCase();
+            const fallbackKey = `${String(item.name || '').trim().toLowerCase()}-${index}`;
+            const key = primaryKey || fallbackKey;
+            if (seen.has(key)) return;
+            seen.add(key);
+            output.push(item);
+        });
+        return output;
+    }, [items]);
+
     const sortedItems = useMemo(
-        () => sortUniversities(items, effectiveSort),
-        [items, effectiveSort]
+        () => sortUniversities(uniqueItems, effectiveSort),
+        [uniqueItems, effectiveSort]
     );
 
     const totalPages = Math.ceil(sortedItems.length / itemsPerPage);
@@ -166,9 +180,9 @@ export default function UniversityGrid({
                 data-grid="university-card-grid"
             >
                 <AnimatePresence mode="popLayout">
-                    {paginatedItems.map((item) => (
+                    {paginatedItems.map((item, index) => (
                         <UniversityCard
-                            key={String(item.id || item._id || item.slug || item.name)}
+                            key={String(item.id || item._id || item.slug || `${String(item.name || 'item').trim().toLowerCase()}-${currentPage}-${index}`)}
                             university={item}
                             config={mergedConfig}
                             animationLevel={animationLevel}

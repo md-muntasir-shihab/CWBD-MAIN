@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import Resource from '../models/Resource';
+import mongoose from 'mongoose';
 
 function isAllToken(value: unknown): boolean {
     const normalized = String(value || '').trim().toLowerCase();
@@ -8,6 +9,32 @@ function isAllToken(value: unknown): boolean {
 
 function escapeRegex(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function toSlug(value: unknown): string {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+}
+
+function toPublicSlug(resource: Record<string, any>): string {
+    const rawSlug = String(resource.slug || '').trim();
+    if (rawSlug) return rawSlug;
+    const id = String(resource._id || '').trim();
+    const base = toSlug(resource.title || 'resource') || 'resource';
+    return id ? `${base}-${id}` : base;
+}
+
+function withPublicSlug<T extends Record<string, any>>(resource: T): T {
+    return { ...resource, slug: toPublicSlug(resource) };
+}
+
+function extractObjectIdFromSlug(value: string): string | null {
+    const match = String(value || '').trim().match(/([a-f\d]{24})$/i);
+    if (!match) return null;
+    const id = match[1];
+    return mongoose.Types.ObjectId.isValid(id) ? id : null;
 }
 
 export async function getPublicResources(req: Request, res: Response): Promise<void> {
@@ -55,7 +82,7 @@ export async function getPublicResources(req: Request, res: Response): Promise<v
             Resource.countDocuments(filter),
         ]);
 
-        res.json({ resources, total, page: pageNum, pages: Math.ceil(total / limitNum) });
+        res.json({ resources: resources.map((item) => withPublicSlug(item as Record<string, any>)), total, page: pageNum, pages: Math.ceil(total / limitNum) });
     } catch (err) {
         console.error('getPublicResources error:', err);
         res.status(500).json({ message: 'Server error' });
@@ -83,11 +110,26 @@ export async function incrementResourceDownload(req: Request, res: Response): Pr
 export async function getPublicResourceBySlug(req: Request, res: Response): Promise<void> {
     try {
         const now = new Date();
-        const resource = await Resource.findOne({
-            slug: req.params.slug,
+        const activeFilter: Record<string, unknown> = {
             isPublic: true,
             $or: [{ expiryDate: { $exists: false } }, { expiryDate: null }, { expiryDate: { $gt: now } }],
+        };
+        const slug = String(req.params.slug || '').trim();
+
+        let resource = await Resource.findOne({
+            slug,
+            ...activeFilter,
         }).lean();
+
+        if (!resource) {
+            const fallbackId = extractObjectIdFromSlug(slug);
+            if (fallbackId) {
+                resource = await Resource.findOne({
+                    _id: fallbackId,
+                    ...activeFilter,
+                }).lean();
+            }
+        }
 
         if (!resource) {
             res.status(404).json({ message: 'Resource not found' });
@@ -101,14 +143,13 @@ export async function getPublicResourceBySlug(req: Request, res: Response): Prom
         const relatedResources = await Resource.find({
             _id: { $ne: resource._id },
             category: resource.category,
-            isPublic: true,
-            $or: [{ expiryDate: { $exists: false } }, { expiryDate: null }, { expiryDate: { $gt: now } }],
+            ...activeFilter,
         })
             .sort({ publishDate: -1 })
             .limit(4)
             .lean();
 
-        res.json({ resource, relatedResources });
+        res.json({ resource: withPublicSlug(resource as Record<string, any>), relatedResources: relatedResources.map((item) => withPublicSlug(item as Record<string, any>)) });
     } catch (err) {
         console.error('getPublicResourceBySlug error:', err);
         res.status(500).json({ message: 'Server error' });

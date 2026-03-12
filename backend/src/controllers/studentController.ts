@@ -187,6 +187,40 @@ export const getStudentProfile = async (req: AuthRequest, res: ExpressResponse) 
     }
 };
 
+// @desc    Get latest student profile update request status
+// @route   GET /api/student/profile-update-request
+// @access  Private (Student)
+export const getStudentProfileUpdateRequestStatus = async (req: AuthRequest, res: ExpressResponse) => {
+    try {
+        if (!req.user) return res.status(401).json({ message: 'Not authenticated' });
+        if (req.user.role !== 'student') return res.status(403).json({ message: 'Student access only' });
+
+        const [pending, latestDecision] = await Promise.all([
+            ProfileUpdateRequest.findOne({ student_id: req.user._id, status: 'pending' }).sort({ createdAt: -1 }).lean(),
+            ProfileUpdateRequest.findOne({ student_id: req.user._id, status: { $in: ['approved', 'rejected'] } }).sort({ updatedAt: -1 }).lean(),
+        ]);
+
+        const normalize = (doc: Record<string, any> | null) => {
+            if (!doc) return null;
+            return {
+                id: String(doc._id),
+                status: String(doc.status || ''),
+                requestedChanges: (doc.requested_changes || {}) as Record<string, unknown>,
+                submittedAt: doc.createdAt || null,
+                reviewedAt: doc.reviewed_at || null,
+                feedback: String(doc.admin_feedback || ''),
+            };
+        };
+
+        res.json({
+            pendingRequest: normalize(pending as Record<string, any> | null),
+            latestDecision: normalize(latestDecision as Record<string, any> | null),
+        });
+    } catch (err: any) {
+        res.status(500).json({ message: 'Failed to load profile update request status', error: err.message });
+    }
+};
+
 // @desc    Update student profile
 // @route   PUT /api/student/profile
 // @access  Private (Student)

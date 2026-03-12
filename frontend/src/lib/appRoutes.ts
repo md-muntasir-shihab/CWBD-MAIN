@@ -14,7 +14,15 @@ export function adminUi(path: string): string {
 
 export function legacyAdminToSecret(pathname: string, search = '', hash = ''): string {
     const cleanPath = String(pathname || '').trim();
-    const suffix = cleanPath.replace(/^\/admin\/?/, '').replace(/^\/+/, '');
+    let suffix = cleanPath;
+    if (/^\/campusway-secure-admin(\/|$)/.test(cleanPath)) {
+        suffix = cleanPath.replace(/^\/campusway-secure-admin\/?/, '');
+    } else if (/^\/admin-dashboard(\/|$)/.test(cleanPath)) {
+        suffix = cleanPath.replace(/^\/admin-dashboard\/?/, '');
+    } else {
+        suffix = cleanPath.replace(/^\/admin\/?/, '');
+    }
+    suffix = suffix.replace(/^\/+/, '');
     const target = suffix ? adminUi(suffix) : ADMIN_DASHBOARD;
     return `${target}${search || ''}${hash || ''}`;
 }

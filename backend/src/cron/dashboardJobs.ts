@@ -59,6 +59,41 @@ function activeWindow(now: Date, targetDate: Date, hoursBefore: number): boolean
     return diffMs <= upper && diffMs >= lower;
 }
 
+function normalizeObjectIdString(value: unknown, visited: Set<unknown> = new Set()): string | null {
+    if (value == null) return null;
+
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (/^[a-fA-F0-9]{24}$/.test(trimmed)) return trimmed;
+
+        // Handle malformed serialized payloads like: `[ { "$oid": "..." } ]`
+        const match = trimmed.match(/[a-fA-F0-9]{24}/);
+        return match ? match[0] : null;
+    }
+
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const normalized = normalizeObjectIdString(item, visited);
+            if (normalized) return normalized;
+        }
+        return null;
+    }
+
+    if (typeof value === 'object') {
+        if (visited.has(value)) return null;
+        visited.add(value);
+        const rec = value as Record<string, unknown>;
+        return (
+            normalizeObjectIdString(rec.$oid, visited)
+            || normalizeObjectIdString(rec['"$oid"'], visited)
+            || normalizeObjectIdString(rec.oid, visited)
+            || normalizeObjectIdString(rec._id, visited)
+        );
+    }
+
+    return null;
+}
+
 async function createExamReminderNotifications() {
     const settings = await readNotificationAutomationSettings();
     if (!settings.examStartsSoon.enabled) return;
@@ -164,7 +199,7 @@ async function createPaymentPendingNotifications() {
     const rows = await StudentDueLedger.find({ netDue: { $gt: 0 } }).select('studentId netDue').limit(1000).lean();
 
     for (const row of rows) {
-        const studentId = String(row.studentId || '').trim();
+        const studentId = normalizeObjectIdString((row as { studentId?: unknown }).studentId);
         if (!studentId) continue;
 
         for (const hoursBefore of settings.paymentPendingReminder.hoursBefore) {
@@ -184,7 +219,7 @@ async function createPaymentPendingNotifications() {
                         message,
                         category: 'update',
                         targetRole: 'student',
-                        targetUserIds: [row.studentId],
+                        targetUserIds: [studentId],
                         publishAt: new Date(),
                         expireAt: new Date(Date.now() + 36 * 60 * 60 * 1000),
                         isActive: true,
