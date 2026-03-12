@@ -1,0 +1,1480 @@
+(node:4508) [MONGOOSE] Warning: Duplicate schema index on {"slug":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:4508) [MONGOOSE] Warning: Duplicate schema index on {"slug":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(node:4508) [MONGOOSE] Warning: Duplicate schema index on {"slug":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(node:4508) [MONGOOSE] Warning: Duplicate schema index on {"contentHash":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(node:4508) [MONGOOSE] Warning: Duplicate schema index on {"jobId":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(node:4508) [MONGOOSE] Warning: Duplicate schema index on {"status":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(node:4508) [MONGOOSE] Warning: Duplicate schema index on {"slug":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}
+[CRON] student dashboard notification jobs failed: CastError: Cast to [ObjectId] failed for value "`[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`" (type string) at path "targetUserIds.0" because of "CastError"
+    at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:419:15)
+    at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+    at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+    at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+    at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+    at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+    at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+    at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+    at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+    at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13)
+    at async Timeout._onTimeout (F:\CampusWay\backend\node_modules\node-cron\src\scheduler\runner.ts:100:30) {
+  stringValue: '"`[ { \'"$oid"\': \'69a32fcd5f716c52881e5cf8\' } ]`"',
+  messageFormat: undefined,
+  kind: '[ObjectId]',
+  value: `[ { '"$oid"': '69a32fcd5f716c52881e5cf8' } ]`,
+  path: 'targetUserIds.0',
+  reason: CastError: Cast to ObjectId failed for value "{ '"$oid"': '69a32fcd5f716c52881e5cf8' }" (type Object) at path "targetUserIds" because of "BSONError"
+      at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+      at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+      at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+      at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+      at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+      at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+      at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+      at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17)
+      at async runJobWithLog (F:\CampusWay\backend\src\services\jobRunLogService.ts:19:24)
+      at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:342:13) {
+    stringValue: `"{ '"$oid"': '69a32fcd5f716c52881e5cf8' }"`,
+    messageFormat: undefined,
+    kind: 'ObjectId',
+    value: { '"$oid"': '69a32fcd5f716c52881e5cf8' },
+    path: 'targetUserIds',
+    reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+        at new ObjectId (F:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+        at castObjectId (F:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+        at SchemaObjectId.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at SchemaArray.cast (F:\CampusWay\backend\node_modules\mongoose\lib\schema\array.js:415:32)
+        at SchemaType.applySetters (F:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at castUpdateVal (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:631:21)
+        at walkUpdatePath (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:438:24)
+        at castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\helpers\query\castUpdate.js:144:7)
+        at model.Query._castUpdate (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4874:10)
+        at model.Query._updateThunk (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4062:25)
+        at model.Query._updateOne (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4150:23)
+        at model.Query.exec (F:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async createPaymentPendingNotifications (F:\CampusWay\backend\src\cron\dashboardJobs.ts:178:13)
+        at async <anonymous> (F:\CampusWay\backend\src\cron\dashboardJobs.ts:346:17),
+    valueType: 'Object'
+  },
+  valueType: 'string'
+}

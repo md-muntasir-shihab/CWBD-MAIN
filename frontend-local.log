@@ -1,0 +1,31 @@
+
+> campusway-frontend@1.0.0 dev
+> vite --host 0.0.0.0 --port 5175
+
+
+  [32m[1mVITE[22m v6.4.1[39m  [2mready in [0m[1m1876[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5175[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.0.120:[1m5175[22m/[39m
+[2m1:35:14 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/styles/index.css, /src/pages/admin/datahub/DataHubPage.tsx, /src/pages/admin/team/MemberDetailPage.tsx, /src/pages/AdminCorePages.tsx, /src/pages/admin/team/TeamAccessConsolePage.tsx, /src/pages/admin/team/RoleDetailPage.tsx, /src/pages/admin/students/StudentGroupDetailPage.tsx, /src/components/admin/questionBank/QuestionBankConsole.tsx, /src/pages/admin/students/StudentGroupsPage.tsx, /src/components/admin/AdminShell.tsx, /src/components/admin/students/StudentManagementLayout.tsx, /src/components/admin/finance/FinanceLayout.tsx, /src/pages/admin/students/StudentManagementListPage.tsx, /src/pages/admin/students/StudentCreatePage.tsx[22m
+[2m1:35:18 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/styles/index.css[22m
+[2m1:36:17 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/Resources.tsx, /src/styles/index.css[22m
+[2m1:36:21 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/university/CategoryChipRow.tsx, /src/styles/index.css[22m
+[2m1:36:32 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/university/UniversityGrid.tsx, /src/styles/index.css[22m
+[2m1:36:40 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/university/UniversityGrid.tsx, /src/styles/index.css[22m
+[2m2:21:01 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/layout/Navbar.tsx, /src/styles/index.css[22m
+[2m2:24:29 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/layout/Navbar.tsx, /src/styles/index.css[22m
+[2m2:24:35 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/layout/Footer.tsx, /src/styles/index.css[22m
+[2m2:30:10 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/HomeModern.tsx, /src/styles/index.css[22m
+[2m2:35:14 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/student/StudentLayout.tsx, /src/styles/index.css[22m
+[2m3:24:56 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/styles/index.css[22m
+[2m3:24:56 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/components/student/dashboard/MyExamsSection.tsx, /src/styles/index.css[22m
+[2m3:42:31 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/index.css, /src/pages/exams/ExamResultPage.tsx, /src/pages/exams/ExamSolutionsPage.tsx, /src/pages/exams/ExamRunnerPage.tsx, /src/pages/exams/ExamsListPage.tsx[22m
+[2m3:43:36 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/index.css, /src/pages/exams/ExamResultPage.tsx, /src/pages/exams/ExamSolutionsPage.tsx, /src/pages/exams/ExamRunnerPage.tsx, /src/pages/exams/ExamsListPage.tsx[22m
+[2m3:54:10 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/types/exam.ts[22m
+[2m3:54:26 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/index.css, /src/pages/exams/ExamResultPage.tsx, /src/pages/exams/ExamSolutionsPage.tsx, /src/pages/exams/ExamRunnerPage.tsx, /src/pages/exams/ExamsListPage.tsx[22m
+[2m3:54:39 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/exams/ExamRunnerPage.tsx, /src/styles/index.css[22m
+[2m4:25:37 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/index.css, /src/pages/exams/ExamResultPage.tsx, /src/pages/exams/ExamSolutionsPage.tsx, /src/pages/exams/ExamRunnerPage.tsx, /src/pages/exams/ExamsListPage.tsx[22m
+[2m4:25:58 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/exams/ExamResultPage.tsx, /src/styles/index.css[22m
+[2m4:26:17 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/exams/ExamSolutionsPage.tsx, /src/styles/index.css[22m
+[2m4:32:23 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/index.css, /src/pages/exams/ExamResultPage.tsx, /src/pages/exams/ExamSolutionsPage.tsx, /src/pages/exams/ExamRunnerPage.tsx, /src/pages/exams/ExamsListPage.tsx[22m

@@ -249,6 +249,13 @@ function LegacyExamTakeRedirect() {
     return <Navigate to={`/exam/${examId}${location.search}`} replace />;
 }
 
+function LegacyStudentExamStartRedirect() {
+    const { examId } = useParams<{ examId: string }>();
+    const location = useLocation();
+    if (!examId) return <Navigate to="/exams" replace />;
+    return <Navigate to={`/exam/${examId}${location.search}`} replace />;
+}
+
 function LegacyExamResultRedirect() {
     const { examId } = useParams<{ examId: string }>();
     const location = useLocation();
@@ -289,6 +296,7 @@ export default function App() {
                                 <Route path="/exam-portal" element={<Navigate to="/exams" replace />} />
                                 <Route path="/exams/landing" element={<Navigate to="/exams" replace />} />
                                 <Route path="/exams" element={<ExamsListPage />} />
+                                <Route path="/exams/:examId/start" element={<LegacyStudentExamStartRedirect />} />
                                 <Route path="/exam/:examId" element={<ExamRunnerPage />} />
                                 <Route path="/exam/:examId/result" element={<ExamResultPage />} />
                                 <Route path="/exam/:examId/solutions" element={<ExamSolutionsPage />} />

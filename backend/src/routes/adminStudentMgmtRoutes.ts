@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
+import XLSX from 'xlsx';
 
 import { authenticate, requireRole } from '../middlewares/auth';
 import User from '../models/User';
@@ -385,10 +386,26 @@ router.get('/students-v2/template.xlsx', ...adminAuth, async (_req: Request, res
 
 router.get('/students-v2/export', ...adminAuth, async (req: Request, res: Response) => {
   try {
-    const format = String(req.query['format'] ?? 'xlsx') as 'csv' | 'xlsx';
+    const format = String(req.query['format'] ?? req.query['type'] ?? 'xlsx').trim().toLowerCase() === 'csv' ? 'csv' : 'xlsx';
     const filters: Record<string, unknown> = {};
-    if (req.query['status']) filters['status'] = req.query['status'];
-    if (req.query['q'])      filters['q']      = req.query['q'];
+    const passthroughKeys = [
+      'q',
+      'status',
+      'group',
+      'profileScoreMin',
+      'subscriptionStatus',
+      'expiringDays',
+      'department',
+      'sscBatch',
+      'hscBatch',
+      'guardianStatus',
+      'hasPaymentDue',
+      'sortBy',
+      'sortOrder',
+    ];
+    passthroughKeys.forEach((key) => {
+      if (req.query[key] !== undefined) filters[key] = req.query[key];
+    });
 
     const buffer = await exportStudents(filters, format === 'csv' ? 'csv' : 'xlsx');
     if (format === 'csv') {
@@ -459,11 +476,18 @@ router.post('/students-v2/bulk-update', ...adminAuth, async (req: Request, res: 
     }
     const validIds = ids.filter((id) => mongoose.Types.ObjectId.isValid(id));
     const allowedUserFields: Record<string, unknown> = {};
+    const allowedProfileFields: Record<string, unknown> = {};
     if (update['status'] && ['active','suspended','blocked','pending'].includes(String(update['status']))) {
       allowedUserFields['status'] = update['status'];
     }
+    if (update['department'] !== undefined) allowedProfileFields['department'] = String(update['department'] || '').trim();
+    if (update['ssc_batch'] !== undefined) allowedProfileFields['ssc_batch'] = String(update['ssc_batch'] || '').trim();
+    if (update['hsc_batch'] !== undefined) allowedProfileFields['hsc_batch'] = String(update['hsc_batch'] || '').trim();
     if (Object.keys(allowedUserFields).length > 0) {
       await User.updateMany({ _id: { $in: validIds } }, { $set: allowedUserFields });
+    }
+    if (Object.keys(allowedProfileFields).length > 0) {
+      await StudentProfile.updateMany({ user_id: { $in: validIds } }, { $set: allowedProfileFields });
     }
     res.json({ message: `Updated ${validIds.length} students`, updated: validIds.length });
   } catch (err) {
@@ -643,6 +667,147 @@ router.get('/student-groups', ...adminAuth, async (req: Request, res: Response) 
       StudentGroup.countDocuments(query),
     ]);
     res.json({ data: groups, total, page: pageNum, limit: limitNum });
+  } catch (err) {
+    res.status(500).json({ message: String(err) });
+  }
+});
+
+router.get('/student-groups/export', ...adminAuth, async (req: Request, res: Response) => {
+  try {
+    const { q, isActive } = req.query as Record<string, string>;
+    const format = String(req.query['format'] ?? req.query['type'] ?? 'xlsx').trim().toLowerCase() === 'csv' ? 'csv' : 'xlsx';
+    const query: Record<string, unknown> = {};
+    if (isActive !== undefined) query['isActive'] = isActive === 'true';
+    if (q) {
+      const matcher = new RegExp(String(q), 'i');
+      query['$or'] = [{ name: matcher }, { slug: matcher }, { batchTag: matcher }, { description: matcher }];
+    }
+
+    const [groups, counts] = await Promise.all([
+      StudentGroup.find(query).sort({ createdAt: -1 }).lean(),
+      GroupMembership.aggregate([
+        { $match: { membershipStatus: 'active' } },
+        { $group: { _id: '$groupId', studentCount: { $sum: 1 } } },
+      ]),
+    ]);
+
+    const countMap = new Map(counts.map((item) => [String(item._id), Number(item.studentCount || 0)]));
+    const rows = groups.map((group) => ({
+      name: group.name,
+      slug: group.slug,
+      batchTag: group.batchTag || '',
+      description: group.description || '',
+      type: group.type || 'manual',
+      isActive: Boolean(group.isActive),
+      isFeatured: Boolean(group.isFeatured),
+      department: String(group.department || ''),
+      batch: String(group.batch || ''),
+      memberCount: countMap.get(String(group._id)) || Number(group.studentCount || 0),
+      createdAt: group.createdAt,
+      updatedAt: group.updatedAt,
+    }));
+
+    if (format === 'csv') {
+      const sheet = XLSX.utils.json_to_sheet(rows);
+      const csv = XLSX.utils.sheet_to_csv(sheet);
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="student_groups_export.csv"');
+      res.send(csv);
+      return;
+    }
+
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Student Groups');
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="student_groups_export.xlsx"');
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ message: String(err) });
+  }
+});
+
+router.post('/student-groups/bulk-update', ...adminAuth, async (req: Request, res: Response) => {
+  try {
+    const { ids, update } = req.body as { ids: string[]; update: Record<string, unknown> };
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: 'ids array required' });
+    }
+    if (!update || typeof update !== 'object') {
+      return res.status(400).json({ message: 'update payload required' });
+    }
+
+    const validIds = ids.filter((id) => mongoose.Types.ObjectId.isValid(id));
+    const allowed: Record<string, unknown> = {};
+    const directFields = ['description', 'department', 'batch', 'visibilityNote', 'color', 'icon'];
+    directFields.forEach((field) => {
+      if (update[field] !== undefined) allowed[field] = String(update[field] || '').trim();
+    });
+    if (update['isActive'] !== undefined) allowed['isActive'] = Boolean(update['isActive']);
+    if (update['isFeatured'] !== undefined) allowed['isFeatured'] = Boolean(update['isFeatured']);
+    if (update['sortOrder'] !== undefined) allowed['sortOrder'] = Number(update['sortOrder']) || 0;
+    if (update['cardStyleVariant'] !== undefined && ['solid', 'gradient', 'outline', 'minimal'].includes(String(update['cardStyleVariant']))) {
+      allowed['cardStyleVariant'] = update['cardStyleVariant'];
+    }
+    if (update['defaultExamVisibility'] !== undefined && ['all_students', 'group_only', 'hidden'].includes(String(update['defaultExamVisibility']))) {
+      allowed['defaultExamVisibility'] = update['defaultExamVisibility'];
+    }
+    if (update['defaultCommunicationAudience'] !== undefined) {
+      allowed['defaultCommunicationAudience'] = Boolean(update['defaultCommunicationAudience']);
+    }
+
+    if (Object.keys(allowed).length === 0) {
+      return res.status(400).json({ message: 'No safe bulk fields provided' });
+    }
+
+    const result = await StudentGroup.updateMany({ _id: { $in: validIds } }, { $set: allowed });
+    res.json({ message: `Updated ${Number(result.modifiedCount || 0)} groups`, updated: Number(result.modifiedCount || 0) });
+  } catch (err) {
+    res.status(500).json({ message: String(err) });
+  }
+});
+
+router.post('/student-groups/bulk-delete', ...adminAuth, async (req: Request, res: Response) => {
+  try {
+    const { ids } = req.body as { ids: string[] };
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: 'ids array required' });
+    }
+
+    const validIds = ids.filter((id) => mongoose.Types.ObjectId.isValid(id));
+    const deletedIds: string[] = [];
+    const skipped: Array<{ id: string; blockers: string[] }> = [];
+
+    for (const id of validIds) {
+      const safety = await groupMembershipService.canDeleteGroup(id);
+      if (!safety.safe) {
+        skipped.push({ id, blockers: safety.blockers });
+        continue;
+      }
+
+      const objectId = new mongoose.Types.ObjectId(id);
+      const removed = await StudentGroup.findByIdAndDelete(objectId).lean();
+      if (!removed) continue;
+      deletedIds.push(id);
+      await Promise.all([
+        GroupMembership.updateMany(
+          { groupId: objectId, membershipStatus: 'active' },
+          { $set: { membershipStatus: 'archived', removedAtUTC: new Date(), note: 'Bulk deleted group' } }
+        ),
+        StudentProfile.updateMany(
+          { groupIds: objectId },
+          { $pull: { groupIds: objectId } }
+        ),
+      ]);
+    }
+
+    res.json({
+      message: `Deleted ${deletedIds.length} groups`,
+      deleted: deletedIds.length,
+      deletedIds,
+      skipped,
+    });
   } catch (err) {
     res.status(500).json({ message: String(err) });
   }
@@ -834,7 +999,7 @@ router.post('/student-groups/:id/members/remove', ...adminAuth, async (req: Requ
 
 router.get('/student-groups/:id/members/export', ...adminAuth, async (req: Request, res: Response) => {
   try {
-    const format = String(req.query['format'] ?? 'csv') as 'csv' | 'xlsx';
+    const format = String(req.query['format'] ?? req.query['type'] ?? 'csv').trim().toLowerCase() === 'xlsx' ? 'xlsx' : 'csv';
     const groupId    = new mongoose.Types.ObjectId(String(req.params.id));
     const memberships = await GroupMembership.find({ groupId, membershipStatus: 'active' })
       .select('studentId joinedAtUTC note')

@@ -1138,7 +1138,14 @@ function normalizeIncomingAnswers(input: unknown): NormalizedIncomingAnswer[] {
                 const updatedAt = updatedAtRaw ? new Date(updatedAtRaw) : undefined;
                 return {
                     questionId: String(row.questionId || '').trim(),
-                    selectedAnswer: row.selectedAnswer !== undefined ? String(row.selectedAnswer || '') : undefined,
+                    selectedAnswer:
+                        row.selectedAnswer !== undefined
+                            ? String(row.selectedAnswer || '')
+                            : row.selectedKey !== undefined
+                                ? String(row.selectedKey || '')
+                                : row.selectedOption !== undefined
+                                    ? String(row.selectedOption || '')
+                                    : undefined,
                     writtenAnswerUrl: row.writtenAnswerUrl !== undefined ? String(row.writtenAnswerUrl || '') : undefined,
                     updatedAtUTC: updatedAt && !Number.isNaN(updatedAt.getTime()) ? updatedAt : undefined,
                 };
@@ -1158,7 +1165,14 @@ function normalizeIncomingAnswers(input: unknown): NormalizedIncomingAnswer[] {
                 const updatedAt = updatedAtRaw ? new Date(updatedAtRaw) : undefined;
                 return {
                     questionId,
-                    selectedAnswer: item.selectedAnswer !== undefined ? String(item.selectedAnswer || '') : undefined,
+                    selectedAnswer:
+                        item.selectedAnswer !== undefined
+                            ? String(item.selectedAnswer || '')
+                            : item.selectedKey !== undefined
+                                ? String(item.selectedKey || '')
+                                : item.selectedOption !== undefined
+                                    ? String(item.selectedOption || '')
+                                    : undefined,
                     writtenAnswerUrl: item.writtenAnswerUrl !== undefined ? String(item.writtenAnswerUrl || '') : undefined,
                     updatedAtUTC: updatedAt && !Number.isNaN(updatedAt.getTime()) ? updatedAt : undefined,
                 };
@@ -2430,135 +2444,296 @@ export async function logExamAttemptEvent(req: AuthRequest, res: Response): Prom
     }
 }
 
+type ExamReviewSettings = {
+    showQuestion?: boolean;
+    showSelectedAnswer?: boolean;
+    showCorrectAnswer?: boolean;
+    showExplanation?: boolean;
+    showSolutionImage?: boolean;
+};
+
+type ExamAttemptResultContext =
+    | {
+        ok: false;
+        statusCode: number;
+        message: string;
+    }
+    | {
+        ok: true;
+        exam: Record<string, any>;
+        result: Record<string, any>;
+        resultPublished: boolean;
+        resultPublishMode: 'immediate' | 'manual' | 'scheduled';
+        reviewSettings: ExamReviewSettings;
+        answers: Array<Record<string, unknown>>;
+        rank: number;
+    };
+
+function normalizeOptionKey(value: unknown): 'A' | 'B' | 'C' | 'D' | null {
+    const normalized = String(value || '').trim().toUpperCase();
+    if (normalized === 'A' || normalized === 'B' || normalized === 'C' || normalized === 'D') {
+        return normalized;
+    }
+    return null;
+}
+
+async function loadExamAttemptResultContext(params: {
+    studentId: string;
+    examId: string;
+    attemptId?: string;
+}): Promise<ExamAttemptResultContext> {
+    const { studentId, examId, attemptId } = params;
+
+    const exam = await Exam.findById(examId).lean();
+    if (!exam) {
+        return { ok: false, statusCode: 404, message: 'Exam not found.' };
+    }
+
+    let attemptNo: number | null = null;
+    if (attemptId) {
+        if (!mongoose.Types.ObjectId.isValid(attemptId)) {
+            return { ok: false, statusCode: 400, message: 'Invalid exam session.' };
+        }
+        const session = await ExamSession.findOne({
+            _id: attemptId,
+            exam: examId,
+            student: studentId,
+        }).lean();
+        if (!session) {
+            return { ok: false, statusCode: 404, message: 'Exam session not found.' };
+        }
+        attemptNo = Number((session as any).attemptNo || 1);
+    }
+
+    const resultQuery: Record<string, unknown> = { exam: examId, student: studentId };
+    if (attemptNo !== null) {
+        resultQuery.attemptNo = attemptNo;
+    }
+
+    const result = await ExamResult.findOne(resultQuery).sort({ attemptNo: -1, submittedAt: -1 }).lean();
+    if (!result) {
+        return {
+            ok: false,
+            statusCode: 404,
+            message: 'No result found. You have not submitted this exam.',
+        };
+    }
+
+    const now = new Date();
+    const resultPublished = isExamResultPublished(exam as unknown as Record<string, unknown>, now);
+    const resultPublishMode = getResultPublishMode(exam as unknown as Record<string, unknown>);
+    const reviewSettings = ((exam as any).reviewSettings || {
+        showQuestion: true,
+        showSelectedAnswer: true,
+        showCorrectAnswer: true,
+        showExplanation: true,
+        showSolutionImage: true,
+    }) as ExamReviewSettings;
+
+    const questionIds = Array.isArray((result as any).answers)
+        ? (result as any).answers.map((answer: { question: mongoose.Types.ObjectId }) => answer.question)
+        : [];
+    const questions = await Question.find({ _id: { $in: questionIds } }).lean();
+    const qMap = new Map(questions.map((question) => [question._id!.toString(), question]));
+
+    const rawAnswers = (Array.isArray((result as any).answers) ? (result as any).answers : []).map((answer: {
+        question: mongoose.Types.ObjectId;
+        selectedAnswer: string;
+        isCorrect: boolean;
+    }) => {
+        const question = qMap.get(String(answer.question || ''));
+        return {
+            questionId: answer.question,
+            question: question?.question,
+            questionImage: question?.questionImage,
+            optionA: question?.optionA,
+            optionB: question?.optionB,
+            optionC: question?.optionC,
+            optionD: question?.optionD,
+            correctAnswer: question?.correctAnswer,
+            correctOption: question?.correctAnswer,
+            selectedAnswer: answer.selectedAnswer,
+            selectedOption: answer.selectedAnswer,
+            isCorrect: answer.isCorrect,
+            explanation: question?.explanation,
+            solutionImage: question?.solutionImage,
+            solution: (question as Record<string, unknown>)?.solution || null,
+            section: question?.section,
+            marks: question?.marks,
+        };
+    });
+
+    const answers = !Boolean(reviewSettings.showQuestion)
+        ? []
+        : rawAnswers.map((answer) => {
+            const next = { ...answer } as Record<string, unknown>;
+            if (!Boolean(reviewSettings.showSelectedAnswer)) {
+                delete next.selectedAnswer;
+                delete next.selectedOption;
+            }
+            if (!Boolean(reviewSettings.showCorrectAnswer)) {
+                delete next.correctAnswer;
+                delete next.correctOption;
+                delete next.optionA;
+                delete next.optionB;
+                delete next.optionC;
+                delete next.optionD;
+            }
+            if (!Boolean(reviewSettings.showExplanation)) {
+                delete next.explanation;
+                delete next.solution;
+            }
+            if (!Boolean(reviewSettings.showSolutionImage)) {
+                delete next.solutionImage;
+            }
+            return next;
+        });
+
+    const rank = await ExamResult.countDocuments({
+        exam: examId,
+        obtainedMarks: { $gt: Number((result as any).obtainedMarks || 0) },
+    }) + 1;
+
+    return {
+        ok: true,
+        exam: exam as unknown as Record<string, any>,
+        result: result as unknown as Record<string, any>,
+        resultPublished,
+        resultPublishMode,
+        reviewSettings,
+        answers,
+        rank,
+    };
+}
+
 export async function getExamResult(req: AuthRequest, res: Response): Promise<void> {
     try {
         const studentId = req.user!._id;
-        const examId = req.params.id;
+        const examId = String(req.params.id || req.params.examId || '');
+        const context = await loadExamAttemptResultContext({ studentId, examId });
 
-        const exam = await Exam.findById(examId).lean();
-        if (!exam) { res.status(404).json({ message: 'Exam not found.' }); return; }
+        if (!context.ok) {
+            res.status(context.statusCode).json({ message: context.message });
+            return;
+        }
 
-        const result = await ExamResult.findOne({ exam: examId, student: studentId }).sort({ attemptNo: -1, submittedAt: -1 }).lean();
-        if (!result) { res.status(404).json({ message: 'No result found. You have not submitted this exam.' }); return; }
-
-        const now = new Date();
-        const resultPublished = isExamResultPublished(exam as unknown as Record<string, unknown>, now);
-        const resultPublishMode = getResultPublishMode(exam as unknown as Record<string, unknown>);
-        const reviewSettings = ((exam as any).reviewSettings || {
-            showQuestion: true,
-            showSelectedAnswer: true,
-            showCorrectAnswer: true,
-            showExplanation: true,
-            showSolutionImage: true,
-        }) as {
-            showQuestion?: boolean;
-            showSelectedAnswer?: boolean;
-            showCorrectAnswer?: boolean;
-            showExplanation?: boolean;
-            showSolutionImage?: boolean;
-        };
-
-        if (!resultPublished) {
+        if (!context.resultPublished) {
             res.json({
                 resultPublished: false,
-                publishDate: exam.resultPublishDate,
-                resultPublishMode,
+                publishDate: context.exam.resultPublishDate,
+                resultPublishMode: context.resultPublishMode,
                 exam: {
-                    title: exam.title,
-                    subject: exam.subject,
-                    totalMarks: exam.totalMarks,
-                    totalQuestions: exam.totalQuestions,
+                    title: context.exam.title,
+                    subject: context.exam.subject,
+                    totalMarks: context.exam.totalMarks,
+                    totalQuestions: context.exam.totalQuestions,
                 },
                 message: 'Result not published yet',
             });
             return;
         }
 
-        // Include solution details once published
-        const questionIds = result.answers.map((a: { question: mongoose.Types.ObjectId }) => a.question);
-        const questions = await Question.find({ _id: { $in: questionIds } }).lean();
-        const qMap = new Map(questions.map(q => [q._id!.toString(), q]));
-
-        const rawAnswers = result.answers.map((a: {
-            question: mongoose.Types.ObjectId;
-            selectedAnswer: string;
-            isCorrect: boolean;
-        }) => {
-            const q = qMap.get(a.question.toString());
-            return {
-                questionId: a.question,
-                question: q?.question,
-                questionImage: q?.questionImage,
-                optionA: q?.optionA,
-                optionB: q?.optionB,
-                optionC: q?.optionC,
-                optionD: q?.optionD,
-                correctAnswer: q?.correctAnswer,
-                correctOption: q?.correctAnswer,
-                selectedAnswer: a.selectedAnswer,
-                selectedOption: a.selectedAnswer,
-                isCorrect: a.isCorrect,
-                explanation: q?.explanation,
-                solutionImage: q?.solutionImage,
-                solution: (q as Record<string, unknown>)?.solution || null,
-                section: q?.section,
-                marks: q?.marks,
-            };
-        });
-
-        const answers = !Boolean(reviewSettings.showQuestion)
-            ? []
-            : rawAnswers.map((answer) => {
-                const next = { ...answer } as Record<string, unknown>;
-                if (!Boolean(reviewSettings.showSelectedAnswer)) {
-                    delete next.selectedAnswer;
-                    delete next.selectedOption;
-                }
-                if (!Boolean(reviewSettings.showCorrectAnswer)) {
-                    delete next.correctAnswer;
-                    delete next.correctOption;
-                    delete next.optionA;
-                    delete next.optionB;
-                    delete next.optionC;
-                    delete next.optionD;
-                }
-                if (!Boolean(reviewSettings.showExplanation)) {
-                    delete next.explanation;
-                    delete next.solution;
-                }
-                if (!Boolean(reviewSettings.showSolutionImage)) {
-                    delete next.solutionImage;
-                }
-                return next;
-            });
-
-        // Compute rank
-        const rank = await ExamResult.countDocuments({
-            exam: examId,
-            obtainedMarks: { $gt: result.obtainedMarks },
-        }) + 1;
-
         res.json({
             resultPublished: true,
-            resultPublishMode,
-            reviewSettings,
+            resultPublishMode: context.resultPublishMode,
+            reviewSettings: context.reviewSettings,
             result: {
-                ...result,
-                rank,
-                answers,
-                detailedAnswers: answers, // Compatibility alias for one release
+                ...context.result,
+                rank: context.rank,
+                answers: context.answers,
+                detailedAnswers: context.answers,
             },
             exam: {
-                title: exam.title,
-                subject: exam.subject,
-                totalMarks: exam.totalMarks,
-                totalQuestions: exam.totalQuestions,
-                negativeMarking: exam.negativeMarking,
-                negativeMarkValue: exam.negativeMarkValue,
+                title: context.exam.title,
+                subject: context.exam.subject,
+                totalMarks: context.exam.totalMarks,
+                totalQuestions: context.exam.totalQuestions,
+                negativeMarking: context.exam.negativeMarking,
+                negativeMarkValue: context.exam.negativeMarkValue,
             },
         });
     } catch (err) {
         console.error('getExamResult error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+}
+
+export async function getExamAttemptResult(req: AuthRequest, res: Response): Promise<void> {
+    try {
+        const studentId = req.user!._id;
+        const examId = String(req.params.examId || req.params.id || '');
+        const attemptId = String(req.params.attemptId || req.params.sessionId || '').trim();
+        const context = await loadExamAttemptResultContext({ studentId, examId, attemptId });
+
+        if (!context.ok) {
+            res.status(context.statusCode).json({ message: context.message });
+            return;
+        }
+
+        const nowIso = new Date().toISOString();
+        if (!context.resultPublished) {
+            res.json({
+                status: 'locked',
+                publishAtUTC: context.exam.resultPublishDate || nowIso,
+                serverNowUTC: nowIso,
+            });
+            return;
+        }
+
+        res.json({
+            status: 'published',
+            obtainedMarks: Number(context.result.obtainedMarks || 0),
+            totalMarks: Number(context.result.totalMarks || context.exam.totalMarks || 0),
+            correctCount: Number(context.result.correctCount || 0),
+            wrongCount: Number(context.result.wrongCount || 0),
+            skippedCount: Number(context.result.unansweredCount || 0),
+            percentage: Number(context.result.percentage || 0),
+            rank: context.rank,
+            timeTakenSeconds: Number(context.result.timeTaken || 0),
+        });
+    } catch (err) {
+        console.error('getExamAttemptResult error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+}
+
+export async function getExamAttemptSolutions(req: AuthRequest, res: Response): Promise<void> {
+    try {
+        const studentId = req.user!._id;
+        const examId = String(req.params.examId || req.params.id || '');
+        const attemptId = String(req.params.attemptId || req.params.sessionId || '').trim();
+        const context = await loadExamAttemptResultContext({ studentId, examId, attemptId });
+
+        if (!context.ok) {
+            res.status(context.statusCode).json({ message: context.message });
+            return;
+        }
+
+        const nowIso = new Date().toISOString();
+        if (!context.resultPublished) {
+            res.json({
+                status: 'locked',
+                publishAtUTC: context.exam.resultPublishDate || nowIso,
+                serverNowUTC: nowIso,
+                reason: 'Result not published yet',
+            });
+            return;
+        }
+
+        res.json({
+            status: 'available',
+            items: context.answers.map((answer, index) => ({
+                questionId: String(answer.questionId || answer.question || `q-${index + 1}`),
+                questionText: String(answer.question || answer.questionText || `Question ${index + 1}`),
+                selectedKey: normalizeOptionKey(answer.selectedAnswer || answer.selectedOption),
+                correctKey: normalizeOptionKey(answer.correctAnswer || answer.correctOption) || 'A',
+                explanationText: String(answer.explanation || answer.solution || '').trim() || undefined,
+                questionImageUrl: String(answer.questionImage || answer.questionImageUrl || '').trim() || undefined,
+                explanationImageUrl: String(answer.solutionImage || answer.explanationImageUrl || '').trim() || undefined,
+            })),
+        });
+    } catch (err) {
+        console.error('getExamAttemptSolutions error:', err);
         res.status(500).json({ message: 'Server error' });
     }
 }

@@ -34,6 +34,7 @@ const studentHubController_1 = require("../controllers/studentHubController");
 const ContactMessage_1 = __importDefault(require("../models/ContactMessage"));
 const securityRateLimit_2 = require("../middlewares/securityRateLimit");
 const mediaController_1 = require("../controllers/mediaController");
+const adminAlertService_1 = require("../services/adminAlertService");
 const cmsController_3 = require("../controllers/cmsController");
 const socialLinksController_1 = require("../controllers/socialLinksController");
 const analyticsController_1 = require("../controllers/analyticsController");
@@ -146,6 +147,13 @@ router.post('/contact', securityRateLimit_2.contactRateLimiter, async (req, res)
             ip: req.ip,
             userAgent: req.headers['user-agent']
         });
+        await (0, adminAlertService_1.createAdminAlert)({
+            title: 'New contact message',
+            message: `${msg.subject} from ${msg.name}`,
+            linkUrl: `/__cw_admin__/contact?focus=${String(msg._id)}`,
+            category: 'update',
+            targetRole: 'admin',
+        });
         res.status(201).json({ message: 'Message sent successfully', id: msg._id });
     }
     catch (error) {
@@ -179,6 +187,8 @@ router.post('/qbank/usage/increment', auth_1.authenticate, questionBankControlle
 router.get('/student/notices', auth_1.authenticate, adminSupportController_1.studentGetNotices);
 router.post('/student/support-tickets', auth_1.authenticate, adminSupportController_1.studentCreateSupportTicket);
 router.get('/student/support-tickets', auth_1.authenticate, adminSupportController_1.studentGetSupportTickets);
+router.get('/student/support-tickets/:id', auth_1.authenticate, adminSupportController_1.studentGetSupportTicketById);
+router.post('/student/support-tickets/:id/reply', auth_1.authenticate, adminSupportController_1.studentReplySupportTicket);
 router.get('/subscriptions/me', auth_1.authenticate, subscriptionController_1.getMySubscription);
 router.post('/subscriptions/:planId/request-payment', auth_1.authenticate, securityRateLimit_1.subscriptionActionRateLimiter, subscriptionController_1.requestSubscriptionPayment);
 router.post('/subscriptions/:planId/upload-proof', auth_1.authenticate, securityRateLimit_1.subscriptionActionRateLimiter, subscriptionController_1.uploadSubscriptionProof);

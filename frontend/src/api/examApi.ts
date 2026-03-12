@@ -372,6 +372,14 @@ function normalizeSessionQuestionsPayload(raw: unknown): ExamQuestionsResponse {
     const examSource = asRecord(payload.exam);
     const sessionSource = asRecord(payload.session);
     const sourceExam = Object.keys(examSource).length > 0 ? examSource : sessionSource;
+    const sessionId = asString(sessionSource.sessionId || sessionSource._id || sessionSource.id);
+    const submittedAtUTC = asString(sessionSource.submittedAt || sessionSource.submittedAtUTC) || undefined;
+    const isActive =
+        sessionSource.isActive !== undefined
+            ? Boolean(sessionSource.isActive)
+            : submittedAtUTC
+              ? false
+              : asString(sessionSource.status).toLowerCase() !== "submitted";
 
     const questionsRaw = Array.isArray(payload.questions) ? payload.questions : [];
     const questions = questionsRaw.map((entry, index) => normalizeQuestion(asRecord(entry), index));
@@ -394,6 +402,13 @@ function normalizeSessionQuestionsPayload(raw: unknown): ExamQuestionsResponse {
             ),
             rules: normalizeRules(sourceExam),
         },
+        session: sessionId
+            ? {
+                  sessionId,
+                  isActive,
+                  submittedAtUTC,
+              }
+            : undefined,
         questions,
         answers,
     };
@@ -422,6 +437,13 @@ export const examPdfUrls = {
     solutions: (examId: string) => `/api/exams/${examId}/pdf/solutions`,
     answers: (examId: string, sessionId: string) => `/api/exams/${examId}/sessions/${sessionId}/pdf/answers`,
 };
+
+function normalizeApiDownloadPath(url: string): string {
+    if (/^https?:\/\//i.test(url)) return url;
+    if (url.startsWith("/api/")) return url.slice(4);
+    if (url === "/api") return "/";
+    return url;
+}
 
 export const fetchExams = async (params: FetchExamsParams): Promise<ExamListResponse> => {
     const response = await api.get<unknown>("/exams/public-list", { params });
@@ -457,25 +479,8 @@ export const fetchExamDetail = async (examId: string): Promise<ExamDetailRespons
 };
 
 export const startExamSession = async (examId: string): Promise<StartSessionResponse> => {
-    try {
-        const response = await api.post<StartSessionResponse>(examPath(`/${examId}/sessions/start`));
-        if ((response.data as unknown as Record<string, unknown>)?.redirect) {
-            const payload = asRecord(response.data as unknown);
-            return {
-                sessionId: "external_redirect",
-                startedAtUTC: asIso(payload.serverNow),
-                expiresAtUTC: asIso(payload.serverNow),
-                serverNowUTC: asIso(payload.serverNow),
-                redirect: true,
-                externalExamUrl: asString(payload.externalExamUrl),
-            };
-        }
-        return response.data;
-    } catch (error: unknown) {
-        if (!isAxiosError(error) || error.response?.status !== 404) throw error;
-
-        const legacy = await api.post<unknown>(examPath(`/${examId}/start`));
-        const payload = asRecord(legacy.data);
+    const normalizeStartPayload = (raw: unknown): StartSessionResponse => {
+        const payload = asRecord(raw);
         if (Boolean(payload.redirect) && asString(payload.externalExamUrl)) {
             return {
                 sessionId: "external_redirect",
@@ -486,9 +491,22 @@ export const startExamSession = async (examId: string): Promise<StartSessionResp
                 externalExamUrl: asString(payload.externalExamUrl),
             };
         }
+
+        const directSessionId = asString(payload.sessionId);
+        if (directSessionId) {
+            return {
+                sessionId: directSessionId,
+                startedAtUTC: asIso(payload.startedAtUTC),
+                expiresAtUTC: asIso(payload.expiresAtUTC),
+                serverNowUTC: asIso(payload.serverNowUTC || payload.serverNow),
+            };
+        }
+
         const session = asRecord(payload.session);
-        const sessionId = asString(session._id || session.id);
-        if (!sessionId) throw error;
+        const sessionId = asString(session.sessionId || session._id || session.id);
+        if (!sessionId) {
+            throw new Error("Exam session id missing from payload.");
+        }
 
         const bootstrap = normalizeSessionQuestionsPayload(payload);
         rememberLegacyBootstrap(examId, sessionId, bootstrap);
@@ -499,6 +517,16 @@ export const startExamSession = async (examId: string): Promise<StartSessionResp
             expiresAtUTC: asIso(session.expiresAt),
             serverNowUTC: asIso(payload.serverNow),
         };
+    };
+
+    try {
+        const response = await api.post<StartSessionResponse>(examPath(`/${examId}/sessions/start`));
+        return normalizeStartPayload(response.data);
+    } catch (error: unknown) {
+        if (!isAxiosError(error) || error.response?.status !== 404) throw error;
+
+        const legacy = await api.post<unknown>(examPath(`/${examId}/start`));
+        return normalizeStartPayload(legacy.data);
     }
 };
 
@@ -527,12 +555,34 @@ export const saveAnswers = async (
     sessionId: string,
     payload: SaveAnswersPayload,
 ): Promise<SaveAnswersResponse> => {
+    const normalizeSavePayload = (raw: unknown): SaveAnswersResponse => {
+        const data = asRecord(raw);
+        if (Array.isArray(data.updated)) {
+            return {
+                ok: Boolean(data.ok),
+                serverSavedAtUTC: asIso(data.serverSavedAtUTC || data.savedAt),
+                updated: normalizeAnswersFromSession(data.updated),
+            };
+        }
+
+        const serverSavedAtUTC = asIso(data.serverSavedAtUTC || data.savedAt);
+        return {
+            ok: Boolean(data.ok ?? data.saved ?? true),
+            serverSavedAtUTC,
+            updated: payload.answers.map((answer) => ({
+                questionId: answer.questionId,
+                changeCount: 0,
+                updatedAtUTC: serverSavedAtUTC,
+            })),
+        };
+    };
+
     try {
         const response = await api.post<SaveAnswersResponse>(
             examPath(`/${examId}/sessions/${sessionId}/answers`),
             payload,
         );
-        return response.data;
+        return normalizeSavePayload(response.data);
     } catch (error: unknown) {
         if (!isAxiosError(error) || error.response?.status !== 404) throw error;
 
@@ -546,36 +596,29 @@ export const saveAnswers = async (
         };
 
         const legacy = await api.post<unknown>(examPath(`/${examId}/attempt/${sessionId}/answer`), legacyPayload);
-        const data = asRecord(legacy.data);
-        const serverSavedAtUTC = asIso(data.savedAt);
-
-        return {
-            ok: true,
-            serverSavedAtUTC,
-            updated: payload.answers.map((answer) => ({
-                questionId: answer.questionId,
-                changeCount: 0,
-                updatedAtUTC: serverSavedAtUTC,
-            })),
-        };
+        return normalizeSavePayload(legacy.data);
     }
 };
 
 export const submitExam = async (examId: string, sessionId: string): Promise<SubmitExamResponse> => {
+    const normalizeSubmitPayload = (raw: unknown): SubmitExamResponse => {
+        const payload = asRecord(raw);
+        return {
+            ok: Boolean(payload.ok ?? payload.submitted ?? true),
+            submittedAtUTC: asIso(payload.submittedAtUTC || payload.submittedAt || payload.savedAt),
+        };
+    };
+
     try {
         const response = await api.post<SubmitExamResponse>(examPath(`/${examId}/sessions/${sessionId}/submit`));
-        return response.data;
+        return normalizeSubmitPayload(response.data);
     } catch (error: unknown) {
         if (!isAxiosError(error) || error.response?.status !== 404) throw error;
 
         const legacy = await api.post<unknown>(examPath(`/${examId}/attempt/${sessionId}/submit`), {
             attemptId: sessionId,
         });
-        const payload = asRecord(legacy.data);
-        return {
-            ok: true,
-            submittedAtUTC: asIso(payload.submittedAt || payload.savedAt),
-        };
+        return normalizeSubmitPayload(legacy.data);
     }
 };
 
@@ -682,14 +725,34 @@ export const fetchExamSolutions = async (
 };
 
 export const probePdfEndpoint = async (url: string): Promise<boolean> => {
+    const normalizedUrl = normalizeApiDownloadPath(url);
     try {
-        const response = await fetch(url, {
+        const response = await api.request({
+            url: normalizedUrl,
             method: "HEAD",
-            credentials: "include",
         });
         return response.status !== 404;
     } catch (error) {
-        // Non-404 implies endpoint likely exists but failed for another reason (auth/method/network).
+        if (isAxiosError(error)) {
+            return error.response?.status !== 404;
+        }
         return true;
     }
+};
+
+export const downloadPdfEndpoint = async (url: string, fallbackFilename: string): Promise<void> => {
+    const response = await api.get<BlobPart>(normalizeApiDownloadPath(url), {
+        responseType: "blob",
+    });
+
+    const contentType = String(response.headers["content-type"] || "application/pdf");
+    const blob = new Blob([response.data], { type: contentType });
+    const objectUrl = window.URL.createObjectURL(blob);
+    const link = window.document.createElement("a");
+    link.href = objectUrl;
+    link.download = fallbackFilename;
+    window.document.body.appendChild(link);
+    link.click();
+    window.document.body.removeChild(link);
+    window.URL.revokeObjectURL(objectUrl);
 };

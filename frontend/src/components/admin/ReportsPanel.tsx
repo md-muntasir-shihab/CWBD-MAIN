@@ -10,22 +10,12 @@ import {
     adminGetReportsSummary,
 } from '../../services/api';
 import { queryKeys } from '../../lib/queryKeys';
+import { downloadFile } from '../../utils/download';
 
 type ReportsPanelProps = {
     exams?: Array<Record<string, any>>;
     users?: Array<Record<string, any>>;
 };
-
-function saveBlob(blob: Blob, filename: string): void {
-    const href = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = href;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(href);
-}
 
 export default function ReportsPanel(_props: ReportsPanelProps = {}) {
     const [filters, setFilters] = useState<{ from: string; to: string }>({ from: '', to: '' });
@@ -60,7 +50,7 @@ export default function ReportsPanel(_props: ReportsPanelProps = {}) {
                 to: filters.to || undefined,
                 format,
             });
-            saveBlob(response.data, `reports-summary-${Date.now()}.${format}`);
+            downloadFile(response, { filename: `reports-summary-${Date.now()}.${format}` });
         } catch (error: any) {
             toast.error(error?.response?.data?.message || 'Summary export failed');
         }
@@ -73,7 +63,7 @@ export default function ReportsPanel(_props: ReportsPanelProps = {}) {
         }
         try {
             const response = await adminExportExamInsights(selectedExamId, format);
-            saveBlob(response.data, `exam-insights-${selectedExamId}-${Date.now()}.${format}`);
+            downloadFile(response, { filename: `exam-insights-${selectedExamId}-${Date.now()}.${format}` });
         } catch (error: any) {
             toast.error(error?.response?.data?.message || 'Exam insights export failed');
         }

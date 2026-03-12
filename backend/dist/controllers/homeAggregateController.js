@@ -340,7 +340,12 @@ const getAggregatedHomeData = async (req, res) => {
                 .select('name shortForm slug category clusterGroup contactNumber established address email website admissionWebsite totalSeats scienceSeats artsSeats businessSeats applicationStartDate applicationEndDate scienceExamDate artsExamDate businessExamDate examCenters shortDescription description logoUrl')
                 .sort({ updatedAt: -1, createdAt: -1, _id: -1 })
                 .lean(),
-            Exam_1.default.find({ isPublished: true, status: { $in: ['live', 'scheduled'] } })
+            Exam_1.default.find({
+                isPublished: true,
+                isActive: { $ne: false },
+                displayOnPublicList: { $ne: false },
+                status: { $in: ['live', 'scheduled'] },
+            })
                 .select('title subject status startDate endDate duration')
                 .sort({ startDate: 1 })
                 .lean(),
@@ -455,9 +460,11 @@ const getAggregatedHomeData = async (req, res) => {
         }))
             .filter((item) => item.enabled && item.category)
             .sort((a, b) => a.order - b.order);
-        const highlightedCategories = highlightedFromUniversitySettings.length > 0
-            ? highlightedFromUniversitySettings
-            : highlightedFromHomeSettings;
+        // Home settings should be the canonical source when explicitly configured.
+        // Fall back to university settings only when home settings are empty.
+        const highlightedCategories = highlightedFromHomeSettings.length > 0
+            ? highlightedFromHomeSettings
+            : highlightedFromUniversitySettings;
         const highlightedSet = new Set(highlightedCategories.map((item) => item.category));
         const categoriesWithHighlightRaw = categories.map((item) => ({
             ...item,

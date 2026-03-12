@@ -1,5 +1,6 @@
 /* ─── Finance Center API Layer ──────────────────────────── */
 import api from '../services/api';
+import { downloadFile } from '../utils/download';
 import type {
     FcTransaction, FcInvoice, FcBudget, FcRecurringRule,
     FcChartOfAccount, FcVendor, FcSettings, FcRefund,
@@ -105,8 +106,10 @@ export const fcApi = {
         api.get<{ data: FcAuditLog }>(`${FC}/audit-logs/${id}`).then(r => r.data),
 
     // ── Export / Import ─────────────────────────────────
-    exportTransactionsUrl: (p: Params = {}) => `${FC}/export${qs(p)}`,
-    importTemplateUrl: () => `${FC}/import-template`,
+    exportTransactions: (p: Params = {}) =>
+        api.get(`${FC}/export${qs(p)}`, { responseType: 'blob' }),
+    downloadImportTemplate: () =>
+        api.get(`${FC}/import-template`, { responseType: 'blob' }),
     importPreview: (file: File) => {
         const fd = new FormData();
         fd.append('file', file);
@@ -119,12 +122,7 @@ export const fcApi = {
     downloadPLReport: (month?: string) => {
         const url = `${FC}/report.pdf${qs({ month })}`;
         return api.get(url, { responseType: 'blob' }).then(r => {
-            const blob = new Blob([r.data], { type: 'application/pdf' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = `PL-Report-${month || 'current'}.pdf`;
-            a.click();
-            URL.revokeObjectURL(a.href);
+            downloadFile(r, { filename: `PL-Report-${month || 'current'}.pdf` });
         });
     },
 };

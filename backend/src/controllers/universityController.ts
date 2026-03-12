@@ -31,6 +31,42 @@ const SORT_WHITELIST: Record<string, string> = {
     updatedAt: 'updatedAt',
 };
 
+const PUBLIC_UNIVERSITY_LIST_PROJECTION = [
+    'name',
+    'shortForm',
+    'category',
+    'clusterGroup',
+    'established',
+    'establishedYear',
+    'address',
+    'contactNumber',
+    'email',
+    'website',
+    'websiteUrl',
+    'admissionWebsite',
+    'admissionUrl',
+    'totalSeats',
+    'scienceSeats',
+    'seatsScienceEng',
+    'artsSeats',
+    'seatsArtsHum',
+    'businessSeats',
+    'seatsBusiness',
+    'logoUrl',
+    'applicationStartDate',
+    'applicationEndDate',
+    'scienceExamDate',
+    'examDateScience',
+    'artsExamDate',
+    'examDateArts',
+    'businessExamDate',
+    'examDateBusiness',
+    'isActive',
+    'featured',
+    'featuredOrder',
+    'slug',
+].join(' ');
+
 function asStatusFilter(value: unknown): UniversityStatusFilter {
     const raw = String(value || '').trim().toLowerCase();
     if (raw === 'active' || raw === 'inactive' || raw === 'archived' || raw === 'all') return raw;
@@ -186,6 +222,8 @@ function buildUniversityFilter(
     const categoryRaw = String(category || '').trim();
     if (categoryRaw && !isAllUniversityCategoryToken(categoryRaw)) {
         filter.category = normalizeUniversityCategoryStrict(categoryRaw);
+    } else if (categoryRaw && isAllUniversityCategoryToken(categoryRaw) && requireCategory && !allowAllCategories) {
+        categoryMissing = true;
     } else if (!categoryRaw && requireCategory && !allowAllCategories) {
         categoryMissing = true;
     }
@@ -234,7 +272,12 @@ export async function getUniversities(req: Request, res: Response): Promise<void
             ? ({ featuredOrder: 1, name: 1 } as Record<string, 1 | -1>)
             : normalizeSort(sortBy, sortOrder, sort);
         const total = await University.countDocuments(filter);
-        const rows = await University.find(filter).sort(sortOption).skip((pageNum - 1) * limitNum).limit(limitNum).lean();
+        const rows = await University.find(filter)
+            .select(PUBLIC_UNIVERSITY_LIST_PROJECTION)
+            .sort(sortOption)
+            .skip((pageNum - 1) * limitNum)
+            .limit(limitNum)
+            .lean();
         res.json({
             items: rows.map((item) => toCanonicalUniversityRecord(item as unknown as Record<string, unknown>)),
             page: pageNum,
@@ -555,7 +598,7 @@ export async function adminReorderFeaturedUniversities(req: Request, res: Respon
 
 export async function adminExportUniversities(req: Request, res: Response): Promise<void> {
     try {
-        const format = String(req.query.type || req.query.format || 'csv').toLowerCase() === 'xlsx' ? 'xlsx' : 'csv';
+        const format = String(req.query.format || req.query.type || 'csv').toLowerCase() === 'xlsx' ? 'xlsx' : 'csv';
         const { filter } = buildUniversityFilter(req.query, { includeArchivedDefault: false });
         const selectedIds = asStringIdList(req.query.selectedIds);
         if (selectedIds.length > 0) filter._id = { $in: selectedIds };

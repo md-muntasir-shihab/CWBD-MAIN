@@ -7,19 +7,9 @@ import {
     adminNewsV2ExportSources,
     adminNewsV2GetSources,
 } from '../../../services/api';
+import { downloadFile } from '../../../utils/download';
 
 type ExportFormat = 'csv' | 'xlsx';
-
-function downloadBlob(blob: Blob, filename: string) {
-    const objectUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = objectUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(objectUrl);
-}
 
 export default function AdminNewsExportsSection() {
     const [format, setFormat] = useState<ExportFormat>('xlsx');
@@ -35,20 +25,18 @@ export default function AdminNewsExportsSection() {
     const exportMutation = useMutation({
         mutationFn: async (type: 'news' | 'sources' | 'logs') => {
             if (type === 'news') {
-                return (
-                    await adminNewsV2ExportNews({
-                        format,
-                        status: status || undefined,
-                        dateRange: dateRange || undefined,
-                        sourceId: sourceId || undefined,
-                    })
-                ).data as Blob;
+                return adminNewsV2ExportNews({
+                    format,
+                    status: status || undefined,
+                    dateRange: dateRange || undefined,
+                    sourceId: sourceId || undefined,
+                });
             }
-            if (type === 'sources') return (await adminNewsV2ExportSources(format)).data as Blob;
-            return (await adminNewsV2ExportLogs(format)).data as Blob;
+            if (type === 'sources') return adminNewsV2ExportSources(format);
+            return adminNewsV2ExportLogs(format);
         },
-        onSuccess: (blob, type) => {
-            downloadBlob(blob, `news-v2-${type}.${format}`);
+        onSuccess: (response, type) => {
+            downloadFile(response, { filename: `news-v2-${type}.${format}` });
             toast.success(`${type} export downloaded`);
         },
         onError: (err: any) => toast.error(err?.response?.data?.message || 'Export failed'),

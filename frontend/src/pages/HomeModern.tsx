@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
     Search, Megaphone, AlertCircle,
-    GraduationCap, CalendarClock, ClipboardCheck, Newspaper,
+    GraduationCap, CalendarClock, ChevronLeft, ChevronRight, ClipboardCheck, Newspaper,
     BookOpen, BarChart3, Layers
 } from 'lucide-react';
 import UniversityCard from '../components/university/UniversityCard';
@@ -117,6 +117,8 @@ export default function HomeModern() {
     const [selectedCategory, setSelectedCategory] = useState('');
     const [selectedCluster, setSelectedCluster] = useState('');
     const [categoryInteracted, setCategoryInteracted] = useState(false);
+    const categoryScrollRef = useRef<HTMLDivElement | null>(null);
+    const clusterScrollRef = useRef<HTMLDivElement | null>(null);
 
     /* ---------- derived ---------- */
     const hs = data?.homeSettings;
@@ -192,6 +194,23 @@ export default function HomeModern() {
     const stats = data?.stats;
     const cardConfig = hs?.universityCardConfig;
     const animLevel = hs?.ui?.animationLevel ?? 'minimal';
+
+    const handleHorizontalWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+        const container = event.currentTarget;
+        if (container.scrollWidth <= container.clientWidth) return;
+        const dominantDelta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+        if (!dominantDelta) return;
+        container.scrollLeft += dominantDelta;
+        event.preventDefault();
+    };
+
+    const scrollChipRow = (target: 'category' | 'cluster', direction: 'left' | 'right') => {
+        const ref = target === 'category' ? categoryScrollRef : clusterScrollRef;
+        const el = ref.current;
+        if (!el) return;
+        const amount = Math.max(180, Math.floor(el.clientWidth * 0.65));
+        el.scrollBy({ left: direction === 'right' ? amount : -amount, behavior: 'smooth' });
+    };
 
     /* ================================================================ */
     /*  SECTION RENDERERS                                                */
@@ -324,7 +343,11 @@ export default function HomeModern() {
                     <SectionHeader title="Browse by Category" subtitle="Find universities that match your profile" icon={Layers} />
                     {/* Category chips */}
                     <div className="relative">
-                        <div className="flex gap-2 overflow-x-auto pb-3 scrollbar-hide">
+                        <div
+                            ref={categoryScrollRef}
+                            onWheel={handleHorizontalWheel}
+                            className="flex gap-2 overflow-x-auto pb-3 scrollbar-hide touch-pan-x"
+                        >
                             <button
                                 onClick={() => { setSelectedCategory(''); setSelectedCluster(''); setCategoryInteracted(true); }}
                                 className={`shrink-0 px-5 py-2.5 rounded-full text-sm font-semibold transition-all ${
@@ -360,7 +383,27 @@ export default function HomeModern() {
                                 );
                             })}
                         </div>
-                        {/* Fade edge on mobile */}
+                        <div className="pointer-events-none absolute inset-y-0 left-0 hidden md:flex items-center">
+                            <button
+                                type="button"
+                                onClick={() => scrollChipRow('category', 'left')}
+                                className="pointer-events-auto ml-1 inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200/80 bg-white/85 text-gray-600 shadow-sm backdrop-blur hover:bg-white dark:border-gray-700 dark:bg-gray-900/85 dark:text-gray-200"
+                                aria-label="Scroll categories left"
+                            >
+                                <ChevronLeft className="h-4 w-4" />
+                            </button>
+                        </div>
+                        <div className="pointer-events-none absolute inset-y-0 right-0 hidden md:flex items-center">
+                            <button
+                                type="button"
+                                onClick={() => scrollChipRow('category', 'right')}
+                                className="pointer-events-auto mr-1 inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200/80 bg-white/85 text-gray-600 shadow-sm backdrop-blur hover:bg-white dark:border-gray-700 dark:bg-gray-900/85 dark:text-gray-200"
+                                aria-label="Scroll categories right"
+                            >
+                                <ChevronRight className="h-4 w-4" />
+                            </button>
+                        </div>
+                        <div className="absolute left-0 top-0 h-full w-8 bg-gradient-to-r from-gray-50 dark:from-gray-950 pointer-events-none md:hidden" />
                         <div className="absolute right-0 top-0 h-full w-8 bg-gradient-to-l from-gray-50 dark:from-gray-950 pointer-events-none md:hidden" />
                     </div>
                     {/* Cluster chips */}
@@ -368,7 +411,9 @@ export default function HomeModern() {
                         <motion.div
                             initial={{ opacity: 0, height: 0 }}
                             animate={{ opacity: 1, height: 'auto' }}
-                            className="flex gap-2 overflow-x-auto pb-2 mt-1 scrollbar-hide"
+                            ref={clusterScrollRef}
+                            onWheel={handleHorizontalWheel}
+                            className="flex gap-2 overflow-x-auto pb-2 mt-1 scrollbar-hide touch-pan-x"
                         >
                             <button
                                 onClick={() => setSelectedCluster('')}
@@ -391,6 +436,26 @@ export default function HomeModern() {
                                 </button>
                             ))}
                         </motion.div>
+                    )}
+                    {enableCluster && currentClusters.length > 0 && (
+                        <div className="mt-1 hidden md:flex items-center justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={() => scrollChipRow('cluster', 'left')}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200/80 bg-white/85 text-gray-600 shadow-sm backdrop-blur hover:bg-white dark:border-gray-700 dark:bg-gray-900/85 dark:text-gray-200"
+                                aria-label="Scroll clusters left"
+                            >
+                                <ChevronLeft className="h-4 w-4" />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => scrollChipRow('cluster', 'right')}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200/80 bg-white/85 text-gray-600 shadow-sm backdrop-blur hover:bg-white dark:border-gray-700 dark:bg-gray-900/85 dark:text-gray-200"
+                                aria-label="Scroll clusters right"
+                            >
+                                <ChevronRight className="h-4 w-4" />
+                            </button>
+                        </div>
                     )}
                 </div>
             </SectionWrap>

@@ -59,6 +59,7 @@ import FinancePanel from '../components/admin/FinancePanel';
 import SupportTicketsPanel from '../components/admin/SupportTicketsPanel';
 import BackupsPanel from '../components/admin/BackupsPanel';
 import { adminBulkImportExamQuestions } from '../services/api';
+import { downloadFile } from '../utils/download';
 
 if (typeof window !== 'undefined') {
     (window as any).katex = katex;
@@ -1428,10 +1429,7 @@ export default function AdminDashboard({ forcedTab, forcedSubtab }: AdminDashboa
         try {
             setPendingExport(null);
             const res = await adminExportExamResults(examId);
-            const blob = res.data as Blob;
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a'); a.href = url; a.download = `Results_${examId}.xlsx`;
-            document.body.appendChild(a); a.click(); document.body.removeChild(a); window.URL.revokeObjectURL(url);
+            downloadFile(res, { filename: `Results_${examId}.xlsx` });
             toast.success('Download complete', { id: toastId });
         } catch (err: any) {
             toast.error(err.response?.data?.message || err.message || 'Export failed', { id: toastId });

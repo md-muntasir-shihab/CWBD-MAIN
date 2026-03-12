@@ -78,7 +78,7 @@ export default function Footer() {
                             <img
                                 src={home?.globalSettings?.logoUrl || websiteSettings?.logoUrl || websiteSettings?.logo || '/logo.png'}
                                 alt={home?.globalSettings?.websiteName || websiteSettings?.websiteName || 'CampusWay'}
-                                className="h-10 w-auto max-w-[140px] object-contain bg-white/10 p-1.5 rounded-xl"
+                                className="h-10 w-auto max-w-[140px] object-contain"
                             />
                             <div>
                                 <span className="block text-xl font-heading font-bold text-white leading-tight">

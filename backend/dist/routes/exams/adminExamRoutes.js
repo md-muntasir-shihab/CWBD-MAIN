@@ -40,8 +40,24 @@ exports.adminExamRoutes.get("/exams/:id/exports", async (req, res) => {
         .populate("userId", "username fullName email phone")
         .sort({ obtainedMarks: -1 })
         .lean();
-    const type = req.query.type || "csv";
-    if (type === "xlsx") {
+    const format = String(req.query.format || req.query.type || "csv").trim().toLowerCase() === "xlsx" ? "xlsx" : "csv";
+    const exportRows = rows.map((r, i) => {
+        const u = typeof r.userId === "object" ? r.userId : {};
+        return {
+            rank: r.rank || i + 1,
+            name: u.fullName || u.username || "",
+            email: u.email || "",
+            obtainedMarks: r.obtainedMarks ?? "",
+            totalMarks: r.totalMarks ?? "",
+            percentage: r.percentage != null ? `${r.percentage}%` : "",
+            correctCount: r.correctCount ?? "",
+            wrongCount: r.wrongCount ?? "",
+            skippedCount: r.skippedCount ?? "",
+            timeTaken: r.timeTakenSeconds ?? "",
+            submittedAt: r.submittedAtUTC ? new Date(r.submittedAtUTC).toLocaleString() : "",
+        };
+    });
+    if (format === "xlsx") {
         const wb = new exceljs_1.default.Workbook();
         wb.creator = "CampusWay Admin";
         const ws = wb.addWorksheet("Results");
@@ -60,30 +76,18 @@ exports.adminExamRoutes.get("/exams/:id/exports", async (req, res) => {
         ];
         ws.getRow(1).font = { bold: true };
         ws.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE0E0E0" } };
-        rows.forEach((r, i) => {
-            const u = typeof r.userId === "object" ? r.userId : {};
-            ws.addRow({
-                rank: r.rank || i + 1,
-                name: u.fullName || u.username || "",
-                email: u.email || "",
-                obtainedMarks: r.obtainedMarks,
-                totalMarks: r.totalMarks,
-                percentage: r.percentage != null ? `${r.percentage}%` : "",
-                correctCount: r.correctCount,
-                wrongCount: r.wrongCount,
-                skippedCount: r.skippedCount,
-                timeTaken: r.timeTakenSeconds,
-                submittedAt: r.submittedAtUTC ? new Date(r.submittedAtUTC).toLocaleString() : "",
-            });
-        });
+        exportRows.forEach((row) => ws.addRow(row));
         const title = String(exam.title || "exam").replace(/[^a-z0-9]/gi, "_");
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         res.setHeader("Content-Disposition", `attachment; filename="${title}_results.xlsx"`);
         await wb.xlsx.write(res);
         return res.end();
     }
-    const csv = new json2csv_1.Parser().parse(rows);
-    res.type("text/csv").send(csv);
+    const title = String(exam.title || "exam").replace(/[^a-z0-9]/gi, "_");
+    const csv = new json2csv_1.Parser().parse(exportRows);
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${title}_results.csv"`);
+    res.send(csv);
 });
 exports.adminExamRoutes.post("/exams/:id/publish-results", async (req, res) => res.json(await exam_model_1.ExamModel.findByIdAndUpdate(req.params.id, { resultPublishAtUTC: new Date() }, { new: true })));
 exports.adminExamRoutes.post("/exams/:id/reset-attempt", async (req, res) => {

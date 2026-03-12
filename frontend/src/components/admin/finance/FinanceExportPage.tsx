@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { fcApi } from '../../../api/adminFinanceApi';
 import { Download, Upload, FileSpreadsheet } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { downloadFile } from '../../../utils/download';
 
 export default function FinanceExportPage() {
     const [format, setFormat] = useState<'csv' | 'xlsx'>('xlsx');
@@ -8,29 +10,35 @@ export default function FinanceExportPage() {
     const [to, setTo] = useState('');
     const [downloading, setDownloading] = useState(false);
 
-    const handleExport = () => {
+    const handleExport = async () => {
         setDownloading(true);
-        const url = fcApi.exportTransactionsUrl({ format, from: from || undefined, to: to || undefined });
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `transactions.${format}`;
-        a.click();
-        setTimeout(() => setDownloading(false), 2000);
+        try {
+            const response = await fcApi.exportTransactions({ format, from: from || undefined, to: to || undefined });
+            downloadFile(response, { filename: `finance-transactions.${format}` });
+            toast.success(`Exported ${format.toUpperCase()}`);
+        } catch {
+            toast.error('Failed to export transactions');
+        } finally {
+            setDownloading(false);
+        }
     };
 
     const handlePLReport = async () => {
         try {
             await fcApi.downloadPLReport(from || undefined);
         } catch {
-            alert('Failed to download P&L report');
+            toast.error('Failed to download P&L report');
         }
     };
 
-    const handleTemplate = () => {
-        const a = document.createElement('a');
-        a.href = fcApi.importTemplateUrl();
-        a.download = 'import-template.xlsx';
-        a.click();
+    const handleTemplate = async () => {
+        try {
+            const response = await fcApi.downloadImportTemplate();
+            downloadFile(response, { filename: 'finance-import-template.xlsx' });
+            toast.success('Template downloaded');
+        } catch {
+            toast.error('Failed to download template');
+        }
     };
 
     return (

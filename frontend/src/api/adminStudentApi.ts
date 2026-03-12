@@ -84,6 +84,18 @@ export const deleteStudentGroup = (id: string) =>
 export const canDeleteStudentGroup = (id: string) =>
   api.get(`/admin/student-groups/${id}/can-delete`).then(r => r.data);
 
+export const exportStudentGroups = (params: { q?: string; format?: 'csv' | 'xlsx' } = {}) =>
+  api.get('/admin/student-groups/export', {
+    params: { ...params, format: params.format || 'xlsx' },
+    responseType: 'blob',
+  }).then(r => r.data as Blob);
+
+export const bulkUpdateStudentGroups = (ids: string[], update: Record<string, unknown>) =>
+  api.post('/admin/student-groups/bulk-update', { ids, update }).then(r => r.data);
+
+export const bulkDeleteStudentGroups = (ids: string[]) =>
+  api.post('/admin/student-groups/bulk-delete', { ids }).then(r => r.data);
+
 export const addGroupMembers = (groupId: string, studentIds: string[]) =>
   api.post(`/admin/student-groups/${groupId}/members/add`, { studentIds }).then(r => r.data);
 

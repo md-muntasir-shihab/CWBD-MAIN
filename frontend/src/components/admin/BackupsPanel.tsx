@@ -2,15 +2,18 @@ import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
     adminListBackups,
+    adminDownloadBackup,
     adminRestoreBackup,
     adminRunBackup,
     getAdminBackupDownloadUrl,
 } from '../../services/api';
 import { Database, Download, RefreshCw } from 'lucide-react';
+import { downloadFile } from '../../utils/download';
 
 export default function BackupsPanel() {
     const [loading, setLoading] = useState(false);
     const [running, setRunning] = useState(false);
+    const [downloadingId, setDownloadingId] = useState('');
     const [items, setItems] = useState<any[]>([]);
 
     const load = useCallback(async () => {
@@ -54,6 +57,33 @@ export default function BackupsPanel() {
         }
     };
 
+    const formatTimestamp = (value?: string) => {
+        const date = value ? new Date(value) : new Date();
+        if (Number.isNaN(date.getTime())) return Date.now().toString();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+    };
+
+    const buildDownloadName = (item: any) => {
+        const type = String(item?.type || 'full').toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+        const stamp = formatTimestamp(item?.createdAt);
+        return `campusway-backup-${type}-${stamp}.json`;
+    };
+
+    const handleDownload = async (item: any) => {
+        if (!item?._id) return;
+        setDownloadingId(String(item._id));
+        try {
+            const response = await adminDownloadBackup(String(item._id));
+            downloadFile(response, { filename: buildDownloadName(item) });
+            toast.success('Backup downloaded');
+        } catch (error: any) {
+            toast.error(error.response?.data?.message || 'Download failed');
+        } finally {
+            setDownloadingId('');
+        }
+    };
+
     return (
         <div className="space-y-4">
             <div className="rounded-2xl border border-indigo-500/10 bg-slate-900/50 p-4">
@@ -94,12 +124,15 @@ export default function BackupsPanel() {
                             </div>
                             <div className="mt-2 flex flex-wrap gap-2">
                                 {item.localPath && (
-                                    <a
-                                        href={getAdminBackupDownloadUrl(item._id)}
-                                        className="inline-flex items-center gap-1 rounded-lg bg-indigo-500/20 px-2 py-1 text-xs text-indigo-200"
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleDownload(item)}
+                                        disabled={downloadingId === String(item._id)}
+                                        title={getAdminBackupDownloadUrl(item._id)}
+                                        className="inline-flex items-center gap-1 rounded-lg bg-indigo-500/20 px-2 py-1 text-xs text-indigo-200 disabled:opacity-60"
                                     >
-                                        <Download className="h-3.5 w-3.5" /> Download
-                                    </a>
+                                        <Download className="h-3.5 w-3.5" /> {downloadingId === String(item._id) ? 'Downloading...' : 'Download'}
+                                    </button>
                                 )}
                                 {item.status === 'completed' && (
                                     <button onClick={() => void restore(item._id)} className="rounded-lg bg-rose-500/20 px-2 py-1 text-xs text-rose-200">

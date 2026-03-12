@@ -47,19 +47,9 @@ import {
     adminGetExams,
     type AdminExamCard,
 } from '../../../services/api';
+import { downloadFile } from '../../../utils/download';
 
 type AdminTab = 'list' | 'create' | 'edit' | 'questions' | 'results' | 'payments';
-
-function saveBlob(blob: Blob, filename: string): void {
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    window.URL.revokeObjectURL(url);
-}
 
 const defaultExamFields: Record<string, unknown> = {
     title: '', title_bn: '', description: '', description_bn: '',
@@ -244,7 +234,7 @@ export function AdminExamsPage() {
         try {
             setBusy(true);
             const response = await adminDownloadExamResultImportTemplate(selectedExamId, format);
-            saveBlob(response.data as Blob, `exam_results_import_template.${format}`);
+            downloadFile(response, { filename: `exam_results_import_template.${format}` });
         } catch { toast.error('Failed to download template.'); } finally { setBusy(false); }
     };
     const importResults = async () => {
@@ -259,7 +249,10 @@ export function AdminExamsPage() {
                 const lines = ['rowNo,registration_id,reason', ...payload.errors.map((row) =>
                     `${Number(row.rowNo || 0)},"${String(row.registration_id || '').replace(/"/g, '""')}","${String(row.reason || '').replace(/"/g, '""')}"`
                 )];
-                saveBlob(new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' }), 'import_errors.csv');
+                downloadFile(new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' }), {
+                    filename: 'import_errors.csv',
+                    contentType: 'text/csv;charset=utf-8',
+                });
             }
             setUploadFile(null);
         } catch { toast.error('Import failed.'); } finally { setBusy(false); }
@@ -269,7 +262,7 @@ export function AdminExamsPage() {
         try {
             setBusy(true);
             const response = await adminExportExamReport(selectedExamId, { format, groupId: groupId.trim() || undefined });
-            saveBlob(response.data as Blob, `exam_report.${format}`);
+            downloadFile(response, { filename: `exam_report.${format}` });
         } catch { toast.error('Export failed.'); } finally { setBusy(false); }
     };
     const exportLegacyResult = async () => {
@@ -277,7 +270,7 @@ export function AdminExamsPage() {
         try {
             setBusy(true);
             const response = await adminExportExamResults(selectedExamId);
-            saveBlob(response.data as Blob, 'exam_results.xlsx');
+            downloadFile(response, { filename: 'exam_results.xlsx' });
         } catch { toast.error('Legacy export failed.'); } finally { setBusy(false); }
     };
 
@@ -548,7 +541,7 @@ export function AdminExamsPage() {
                             setBusy(true);
                             try {
                                 const response = await downloadQuestionTemplate(selectedExamId);
-                                saveBlob(response.data as Blob, 'questions_template.xlsx');
+                                downloadFile(response, { filename: 'questions_template.xlsx' });
                             } catch { toast.error('Failed to download template.'); }
                             finally { setBusy(false); }
                         }} className="btn-secondary">

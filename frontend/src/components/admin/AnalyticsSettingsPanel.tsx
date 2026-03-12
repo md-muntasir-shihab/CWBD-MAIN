@@ -11,6 +11,7 @@ import {
     adminUpdateAnalyticsSettings,
 } from '../../services/api';
 import { invalidateQueryGroup, invalidationGroups, queryKeys } from '../../lib/queryKeys';
+import { downloadFile } from '../../utils/download';
 
 const DEFAULT_SETTINGS: AnalyticsSettings = {
     enabled: true,
@@ -38,17 +39,6 @@ const DEFAULT_OVERVIEW: AnalyticsOverview = {
     dailySeries: [],
     funnel: { viewed: 0, started: 0, submitted: 0 },
 };
-
-function saveBlob(blob: Blob, fileName: string): void {
-    const href = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = href;
-    anchor.download = fileName;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(href);
-}
 
 export default function AnalyticsSettingsPanel() {
     const queryClient = useQueryClient();
@@ -95,7 +85,7 @@ export default function AnalyticsSettingsPanel() {
                 module: filters.module,
                 format,
             });
-            saveBlob(response.data, `analytics-events-${Date.now()}.${format}`);
+            downloadFile(response, { filename: `analytics-events-${Date.now()}.${format}` });
         } catch (error: any) {
             toast.error(error?.response?.data?.message || 'Event export failed');
         }

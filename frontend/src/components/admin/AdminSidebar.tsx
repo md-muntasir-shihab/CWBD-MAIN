@@ -3,11 +3,11 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { adminGetSupportTickets } from '../../services/api';
 import { adminRouteFromTab, adminTabFromPath } from '../../lib/appRoutes';
 import {
-    LayoutDashboard, GraduationCap, BookOpen, Image, Upload,
+    LayoutDashboard, GraduationCap, BookOpen, Image,
     BarChart3, Home, Settings, ScrollText, LogOut, Shield, X,
     ChevronLeft, ChevronRight, Newspaper, FolderOpen,
-    Mail, UserCog, Download, User, AlertCircle, MonitorPlay,
-    Wallet, LifeBuoy, Database, CreditCard, SlidersHorizontal,
+    Mail, UserCog, User, AlertCircle,
+    Wallet, LifeBuoy, CreditCard, SlidersHorizontal, Database,
     Users, Bell, CreditCard as SubCard, ClipboardList, Megaphone
 } from 'lucide-react';
 
@@ -64,22 +64,19 @@ export const ADMIN_NAV = [
         children: [
             { id: 'exam-list', label: 'All Exams', icon: BookOpen, route: '/__cw_admin__/exams' },
             { id: 'question-bank', label: 'Question Bank', icon: BookOpen, route: '/__cw_admin__/question-bank' },
-            { id: 'live-monitor', label: 'Live Monitor', icon: MonitorPlay, route: '/__cw_admin__/live-monitor' },
-            { id: 'alerts', label: 'Live Alerts', icon: AlertCircle, route: '/__cw_admin__/alerts' },
         ]
     },
     {
         id: 'students',
         label: 'Students',
         icon: Users,
-        route: '/__cw_admin__/students',
+        route: '/__cw_admin__/student-management/list',
         children: [
-            { id: 'student-management', label: 'All Students', icon: UserCog, route: '/__cw_admin__/students' },
-            { id: 'student-groups', label: 'Student Groups', icon: ClipboardList, route: '/__cw_admin__/student-groups' },
-            { id: 'students-v2', label: 'Students CRM', icon: Users, route: '/__cw_admin__/students-v2' },
-            { id: 'student-groups-v2', label: 'Groups V2', icon: ClipboardList, route: '/__cw_admin__/student-groups-v2' },
+            { id: 'student-management', label: 'All Students', icon: UserCog, route: '/__cw_admin__/student-management/list' },
+            { id: 'student-groups', label: 'Student Groups', icon: ClipboardList, route: '/__cw_admin__/student-management/groups' },
+            { id: 'profile-requests', label: 'Profile Requests', icon: ClipboardList, route: '/__cw_admin__/student-management/profile-requests' },
             { id: 'notification-center', label: 'Notification Center', icon: Bell, route: '/__cw_admin__/notification-center' },
-            { id: 'student-settings', label: 'Student Settings', icon: SlidersHorizontal, route: '/__cw_admin__/settings/student-settings' },
+            { id: 'student-settings', label: 'Student Settings', icon: SlidersHorizontal, route: '/__cw_admin__/student-management/settings' },
         ]
     },
     { id: 'subscription-plans', label: 'Subscription Plans', icon: CreditCard, route: '/__cw_admin__/subscription-plans' },
@@ -87,7 +84,6 @@ export const ADMIN_NAV = [
 
     { type: 'header', label: 'System' },
     { id: 'contact', label: 'Contact Messages', icon: Mail, route: '/__cw_admin__/contact' },
-    { id: 'file-upload', label: 'Bulk Import', icon: Upload, route: '/__cw_admin__/file-upload' },
     { id: 'finance', label: 'Accounts & Finance', icon: Wallet, route: '/__cw_admin__/finance/dashboard' },
     { id: 'support-tickets', label: 'Support Tickets', icon: LifeBuoy, route: '/__cw_admin__/support-center' },
     {
@@ -102,11 +98,7 @@ export const ADMIN_NAV = [
             { id: 'logs', label: 'System Logs', icon: ScrollText, route: '/__cw_admin__/settings/system-logs' },
         ]
     },
-    { id: 'settings-center', label: 'Settings Center', icon: Settings, route: '/__cw_admin__/settings' },
-    { id: 'users', label: 'Users & Roles', icon: UserCog, route: '/__cw_admin__/users' },
     { id: 'admin-profile', label: 'Admin Profile', icon: User, route: '/__cw_admin__/settings/admin-profile' },
-    { id: 'exports', label: 'Data Export', icon: Download, route: '/__cw_admin__/exports' },
-    { id: 'backups', label: 'Backups', icon: Database, route: '/__cw_admin__/backups' },
 ];
 
 interface AdminSidebarProps {
@@ -164,9 +156,8 @@ export default function AdminSidebar({
         const r = user?.role || 'student';
 
         const isAllowed = (id: string) => {
-            if (['settings', 'settings-center', 'security', 'site-general', 'users', 'exports', 'file-upload', 'logs'].includes(id) && !['superadmin', 'admin'].includes(r)) return false;
-            if (id === 'backups' && !['superadmin', 'admin'].includes(r)) return false;
-            if (['student-management', 'subscription-plans', 'student-groups'].includes(id) && !['superadmin', 'admin', 'moderator'].includes(r)) return false;
+            if (['settings', 'security', 'site-general', 'logs'].includes(id) && !['superadmin', 'admin'].includes(r)) return false;
+            if (['student-management', 'subscription-plans', 'student-groups', 'profile-requests'].includes(id) && !['superadmin', 'admin', 'moderator'].includes(r)) return false;
             if (['contact', 'finance', 'support-tickets'].includes(id) && !['superadmin', 'admin', 'moderator'].includes(r)) return false;
             if ((['universities', 'exams', 'exam-list', 'question-bank', 'news', 'resources', 'home-control', 'home-settings', 'banners', 'campaign-banners', 'university-list', 'university-settings', 'reports', 'students'].includes(id) || id.startsWith('news'))
                 && !['superadmin', 'admin', 'moderator', 'editor'].includes(r)) return false;
@@ -215,10 +206,9 @@ export default function AdminSidebar({
                 bg-surface/95 dark:bg-gradient-to-b dark:from-slate-950 dark:to-slate-900/80
                 border-r border-card-border dark:border-indigo-500/10
                 transition-all duration-300 ease-in-out
-                ${collapsed ? 'w-64 lg:w-[72px]' : 'w-64'}
-                ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-                ${sidebarOpen ? 'visible pointer-events-auto' : 'invisible pointer-events-none lg:visible lg:pointer-events-auto'}
-                lg:translate-x-0 lg:static
+                w-64 ${collapsed ? 'lg:w-[72px]' : ''}
+                ${sidebarOpen ? 'translate-x-0 visible pointer-events-auto' : '-translate-x-full invisible pointer-events-none'}
+                lg:translate-x-0 lg:visible lg:pointer-events-auto lg:sticky lg:top-0 lg:h-screen lg:flex-shrink-0
             `}>
                 <div className={`flex items-center border-b border-card-border p-4 dark:border-indigo-500/10 ${collapsed ? 'justify-center' : 'justify-between'}`}>
                     <div className="flex items-center gap-3">
@@ -322,7 +312,7 @@ export default function AdminSidebar({
                                                 className={`
                                                     w-full flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] transition-all duration-200
                                                     ${activeTab === child.id || activeTabFromPath === child.id
-                                                        ? 'bg-white/10 font-medium text-white'
+                                                    ? 'bg-indigo-50 font-medium text-indigo-600 dark:bg-white/10 dark:text-indigo-300'
                                                         : 'text-slate-600 hover:bg-slate-100 hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-indigo-300'
                                                     }
                                                 `}

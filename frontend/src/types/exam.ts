@@ -155,6 +155,11 @@ export interface ExamQuestionsResponse {
         resultPublishAtUTC: string;
         rules: ExamRules;
     };
+    session?: {
+        sessionId: string;
+        isActive: boolean;
+        submittedAtUTC?: string;
+    };
     questions: ExamQuestion[];
     answers: ExamAnswer[];
 }

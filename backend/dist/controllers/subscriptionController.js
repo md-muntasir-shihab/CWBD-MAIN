@@ -855,7 +855,7 @@ async function adminSuspendSubscription(req, res) {
 }
 async function adminExportSubscriptions(req, res) {
     try {
-        const type = getExportType(req.query.type);
+        const type = getExportType(req.query.format ?? req.query.type);
         const statusFilter = safeString(req.query.status).toLowerCase();
         const filter = {};
         if (statusFilter && ['active', 'expired', 'pending', 'suspended'].includes(statusFilter)) {
@@ -890,7 +890,7 @@ async function adminExportSubscriptions(req, res) {
 }
 async function adminExportSubscriptionPlans(req, res) {
     try {
-        const type = getExportType(req.query.type);
+        const type = getExportType(req.query.format ?? req.query.type);
         const plans = await SubscriptionPlan_1.default.find().sort({ displayOrder: 1, sortOrder: 1, priority: 1, code: 1 }).lean();
         const exportRows = plans.map((item) => {
             const plan = planToDto(item);

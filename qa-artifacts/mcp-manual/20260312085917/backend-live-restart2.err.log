@@ -1,0 +1,148 @@
+(node:19736) [MONGOOSE] Warning: Duplicate schema index on {"slug":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:19736) [MONGOOSE] Warning: Duplicate schema index on {"slug":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(node:19736) [MONGOOSE] Warning: Duplicate schema index on {"slug":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(node:19736) [MONGOOSE] Warning: Duplicate schema index on {"contentHash":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(node:19736) [MONGOOSE] Warning: Duplicate schema index on {"jobId":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(node:19736) [MONGOOSE] Warning: Duplicate schema index on {"status":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+(node:19736) [MONGOOSE] Warning: Duplicate schema index on {"slug":1} found. This is often due to declaring an index using both "index: true" and "schema.index()". Please remove the duplicate index definition.
+getExamAttemptState error: CastError: Cast to ObjectId failed for value "" (type string) at path "_id" for model "ExamSession"
+    at SchemaObjectId.cast (f:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+    at SchemaType.applySetters (f:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at SchemaType.castForQuery (f:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1724:17)
+    at cast (f:\CampusWay\backend\node_modules\mongoose\lib\cast.js:390:32)
+    at Query.cast (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:5060:12)
+    at Query._castConditions (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:2374:10)
+    at model.Query._findOne (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:2697:8)
+    at model.Query.exec (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Promise.all (index 1)
+    at async getExamAttemptState (f:\CampusWay\backend\src\controllers\examController.ts:2113:33)
+    at async <anonymous> (f:\CampusWay\backend\src\routes\exams\studentExamRoutes.ts:34:3) {
+  stringValue: '""',
+  messageFormat: undefined,
+  kind: 'ObjectId',
+  value: '',
+  path: '_id',
+  reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+      at new ObjectId (f:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+      at castObjectId (f:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+      at SchemaObjectId.cast (f:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+      at SchemaType.applySetters (f:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaType.castForQuery (f:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1724:17)
+      at cast (f:\CampusWay\backend\node_modules\mongoose\lib\cast.js:390:32)
+      at Query.cast (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:5060:12)
+      at Query._castConditions (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:2374:10)
+      at model.Query._findOne (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:2697:8)
+      at model.Query.exec (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Promise.all (index 1)
+      at async getExamAttemptState (f:\CampusWay\backend\src\controllers\examController.ts:2113:33)
+      at async <anonymous> (f:\CampusWay\backend\src\routes\exams\studentExamRoutes.ts:34:3),
+  valueType: 'string'
+}
+getExamAttemptState error: CastError: Cast to ObjectId failed for value "" (type string) at path "_id" for model "ExamSession"
+    at SchemaObjectId.cast (f:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+    at SchemaType.applySetters (f:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at SchemaType.castForQuery (f:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1724:17)
+    at cast (f:\CampusWay\backend\node_modules\mongoose\lib\cast.js:390:32)
+    at Query.cast (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:5060:12)
+    at Query._castConditions (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:2374:10)
+    at model.Query._findOne (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:2697:8)
+    at model.Query.exec (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Promise.all (index 1)
+    at async getExamAttemptState (f:\CampusWay\backend\src\controllers\examController.ts:2113:33)
+    at async <anonymous> (f:\CampusWay\backend\src\routes\exams\studentExamRoutes.ts:34:3) {
+  stringValue: '""',
+  messageFormat: undefined,
+  kind: 'ObjectId',
+  value: '',
+  path: '_id',
+  reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+      at new ObjectId (f:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+      at castObjectId (f:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+      at SchemaObjectId.cast (f:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+      at SchemaType.applySetters (f:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaType.castForQuery (f:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1724:17)
+      at cast (f:\CampusWay\backend\node_modules\mongoose\lib\cast.js:390:32)
+      at Query.cast (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:5060:12)
+      at Query._castConditions (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:2374:10)
+      at model.Query._findOne (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:2697:8)
+      at model.Query.exec (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Promise.all (index 1)
+      at async getExamAttemptState (f:\CampusWay\backend\src\controllers\examController.ts:2113:33)
+      at async <anonymous> (f:\CampusWay\backend\src\routes\exams\studentExamRoutes.ts:34:3),
+  valueType: 'string'
+}
+getExamAttemptState error: CastError: Cast to ObjectId failed for value "" (type string) at path "_id" for model "ExamSession"
+    at SchemaObjectId.cast (f:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+    at SchemaType.applySetters (f:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at SchemaType.castForQuery (f:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1724:17)
+    at cast (f:\CampusWay\backend\node_modules\mongoose\lib\cast.js:390:32)
+    at Query.cast (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:5060:12)
+    at Query._castConditions (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:2374:10)
+    at model.Query._findOne (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:2697:8)
+    at model.Query.exec (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Promise.all (index 1)
+    at async getExamAttemptState (f:\CampusWay\backend\src\controllers\examController.ts:2113:33)
+    at async <anonymous> (f:\CampusWay\backend\src\routes\exams\studentExamRoutes.ts:34:3) {
+  stringValue: '""',
+  messageFormat: undefined,
+  kind: 'ObjectId',
+  value: '',
+  path: '_id',
+  reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+      at new ObjectId (f:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+      at castObjectId (f:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+      at SchemaObjectId.cast (f:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+      at SchemaType.applySetters (f:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaType.castForQuery (f:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1724:17)
+      at cast (f:\CampusWay\backend\node_modules\mongoose\lib\cast.js:390:32)
+      at Query.cast (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:5060:12)
+      at Query._castConditions (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:2374:10)
+      at model.Query._findOne (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:2697:8)
+      at model.Query.exec (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Promise.all (index 1)
+      at async getExamAttemptState (f:\CampusWay\backend\src\controllers\examController.ts:2113:33)
+      at async <anonymous> (f:\CampusWay\backend\src\routes\exams\studentExamRoutes.ts:34:3),
+  valueType: 'string'
+}
+getExamAttemptState error: CastError: Cast to ObjectId failed for value "" (type string) at path "_id" for model "ExamSession"
+    at SchemaObjectId.cast (f:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+    at SchemaType.applySetters (f:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+    at SchemaType.castForQuery (f:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1724:17)
+    at cast (f:\CampusWay\backend\node_modules\mongoose\lib\cast.js:390:32)
+    at Query.cast (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:5060:12)
+    at Query._castConditions (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:2374:10)
+    at model.Query._findOne (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:2697:8)
+    at model.Query.exec (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Promise.all (index 1)
+    at async getExamAttemptState (f:\CampusWay\backend\src\controllers\examController.ts:2113:33)
+    at async <anonymous> (f:\CampusWay\backend\src\routes\exams\studentExamRoutes.ts:34:3) {
+  stringValue: '""',
+  messageFormat: undefined,
+  kind: 'ObjectId',
+  value: '',
+  path: '_id',
+  reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+      at new ObjectId (f:\CampusWay\backend\node_modules\bson\src\objectid.ts:120:15)
+      at castObjectId (f:\CampusWay\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+      at SchemaObjectId.cast (f:\CampusWay\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+      at SchemaType.applySetters (f:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+      at SchemaType.castForQuery (f:\CampusWay\backend\node_modules\mongoose\lib\schemaType.js:1724:17)
+      at cast (f:\CampusWay\backend\node_modules\mongoose\lib\cast.js:390:32)
+      at Query.cast (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:5060:12)
+      at Query._castConditions (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:2374:10)
+      at model.Query._findOne (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:2697:8)
+      at model.Query.exec (f:\CampusWay\backend\node_modules\mongoose\lib\query.js:4627:80)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Promise.all (index 1)
+      at async getExamAttemptState (f:\CampusWay\backend\src\controllers\examController.ts:2113:33)
+      at async <anonymous> (f:\CampusWay\backend\src\routes\exams\studentExamRoutes.ts:34:3),
+  valueType: 'string'
+}

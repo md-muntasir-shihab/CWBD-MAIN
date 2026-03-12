@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   getStudentGroups, createStudentGroup, updateStudentGroup, deleteStudentGroup,
-  canDeleteStudentGroup,
+  canDeleteStudentGroup, exportStudentGroups, exportGroupMembers, bulkUpdateStudentGroups, bulkDeleteStudentGroups,
 } from '../../../api/adminStudentApi';
 import { adminUi } from '../../../lib/appRoutes';
 import {
@@ -12,6 +12,7 @@ import {
   Megaphone, BookOpen, Download,
 } from 'lucide-react';
 import { ADMIN_PATHS } from '../../../routes/adminPaths';
+import { downloadFile } from '../../../utils/download';
 
 type Toast = { show: boolean; message: string; type: 'success' | 'error' };
 type GroupType = 'manual' | 'dynamic';
@@ -36,6 +37,13 @@ const EMPTY_FORM: GroupForm = {
 const CARD_STYLES: CardStyle[] = ['solid', 'gradient', 'outline', 'minimal'];
 const DEPARTMENTS = ['science', 'arts', 'commerce'];
 const EXAM_VIS = ['all_students', 'group_only', 'hidden'];
+const GROUP_BULK_FIELDS = [
+  { label: 'Department', value: 'department' },
+  { label: 'Batch', value: 'batch' },
+  { label: 'Exam Visibility', value: 'defaultExamVisibility' },
+  { label: 'Featured', value: 'isFeatured' },
+  { label: 'Active', value: 'isActive' },
+] as const;
 
 const inputCls = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:focus:border-indigo-400';
 const labelCls = 'block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1';
@@ -55,9 +63,11 @@ function Modal({ open, onClose, title, children }: { open: boolean; onClose: () 
   );
 }
 
-function GroupCard({ g, onEdit, onDelete, onClick, onNavigate }: {
+function GroupCard({ g, selected, onToggleSelect, onEdit, onDelete, onOpen, onExport, onNavigate }: {
   g: Record<string, unknown>;
-  onEdit: () => void; onDelete: () => void; onClick: () => void;
+  selected: boolean;
+  onToggleSelect: () => void;
+  onEdit: () => void; onDelete: () => void; onOpen: () => void; onExport: () => void;
   onNavigate: (path: string) => void;
 }) {
   const [showMenu, setShowMenu] = useState(false);
@@ -77,11 +87,18 @@ function GroupCard({ g, onEdit, onDelete, onClick, onNavigate }: {
         style === 'outline' ? 'border-2' : 'border-slate-200 dark:border-slate-700'
       }`}
       style={style === 'outline' ? { borderColor: `${color}60` } : cardBg}
-      onClick={onClick}
+      onClick={onOpen}
     >
       {/* Header row */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            onClick={(e) => e.stopPropagation()}
+            className="mt-1 rounded border-slate-300"
+          />
           <div className="flex h-10 w-10 items-center justify-center rounded-lg" style={{ backgroundColor: `${color}20` }}>
             <Users size={18} style={{ color }} />
           </div>
@@ -112,7 +129,7 @@ function GroupCard({ g, onEdit, onDelete, onClick, onNavigate }: {
               <button onClick={() => { setShowMenu(false); onNavigate(ADMIN_PATHS.exams); }} className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700">
                 <BookOpen size={12} /> Create Exam
               </button>
-              <button onClick={() => { setShowMenu(false); onClick(); }} className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700">
+              <button onClick={() => { setShowMenu(false); onExport(); }} className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700">
                 <Download size={12} /> Export
               </button>
               <button onClick={() => { setShowMenu(false); onDelete(); }} className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
@@ -153,6 +170,10 @@ export default function StudentGroupsPage() {
   const qc = useQueryClient();
   const [toast, setToast] = useState<Toast>({ show: false, message: '', type: 'success' });
   const [search, setSearch] = useState('');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [exportFormat, setExportFormat] = useState<'csv' | 'xlsx'>('xlsx');
+  const [bulkField, setBulkField] = useState<(typeof GROUP_BULK_FIELDS)[number]['value']>('department');
+  const [bulkValue, setBulkValue] = useState('');
   const [groupModal, setGroupModal] = useState<{ open: boolean; editId?: string }>({ open: false });
   const [form, setForm] = useState<GroupForm>(EMPTY_FORM);
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string; name: string; safe?: boolean }>({ open: false, id: '', name: '' });
@@ -173,9 +194,12 @@ export default function StudentGroupsPage() {
     (groupsData as { items?: Record<string, unknown>[] })?.items ??
     (Array.isArray(groupsData) ? groupsData as Record<string, unknown>[] : []);
 
-  const filteredGroups = search
-    ? rawGroups.filter(g => (g.name as string).toLowerCase().includes(search.toLowerCase()))
-    : rawGroups;
+  const filteredGroups = useMemo(() => (
+    search
+      ? rawGroups.filter(g => `${String(g.name || '')} ${String(g.slug || '')} ${String(g.batch || '')}`.toLowerCase().includes(search.toLowerCase()))
+      : rawGroups
+  ), [rawGroups, search]);
+  const allVisibleSelected = filteredGroups.length > 0 && filteredGroups.every((g) => selectedIds.includes(String(g._id)));
 
   const openCreate = () => { setForm(EMPTY_FORM); setGroupModal({ open: true }); };
   const openEdit = (g: Record<string, unknown>) => {
@@ -234,6 +258,81 @@ export default function StudentGroupsPage() {
   const set = (field: keyof GroupForm, value: string | number | boolean) =>
     setForm(prev => ({ ...prev, [field]: value }));
 
+  const toggleGroupSelection = (id: string) =>
+    setSelectedIds((prev) => prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]);
+
+  const toggleSelectAllVisible = () => {
+    const visibleIds = filteredGroups.map((group) => String(group._id));
+    if (allVisibleSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !visibleIds.includes(id)));
+      return;
+    }
+    setSelectedIds((prev) => Array.from(new Set([...prev, ...visibleIds])));
+  };
+
+  const handleExport = async () => {
+    try {
+      const blob = await exportStudentGroups({ q: search || undefined, format: exportFormat });
+      downloadFile(blob, { filename: `student-groups.${exportFormat}` });
+      showToast('Groups exported');
+    } catch {
+      showToast('Failed to export groups', 'error');
+    }
+  };
+
+  const handleExportMembers = async (groupId: string, groupName: string) => {
+    try {
+      const blob = await exportGroupMembers(groupId, 'csv');
+      const safeName = groupName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || groupId;
+      downloadFile(blob, { filename: `${safeName}_members.csv` });
+      showToast('Group members exported');
+    } catch {
+      showToast('Failed to export group members', 'error');
+    }
+  };
+
+  const handleBulkUpdate = async () => {
+    if (selectedIds.length === 0) return;
+    const normalizedValue = bulkValue.trim();
+    let update: Record<string, unknown> = {};
+
+    if (bulkField === 'department' || bulkField === 'batch' || bulkField === 'defaultExamVisibility') {
+      if (!normalizedValue) {
+        showToast('Choose a bulk value', 'error');
+        return;
+      }
+      update = { [bulkField]: normalizedValue };
+    } else if (bulkField === 'isFeatured' || bulkField === 'isActive') {
+      update = { [bulkField]: normalizedValue === 'true' };
+    }
+
+    try {
+      await bulkUpdateStudentGroups(selectedIds, update);
+      setSelectedIds([]);
+      qc.invalidateQueries({ queryKey: ['admin-student-groups'] });
+      showToast('Bulk update applied');
+    } catch {
+      showToast('Bulk update failed', 'error');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`Delete ${selectedIds.length} selected groups? Unsafe groups will be skipped.`)) return;
+    try {
+      const result = await bulkDeleteStudentGroups(selectedIds) as { skipped?: Array<{ blockers?: string[] }> };
+      setSelectedIds([]);
+      qc.invalidateQueries({ queryKey: ['admin-student-groups'] });
+      if (Array.isArray(result?.skipped) && result.skipped.length > 0) {
+        showToast(`Deleted with ${result.skipped.length} blocked group(s) skipped`, 'error');
+      } else {
+        showToast('Selected groups deleted');
+      }
+    } catch {
+      showToast('Bulk delete failed', 'error');
+    }
+  };
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       {/* Toast */}
@@ -245,7 +344,7 @@ export default function StudentGroupsPage() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-100 dark:bg-indigo-900/40">
             <Users className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
@@ -255,15 +354,70 @@ export default function StudentGroupsPage() {
             <p className="text-xs text-slate-500">{rawGroups.length} group{rawGroups.length !== 1 ? 's' : ''}</p>
           </div>
         </div>
-        <button onClick={openCreate} className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
-          <Plus size={14} /> New Group
-        </button>
+        <div className="flex items-center gap-2">
+          <select value={exportFormat} onChange={(e) => setExportFormat(e.target.value as 'csv' | 'xlsx')} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-white">
+            <option value="xlsx">XLSX</option>
+            <option value="csv">CSV</option>
+          </select>
+          <button onClick={() => void handleExport()} className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800">
+            <Download size={14} /> Export
+          </button>
+          <button onClick={openCreate} className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+            <Plus size={14} /> New Group
+          </button>
+        </div>
       </div>
 
       {/* Search */}
-      <div className="relative">
-        <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
-        <input className={`${inputCls} pl-8`} placeholder="Search groups..." value={search} onChange={e => setSearch(e.target.value)} />
+      <div className="space-y-3">
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+          <input className={`${inputCls} pl-8`} placeholder="Search groups..." value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        {filteredGroups.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+            <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+              <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAllVisible} className="rounded border-slate-300" />
+              Select visible
+            </label>
+            {selectedIds.length > 0 && (
+              <>
+                <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-medium text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">{selectedIds.length} selected</span>
+                <select value={bulkField} onChange={(e) => {
+                  const nextField = e.target.value as (typeof GROUP_BULK_FIELDS)[number]['value'];
+                  setBulkField(nextField);
+                  setBulkValue(nextField === 'isFeatured' || nextField === 'isActive' ? 'true' : '');
+                }} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-white">
+                  {GROUP_BULK_FIELDS.map((field) => <option key={field.value} value={field.value}>{field.label}</option>)}
+                </select>
+                {bulkField === 'department' && (
+                  <select value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-white">
+                    <option value="">Choose department</option>
+                    {DEPARTMENTS.map((item) => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                )}
+                {bulkField === 'defaultExamVisibility' && (
+                  <select value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-white">
+                    <option value="">Choose visibility</option>
+                    {EXAM_VIS.map((item) => <option key={item} value={item}>{item.replace(/_/g, ' ')}</option>)}
+                  </select>
+                )}
+                {bulkField === 'isFeatured' || bulkField === 'isActive' ? (
+                  <select value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-white">
+                    <option value="true">True</option>
+                    <option value="false">False</option>
+                  </select>
+                ) : null}
+                {bulkField === 'batch' && (
+                  <input value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} placeholder="Batch value" className={inputCls} />
+                )}
+                <button onClick={() => void handleBulkUpdate()} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">Bulk Edit</button>
+                <button onClick={() => void handleBulkDelete()} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">Bulk Delete</button>
+                <button onClick={() => setSelectedIds([])} className="ml-auto text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">Clear</button>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Grid */}
@@ -284,7 +438,10 @@ export default function StudentGroupsPage() {
             <GroupCard
               key={g._id as string}
               g={g}
-              onClick={() => navigate(adminUi(`student-management/groups/${g._id}`))}
+              selected={selectedIds.includes(String(g._id))}
+              onToggleSelect={() => toggleGroupSelection(String(g._id))}
+              onOpen={() => navigate(adminUi(`student-management/groups/${g._id}`))}
+              onExport={() => void handleExportMembers(String(g._id), String(g.name || 'group'))}
               onEdit={() => openEdit(g)}
               onDelete={() => confirmDelete(g._id as string, g.name as string)}
               onNavigate={(path) => navigate(path)}

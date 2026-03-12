@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     Search, Bell, Menu, RefreshCw, ChevronDown,
     User, Lock, Settings, LogOut, Clock,
 } from 'lucide-react';
 import ThemeSwitchPro from '../ui/ThemeSwitchPro';
 import { adminRouteFromTab } from '../../lib/appRoutes';
+import { adminGetActionableAlerts, adminMarkActionableAlertsRead } from '../../services/api';
 
 interface AdminTopbarProps {
     activeTab: string;
@@ -20,6 +22,7 @@ interface AdminTopbarProps {
 export default function AdminTopbar({
     activeTab, onMenuClick, onRefresh, loading, user, onLogout, onTabChange
 }: AdminTopbarProps) {
+    const queryClient = useQueryClient();
     const navigate = useNavigate();
     const location = useLocation();
     const [searchQuery, setSearchQuery] = useState('');
@@ -65,12 +68,22 @@ export default function AdminTopbar({
         { label: 'News Console', to: '/__cw_admin__/news/dashboard' },
     ];
 
-    const notifications = [
-        { id: 1, text: 'New student registered', time: '2 min ago', read: false },
-        { id: 2, text: 'Exam results published', time: '1 hour ago', read: false },
-        { id: 3, text: 'System backup completed', time: '3 hours ago', read: true },
-    ];
-    const unreadCount = notifications.filter(n => !n.read).length;
+    const alertsQuery = useQuery({
+        queryKey: ['admin', 'actionable-alerts', 'topbar'],
+        queryFn: async () => (await adminGetActionableAlerts({ page: 1, limit: 8 })).data,
+        staleTime: 30_000,
+    });
+    const markReadMutation = useMutation({
+        mutationFn: async (ids?: string[]) => (await adminMarkActionableAlertsRead(ids)).data,
+        onSuccess: async () => {
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['admin', 'actionable-alerts'] }),
+                queryClient.invalidateQueries({ queryKey: ['admin', 'actionable-alerts', 'topbar'] }),
+            ]);
+        },
+    });
+    const notifications = alertsQuery.data?.items || [];
+    const unreadCount = Number(alertsQuery.data?.unreadCount || 0);
 
     const navigateByTab = (tab: string) => {
         onTabChange(tab);
@@ -78,6 +91,16 @@ export default function AdminTopbar({
         if (target && location.pathname !== target) {
             navigate(target);
         }
+    };
+
+    const openNotification = async (id: string, linkUrl?: string) => {
+        await markReadMutation.mutateAsync([id]);
+        setNotifOpen(false);
+        if (linkUrl) {
+            navigate(linkUrl);
+            return;
+        }
+        navigate('/__cw_admin__/notification-center');
     };
 
     return (
@@ -139,14 +162,20 @@ export default function AdminTopbar({
                                         <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] text-indigo-500 dark:text-indigo-300">{unreadCount} new</span>
                                     </div>
                                     <div className="max-h-64 overflow-y-auto">
-                                        {notifications.map(n => (
-                                            <div
-                                                key={n.id}
-                                                className={`border-b border-slate-200 px-4 py-3 transition-colors last:border-0 hover:bg-slate-100/70 dark:border-indigo-500/10 dark:hover:bg-white/5 ${!n.read ? 'bg-indigo-500/5 dark:bg-indigo-500/10' : ''}`}
-                                            >
-                                                <p className="text-sm text-text dark:text-white">{n.text}</p>
-                                                <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">{n.time}</p>
+                                        {notifications.length === 0 ? (
+                                            <div className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">
+                                                No admin alerts right now.
                                             </div>
+                                        ) : notifications.map(n => (
+                                            <button
+                                                key={n._id}
+                                                onClick={() => void openNotification(n._id, n.linkUrl)}
+                                                className={`block w-full border-b border-slate-200 px-4 py-3 text-left transition-colors last:border-0 hover:bg-slate-100/70 dark:border-indigo-500/10 dark:hover:bg-white/5 ${!n.isRead ? 'bg-indigo-500/5 dark:bg-indigo-500/10' : ''}`}
+                                            >
+                                                <p className="text-sm text-text dark:text-white">{n.title}</p>
+                                                <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{n.message}</p>
+                                                <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">{new Date(n.publishAt).toLocaleString()}</p>
+                                            </button>
                                         ))}
                                     </div>
                                 </div>

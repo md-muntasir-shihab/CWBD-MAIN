@@ -10,6 +10,7 @@ import {
   importStudentsCommit,
 } from '../../../api/adminStudentApi';
 import api from '../../../services/api';
+import { downloadFile } from '../../../utils/download';
 
 type LogEntry = {
   _id: string; direction: string; category: string; format: string;
@@ -62,24 +63,14 @@ export default function StudentImportExportPage() {
       const res = await api.get(`/admin/students-v2/export?format=${format}`, {
         responseType: 'blob',
       });
-      const url = URL.createObjectURL(res.data as Blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `students-export.${format}`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadFile(res, { filename: `students-export.${format}` });
     },
     onSuccess: () => refetchLogs(),
   });
 
   const downloadTemplate = async () => {
     const res = await api.get('/admin/students-v2/template.xlsx', { responseType: 'blob' });
-    const url = URL.createObjectURL(res.data as Blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'students_import_template.xlsx';
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadFile(res, { filename: 'students_import_template.xlsx' });
   };
 
   const logs: LogEntry[] = logsData?.logs ?? [];

@@ -9,6 +9,8 @@ exports.adminToggleNotice = adminToggleNotice;
 exports.studentGetNotices = studentGetNotices;
 exports.studentCreateSupportTicket = studentCreateSupportTicket;
 exports.studentGetSupportTickets = studentGetSupportTickets;
+exports.studentGetSupportTicketById = studentGetSupportTicketById;
+exports.studentReplySupportTicket = studentReplySupportTicket;
 exports.adminGetSupportTickets = adminGetSupportTickets;
 exports.adminUpdateSupportTicketStatus = adminUpdateSupportTicketStatus;
 exports.adminReplySupportTicket = adminReplySupportTicket;
@@ -19,6 +21,7 @@ const Notification_1 = __importDefault(require("../models/Notification"));
 const StudentProfile_1 = __importDefault(require("../models/StudentProfile"));
 const SupportTicket_1 = __importDefault(require("../models/SupportTicket"));
 const studentDashboardStream_1 = require("../realtime/studentDashboardStream");
+const adminAlertService_1 = require("../services/adminAlertService");
 const requestMeta_1 = require("../utils/requestMeta");
 function asObjectId(value) {
     const raw = String(value || '').trim();
@@ -94,6 +97,28 @@ async function generateTicketNo() {
         },
     });
     return `TKT-${ymd}-${String(count + 1).padStart(4, '0')}`;
+}
+async function notifyAdminsForTicket(ticket, action) {
+    const actionLabel = action === 'created' ? 'New support ticket' : 'New student reply';
+    await (0, adminAlertService_1.createAdminAlert)({
+        title: actionLabel,
+        message: `${ticket.ticketNo}: ${ticket.subject}`,
+        linkUrl: `/__cw_admin__/support-center?ticketId=${String(ticket._id)}`,
+        category: 'update',
+        targetRole: 'admin',
+    });
+}
+async function notifyStudentForTicket(studentId, ticket, title, message) {
+    const targetStudentId = asObjectId(studentId);
+    if (!targetStudentId)
+        return;
+    await (0, adminAlertService_1.createStudentNotification)({
+        title,
+        message: `${ticket.ticketNo}: ${message || ticket.subject}`,
+        linkUrl: `/support/${String(ticket._id)}`,
+        category: 'update',
+        targetUserIds: [targetStudentId],
+    });
 }
 async function adminGetNotices(req, res) {
     try {
@@ -296,6 +321,7 @@ async function studentCreateSupportTicket(req, res) {
             ticketId: String(ticket._id),
             ticketNo,
         });
+        await notifyAdminsForTicket(ticket, 'created');
         res.status(201).json({ item: ticket, message: 'Support ticket created successfully' });
     }
     catch (error) {
@@ -325,6 +351,85 @@ async function studentGetSupportTickets(req, res) {
     }
     catch (error) {
         console.error('studentGetSupportTickets error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+}
+async function studentGetSupportTicketById(req, res) {
+    try {
+        if (!req.user) {
+            res.status(401).json({ message: 'Authentication required' });
+            return;
+        }
+        if (req.user.role !== 'student') {
+            res.status(403).json({ message: 'Student access required' });
+            return;
+        }
+        const studentId = asObjectId(req.user._id);
+        const ticketId = asObjectId(req.params.id);
+        if (!studentId || !ticketId) {
+            res.status(400).json({ message: 'Invalid ticket id' });
+            return;
+        }
+        const item = await SupportTicket_1.default.findOne({ _id: ticketId, studentId }).lean();
+        if (!item) {
+            res.status(404).json({ message: 'Support ticket not found' });
+            return;
+        }
+        res.json({ item });
+    }
+    catch (error) {
+        console.error('studentGetSupportTicketById error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+}
+async function studentReplySupportTicket(req, res) {
+    try {
+        if (!req.user) {
+            res.status(401).json({ message: 'Authentication required' });
+            return;
+        }
+        if (req.user.role !== 'student') {
+            res.status(403).json({ message: 'Student access required' });
+            return;
+        }
+        const studentId = asObjectId(req.user._id);
+        const ticketId = asObjectId(req.params.id);
+        const message = String(req.body.message || '').trim();
+        if (!studentId || !ticketId) {
+            res.status(400).json({ message: 'Invalid ticket id' });
+            return;
+        }
+        if (!message) {
+            res.status(400).json({ message: 'message is required' });
+            return;
+        }
+        const ticket = await SupportTicket_1.default.findOne({ _id: ticketId, studentId });
+        if (!ticket) {
+            res.status(404).json({ message: 'Support ticket not found' });
+            return;
+        }
+        if (ticket.status === 'closed') {
+            res.status(400).json({ message: 'Closed tickets cannot receive new replies' });
+            return;
+        }
+        ticket.timeline.push({
+            actorId: studentId,
+            actorRole: 'student',
+            message,
+            createdAt: new Date(),
+        });
+        if (ticket.status === 'resolved') {
+            ticket.status = 'in_progress';
+        }
+        await ticket.save();
+        await createAudit(req, 'support_ticket_student_replied', {
+            ticketId: String(ticket._id),
+        });
+        await notifyAdminsForTicket(ticket, 'student_reply');
+        res.json({ item: ticket, message: 'Reply added successfully' });
+    }
+    catch (error) {
+        console.error('studentReplySupportTicket error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 }
@@ -384,6 +489,9 @@ async function adminUpdateSupportTicketStatus(req, res) {
             ticketId: String(ticket._id),
             updatedFields: Object.keys(update),
         });
+        if (update.status) {
+            await notifyStudentForTicket(ticket.studentId, ticket, 'Support ticket updated', `Status changed to ${String(ticket.status).replace('_', ' ')}`);
+        }
         res.json({ item: ticket, message: 'Support ticket updated' });
     }
     catch (error) {
@@ -425,6 +533,7 @@ async function adminReplySupportTicket(req, res) {
         await createAudit(req, 'support_ticket_replied', {
             ticketId: String(ticket._id),
         });
+        await notifyStudentForTicket(ticket.studentId, ticket, 'Support reply received', 'An admin replied to your support ticket');
         res.json({ item: ticket, message: 'Reply added successfully' });
     }
     catch (error) {

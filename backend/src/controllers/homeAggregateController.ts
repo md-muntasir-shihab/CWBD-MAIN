@@ -458,7 +458,12 @@ export const getAggregatedHomeData = async (req: AuthRequest, res: Response): Pr
                 .select('name shortForm slug category clusterGroup contactNumber established address email website admissionWebsite totalSeats scienceSeats artsSeats businessSeats applicationStartDate applicationEndDate scienceExamDate artsExamDate businessExamDate examCenters shortDescription description logoUrl')
                 .sort({ updatedAt: -1, createdAt: -1, _id: -1 })
                 .lean(),
-            Exam.find({ isPublished: true, status: { $in: ['live', 'scheduled'] } })
+            Exam.find({
+                isPublished: true,
+                isActive: { $ne: false },
+                displayOnPublicList: { $ne: false },
+                status: { $in: ['live', 'scheduled'] },
+            })
                 .select('title subject status startDate endDate duration')
                 .sort({ startDate: 1 })
                 .lean(),
