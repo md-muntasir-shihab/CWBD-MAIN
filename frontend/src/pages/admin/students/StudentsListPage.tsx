@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import AdminGuardShell from '../../../components/admin/AdminGuardShell';
+import { ADMIN_PATHS } from '../../../routes/adminPaths';
 import {
   getStudentsList, suspendStudent, activateStudent, resetStudentPassword,
   exportStudents, importStudentsPreview, importStudentsCommit, bulkDeleteStudents, bulkUpdateStudents,
@@ -236,7 +237,7 @@ export default function StudentsListPage() {
               <button onClick={() => void handleBulkEdit()} className="rounded-full bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700">Bulk Edit</button>
             </div>
             <button onClick={() => void handleBulkDelete()} className="px-3 py-1 text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-full hover:bg-red-200">Delete All</button>
-            <button onClick={() => navigate('/__cw_admin__/notification-center')} className="px-3 py-1 text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full hover:bg-purple-200">Send Notification</button>
+            <button onClick={() => navigate(ADMIN_PATHS.campaignsNew)} className="px-3 py-1 text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full hover:bg-purple-200">New Campaign</button>
             <button onClick={() => setSelected([])} className="ml-auto text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700">Clear</button>
           </div>
         )}

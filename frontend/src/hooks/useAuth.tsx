@@ -14,6 +14,8 @@ interface User {
         canManageStudents: boolean;
         canViewReports: boolean;
         canDeleteData: boolean;
+        canManageFinance?: boolean;
+        canManagePlans?: boolean;
     };
     redirectTo?: string;
     profile_completion_percentage?: number;

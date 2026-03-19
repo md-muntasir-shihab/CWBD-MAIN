@@ -14,6 +14,15 @@ type AdminShellProps = {
     children: ReactNode;
 };
 
+const ACTIONABLE_ALERT_ROLES = new Set([
+    'superadmin',
+    'admin',
+    'moderator',
+    'viewer',
+    'support_agent',
+    'finance_agent',
+]);
+
 export default function AdminShell({ title, description, children }: AdminShellProps) {
     const queryClient = useQueryClient();
     const [drawerOpen, setDrawerOpen] = useState(false);
@@ -26,11 +35,13 @@ export default function AdminShell({ title, description, children }: AdminShellP
     const { hasAnyAccess } = useModuleAccess();
     const location = useLocation();
     const navigate = useNavigate();
+    const canReadActionableAlerts = ACTIONABLE_ALERT_ROLES.has(String(user?.role || '').toLowerCase());
 
     const alertsQuery = useQuery({
         queryKey: ['admin', 'actionable-alerts', 'shell'],
         queryFn: async () => (await adminGetActionableAlerts({ page: 1, limit: 8 })).data,
         staleTime: 30_000,
+        enabled: canReadActionableAlerts,
     });
     const markReadMutation = useMutation({
         mutationFn: async (ids?: string[]) => (await adminMarkActionableAlertsRead(ids)).data,
@@ -44,11 +55,17 @@ export default function AdminShell({ title, description, children }: AdminShellP
 
     const visibleMenuItems = useMemo(() => {
         return ADMIN_MENU_ITEMS.filter((item) => {
+            if (item.allowedRoles && !item.allowedRoles.includes(String(user?.role || '') as typeof item.allowedRoles[number])) {
+                return false;
+            }
+            if (item.requiredLegacyPermission && user?.role !== 'superadmin' && !user?.permissions?.[item.requiredLegacyPermission]) {
+                return false;
+            }
             if (!item.module) return true;
             if (item.module === 'dashboard' || item.module === 'admin_profile') return true;
             return hasAnyAccess(item.module);
         });
-    }, [hasAnyAccess]);
+    }, [hasAnyAccess, user]);
 
     const breadcrumb = useMemo(() => {
         if (location.pathname === '/__cw_admin__/settings') return 'Admin / Settings';
@@ -59,6 +76,18 @@ export default function AdminShell({ title, description, children }: AdminShellP
         return `Admin / ${title}`;
     }, [location.pathname, title]);
 
+    const currentRoute = `${location.pathname}${location.search}`;
+    const alertItems = canReadActionableAlerts ? (alertsQuery.data?.items || []) : [];
+    const unreadAlertCount = canReadActionableAlerts ? Number(alertsQuery.data?.unreadCount || 0) : 0;
+
+    const matchesMenuPath = (targetPath: string): boolean => {
+        if (!targetPath) return false;
+        if (targetPath.includes('?')) {
+            return currentRoute === targetPath;
+        }
+        return location.pathname === targetPath || location.pathname.startsWith(`${targetPath}/`);
+    };
+
     // Auto-expand parent menus that contain the current route
     useEffect(() => {
         setExpandedMenus((prev) => {
@@ -67,12 +96,12 @@ export default function AdminShell({ title, description, children }: AdminShellP
                 if (!item.children) continue;
                 const shouldExpand =
                     isAdminPathActive(location.pathname, item) ||
-                    item.children.some((child) => location.pathname === child.path || location.pathname.startsWith(`${child.path}/`));
+                    item.children.some((child) => matchesMenuPath(child.path));
                 if (shouldExpand) next[item.key] = true;
             }
             return next;
         });
-    }, [location.pathname]);
+    }, [currentRoute, location.pathname]);
 
     useEffect(() => {
         const handleOutside = (event: MouseEvent) => {
@@ -94,6 +123,7 @@ export default function AdminShell({ title, description, children }: AdminShellP
     };
 
     const openAlert = async (id: string, linkUrl?: string) => {
+        if (!canReadActionableAlerts) return;
         await markReadMutation.mutateAsync([id]);
         setNotifOpen(false);
         navigate(linkUrl || ADMIN_PATHS.notificationCenter);
@@ -158,7 +188,7 @@ export default function AdminShell({ title, description, children }: AdminShellP
                 {!collapsed && hasChildren && isExpanded && (
                     <div className="ml-8 space-y-0.5 border-l-2 border-indigo-500/10 pl-3 dark:border-indigo-500/20">
                         {item.children!.map((child) => {
-                            const childActive = location.pathname === child.path || location.pathname.startsWith(`${child.path}/`);
+                            const childActive = matchesMenuPath(child.path);
                             const ChildIcon = child.icon;
                             return (
                                 <Link
@@ -301,57 +331,59 @@ export default function AdminShell({ title, description, children }: AdminShellP
                             </div>
                             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
                                 <ThemeSwitchPro />
-                                <div ref={notifRef} className="relative">
-                                    <button
-                                        type="button"
-                                        aria-label="Notifications"
-                                        onClick={() => setNotifOpen((prev) => !prev)}
-                                        className="relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400"
-                                    >
-                                        <Bell className="h-4 w-4" />
-                                        {Number(alertsQuery.data?.unreadCount || 0) > 0 && (
-                                            <span className="absolute -right-1 -top-1 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
-                                                {Number(alertsQuery.data?.unreadCount || 0)}
-                                            </span>
-                                        )}
-                                    </button>
-                                    {notifOpen && (
-                                        <div className="absolute right-0 top-11 z-30 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-                                            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 text-sm font-semibold dark:border-slate-700">
-                                                <span>Admin Alerts</span>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => navigate(ADMIN_PATHS.notificationCenter)}
-                                                    className="text-xs text-indigo-600 dark:text-indigo-300"
-                                                >
-                                                    Open center
-                                                </button>
-                                            </div>
-                                            <div className="max-h-80 overflow-y-auto">
-                                                {(alertsQuery.data?.items || []).length === 0 ? (
-                                                    <div className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">
-                                                        No actionable alerts right now.
-                                                    </div>
-                                                ) : (alertsQuery.data?.items || []).map((item) => (
+                                {canReadActionableAlerts && (
+                                    <div ref={notifRef} className="relative">
+                                        <button
+                                            type="button"
+                                            aria-label="Notifications"
+                                            onClick={() => setNotifOpen((prev) => !prev)}
+                                            className="relative inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400"
+                                        >
+                                            <Bell className="h-4 w-4" />
+                                            {unreadAlertCount > 0 && (
+                                                <span className="absolute -right-1 -top-1 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+                                                    {unreadAlertCount}
+                                                </span>
+                                            )}
+                                        </button>
+                                        {notifOpen && (
+                                            <div className="absolute right-0 top-11 z-30 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+                                                <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 text-sm font-semibold dark:border-slate-700">
+                                                    <span>Admin Alerts</span>
                                                     <button
-                                                        key={item._id}
                                                         type="button"
-                                                        onClick={() => void openAlert(item._id, item.linkUrl)}
-                                                        className={`block w-full border-b border-slate-200 px-4 py-3 text-left transition hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800 ${
-                                                            item.isRead ? '' : 'bg-indigo-50/70 dark:bg-indigo-500/10'
-                                                        }`}
+                                                        onClick={() => navigate(ADMIN_PATHS.notificationCenter)}
+                                                        className="text-xs text-indigo-600 dark:text-indigo-300"
                                                     >
-                                                        <p className="text-sm font-semibold text-slate-900 dark:text-white">{item.title}</p>
-                                                        <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{item.message}</p>
-                                                        <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                                                            {new Date(item.publishAt).toLocaleString()}
-                                                        </p>
+                                                        Open center
                                                     </button>
-                                                ))}
+                                                </div>
+                                                <div className="max-h-80 overflow-y-auto">
+                                                    {alertItems.length === 0 ? (
+                                                        <div className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">
+                                                            No actionable alerts right now.
+                                                        </div>
+                                                    ) : alertItems.map((item) => (
+                                                        <button
+                                                            key={item._id}
+                                                            type="button"
+                                                            onClick={() => void openAlert(item._id, item.linkUrl)}
+                                                            className={`block w-full border-b border-slate-200 px-4 py-3 text-left transition hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800 ${
+                                                                item.isRead ? '' : 'bg-indigo-50/70 dark:bg-indigo-500/10'
+                                                            }`}
+                                                        >
+                                                            <p className="text-sm font-semibold text-slate-900 dark:text-white">{item.title}</p>
+                                                            <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{item.message}</p>
+                                                            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                                                                {new Date(item.publishAt).toLocaleString()}
+                                                            </p>
+                                                        </button>
+                                                    ))}
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
-                                </div>
+                                        )}
+                                    </div>
+                                )}
                                 <button
                                     type="button"
                                     className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-2 py-1 text-xs dark:border-slate-700"

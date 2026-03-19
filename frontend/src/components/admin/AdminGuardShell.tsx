@@ -13,7 +13,23 @@ export type AdminAllowedRole =
     | 'support_agent'
     | 'finance_agent';
 
-const DEFAULT_ALLOWED_ROLES: AdminAllowedRole[] = ['superadmin', 'admin', 'moderator', 'editor'];
+export type AdminLegacyPermission =
+    | 'canEditExams'
+    | 'canManageStudents'
+    | 'canViewReports'
+    | 'canDeleteData'
+    | 'canManageFinance'
+    | 'canManagePlans';
+
+const DEFAULT_ALLOWED_ROLES: AdminAllowedRole[] = [
+    'superadmin',
+    'admin',
+    'moderator',
+    'editor',
+    'viewer',
+    'support_agent',
+    'finance_agent',
+];
 
 type AdminGuardShellProps = {
     title: string;
@@ -22,6 +38,7 @@ type AdminGuardShellProps = {
     allowedRoles?: AdminAllowedRole[];
     requiredModule?: string;
     requiredAction?: string;
+    requiredLegacyPermission?: AdminLegacyPermission;
 };
 
 export default function AdminGuardShell({
@@ -31,6 +48,7 @@ export default function AdminGuardShell({
     allowedRoles = DEFAULT_ALLOWED_ROLES,
     requiredModule,
     requiredAction = 'view',
+    requiredLegacyPermission,
 }: AdminGuardShellProps) {
     const { user, isLoading } = useAuth();
     const { hasAccess } = useModuleAccess();
@@ -48,6 +66,10 @@ export default function AdminGuardShell({
     }
 
     if (requiredModule && !hasAccess(requiredModule, requiredAction)) {
+        return <Navigate to="/__cw_admin__/access-denied" replace />;
+    }
+
+    if (requiredLegacyPermission && user.role !== 'superadmin' && !user.permissions?.[requiredLegacyPermission]) {
         return <Navigate to="/__cw_admin__/access-denied" replace />;
     }
 
