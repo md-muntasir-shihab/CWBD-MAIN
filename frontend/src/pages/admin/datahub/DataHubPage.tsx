@@ -7,16 +7,17 @@ import {
   exportDataHub, getExportHistory,
   type ExportHistoryItem,
 } from '../../../api/adminNotificationCampaignApi';
+import { downloadFile } from '../../../utils/download';
 
-type ExportCategory = 'phone_list' | 'email_list' | 'guardian_list' | 'audience_segment' | 'failed_deliveries' | 'manual_send';
+type ExportCategory = 'phone_list' | 'email_list' | 'guardians' | 'audience_segment' | 'failed_deliveries' | 'manual_send_list';
 
 const CATEGORIES: { key: ExportCategory; label: string; desc: string; icon: string }[] = [
   { key: 'phone_list', label: 'Phone List', desc: 'Export student phone numbers with filters', icon: '📱' },
   { key: 'email_list', label: 'Email List', desc: 'Export student email addresses', icon: '📧' },
-  { key: 'guardian_list', label: 'Guardian Contacts', desc: 'Export guardian emails & phones', icon: '👨‍👩‍👧' },
+  { key: 'guardians', label: 'Guardian Contacts', desc: 'Export guardian emails & phones', icon: '👨‍👩‍👧' },
   { key: 'audience_segment', label: 'Audience Segment', desc: 'Export by group, subscription, or role', icon: '👥' },
   { key: 'failed_deliveries', label: 'Failed Deliveries', desc: 'Get list of failed sends for retry', icon: '⚠️' },
-  { key: 'manual_send', label: 'Manual Send List', desc: 'Pre-formatted list for manual sending', icon: '📋' },
+  { key: 'manual_send_list', label: 'Manual Send List', desc: 'Pre-formatted list for manual sending', icon: '📋' },
 ];
 
 export default function DataHubPage() {
@@ -44,14 +45,32 @@ function ExportCenter() {
   const [selected, setSelected] = useState<ExportCategory | null>(null);
   const [toast, setToast] = useState('');
   const [exportResult, setExportResult] = useState<{ data: Record<string, unknown>[]; count: number } | null>(null);
-  const [filters, setFilters] = useState({ format: 'json', groupId: '', subscriptionStatus: '', campaignId: '' });
+  const [filters, setFilters] = useState({ format: 'xlsx', groupId: '', subscriptionStatus: '', campaignId: '' });
 
   const exportMut = useMutation({
     mutationFn: (params: { category: string; format: string; filters?: Record<string, string> }) => exportDataHub(params),
     onSuccess: (res: unknown) => {
-      const r = res as { data?: Record<string, unknown>[]; count?: number };
+      const axiosLike = res as { data?: unknown; headers?: Record<string, unknown> | { get?: (name: string) => unknown } };
+      if (axiosLike?.data instanceof Blob) {
+        const fallbackName = `${selected || 'data-hub'}_export.${filters.format === 'csv' ? 'csv' : 'xlsx'}`;
+        downloadFile(axiosLike as { data: Blob; headers?: Record<string, unknown> }, { filename: fallbackName });
+        setExportResult(null);
+        setToast('Export downloaded');
+        setTimeout(() => setToast(''), 3000);
+        return;
+      }
+
+      const r = res as { data?: Record<string, unknown>[]; count?: number; text?: string };
+      if (typeof r.text === 'string' && r.text.trim()) {
+        navigator.clipboard.writeText(r.text).catch(() => void 0);
+        setExportResult(null);
+        setToast('Copied export text to clipboard');
+        setTimeout(() => setToast(''), 3000);
+        return;
+      }
+
       setExportResult({ data: Array.isArray(r.data) ? r.data : [], count: r.count ?? 0 });
-      setToast('Export completed!');
+      setToast('Export ready!');
       setTimeout(() => setToast(''), 3000);
     },
     onError: () => { setToast('Export failed'); setTimeout(() => setToast(''), 3000); },
@@ -120,8 +139,9 @@ function ExportCenter() {
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Format</label>
               <select value={filters.format} onChange={e => setFilters(p => ({ ...p, format: e.target.value }))} className={fieldClass}>
-                <option value="json">JSON</option>
+                <option value="xlsx">XLSX</option>
                 <option value="csv">CSV</option>
+                <option value="json">JSON</option>
               </select>
             </div>
             {(selected === 'audience_segment') && (

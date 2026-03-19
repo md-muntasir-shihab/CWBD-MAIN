@@ -39,6 +39,41 @@ const SORT_WHITELIST = {
     createdAt: 'createdAt',
     updatedAt: 'updatedAt',
 };
+const PUBLIC_UNIVERSITY_LIST_PROJECTION = [
+    'name',
+    'shortForm',
+    'category',
+    'clusterGroup',
+    'established',
+    'establishedYear',
+    'address',
+    'contactNumber',
+    'email',
+    'website',
+    'websiteUrl',
+    'admissionWebsite',
+    'admissionUrl',
+    'totalSeats',
+    'scienceSeats',
+    'seatsScienceEng',
+    'artsSeats',
+    'seatsArtsHum',
+    'businessSeats',
+    'seatsBusiness',
+    'logoUrl',
+    'applicationStartDate',
+    'applicationEndDate',
+    'scienceExamDate',
+    'examDateScience',
+    'artsExamDate',
+    'examDateArts',
+    'businessExamDate',
+    'examDateBusiness',
+    'isActive',
+    'featured',
+    'featuredOrder',
+    'slug',
+].join(' ');
 function asStatusFilter(value) {
     const raw = String(value || '').trim().toLowerCase();
     if (raw === 'active' || raw === 'inactive' || raw === 'archived' || raw === 'all')
@@ -201,6 +236,9 @@ function buildUniversityFilter(query, opts) {
     if (categoryRaw && !(0, universityCategories_1.isAllUniversityCategoryToken)(categoryRaw)) {
         filter.category = (0, universityCategories_1.normalizeUniversityCategoryStrict)(categoryRaw);
     }
+    else if (categoryRaw && (0, universityCategories_1.isAllUniversityCategoryToken)(categoryRaw) && requireCategory && !allowAllCategories) {
+        categoryMissing = true;
+    }
     else if (!categoryRaw && requireCategory && !allowAllCategories) {
         categoryMissing = true;
     }
@@ -245,7 +283,12 @@ async function getUniversities(req, res) {
             ? { featuredOrder: 1, name: 1 }
             : normalizeSort(sortBy, sortOrder, sort);
         const total = await University_1.default.countDocuments(filter);
-        const rows = await University_1.default.find(filter).sort(sortOption).skip((pageNum - 1) * limitNum).limit(limitNum).lean();
+        const rows = await University_1.default.find(filter)
+            .select(PUBLIC_UNIVERSITY_LIST_PROJECTION)
+            .sort(sortOption)
+            .skip((pageNum - 1) * limitNum)
+            .limit(limitNum)
+            .lean();
         res.json({
             items: rows.map((item) => toCanonicalUniversityRecord(item)),
             page: pageNum,
@@ -607,7 +650,7 @@ async function adminReorderFeaturedUniversities(req, res) {
 }
 async function adminExportUniversities(req, res) {
     try {
-        const format = String(req.query.type || req.query.format || 'csv').toLowerCase() === 'xlsx' ? 'xlsx' : 'csv';
+        const format = String(req.query.format || req.query.type || 'csv').toLowerCase() === 'xlsx' ? 'xlsx' : 'csv';
         const { filter } = buildUniversityFilter(req.query, { includeArchivedDefault: false });
         const selectedIds = asStringIdList(req.query.selectedIds);
         if (selectedIds.length > 0)

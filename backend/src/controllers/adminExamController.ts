@@ -89,6 +89,9 @@ function normalizeDeliveryMode(payload: Record<string, unknown>): void {
 
 function normalizeExamPayload(body: Record<string, unknown>): Record<string, unknown> {
     const payload: Record<string, unknown> = { ...body };
+    const scheduleStartOverride = String(payload.examWindowStartUTC || payload.scheduleStart || '').trim();
+    const scheduleEndOverride = String(payload.examWindowEndUTC || payload.scheduleEnd || '').trim();
+    const resultPublishOverride = String(payload.resultPublishAtUTC || '').trim();
     if (payload.marksPerQuestion !== undefined && payload.defaultMarksPerQuestion === undefined) {
         payload.defaultMarksPerQuestion = Number(payload.marksPerQuestion || 1);
     }
@@ -98,24 +101,24 @@ function normalizeExamPayload(body: Record<string, unknown>): Record<string, unk
     if (payload.maxAnswerChangeLimit !== undefined && payload.answerEditLimitPerQuestion === undefined) {
         payload.answerEditLimitPerQuestion = Number(payload.maxAnswerChangeLimit || 0);
     }
-    if (payload.scheduleStart && !payload.startDate) {
+    if (scheduleStartOverride) {
+        payload.startDate = scheduleStartOverride;
+    } else if (payload.scheduleStart && !payload.startDate) {
         payload.startDate = payload.scheduleStart;
     }
-    if (payload.scheduleEnd && !payload.endDate) {
+    if (scheduleEndOverride) {
+        payload.endDate = scheduleEndOverride;
+    } else if (payload.scheduleEnd && !payload.endDate) {
         payload.endDate = payload.scheduleEnd;
     }
 
     /* ── New admin panel field-name mappings ── */
-    if (payload.examWindowStartUTC && !payload.startDate) {
-        payload.startDate = payload.examWindowStartUTC;
-    }
-    if (payload.examWindowEndUTC && !payload.endDate) {
-        payload.endDate = payload.examWindowEndUTC;
-    }
     if (payload.durationMinutes !== undefined && payload.duration === undefined) {
         payload.duration = Number(payload.durationMinutes || 30);
     }
-    if (payload.resultPublishAtUTC && !payload.resultPublishDate) {
+    if (resultPublishOverride) {
+        payload.resultPublishDate = resultPublishOverride;
+    } else if (payload.resultPublishAtUTC && !payload.resultPublishDate) {
         payload.resultPublishDate = payload.resultPublishAtUTC;
     }
     if (payload.examCategory && !payload.group_category) {
@@ -2233,3 +2236,4 @@ export async function adminLiveAttemptAction(req: AuthRequest, res: Response): P
         res.status(500).json({ message: 'Server error' });
     }
 }
+

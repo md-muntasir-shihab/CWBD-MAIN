@@ -36,6 +36,18 @@ function getBackupDir() {
 function safeBaseName(input) {
     return input.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
 }
+function toCompactTimestamp(value) {
+    const date = value ? new Date(value) : new Date();
+    if (Number.isNaN(date.getTime()))
+        return String(Date.now());
+    return date.toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
+}
+function buildBackupDownloadName(item, filePath) {
+    const ext = path_1.default.extname(filePath) || '.json';
+    const type = safeBaseName(String(item.type || 'full').toLowerCase());
+    const timestamp = toCompactTimestamp(item.createdAt);
+    return safeBaseName(`campusway-backup-${type}-${timestamp}${ext}`);
+}
 async function createAudit(req, action, details) {
     if (!req.user || !mongoose_1.default.Types.ObjectId.isValid(req.user._id))
         return;
@@ -194,7 +206,8 @@ async function adminDownloadBackup(req, res) {
             res.status(404).json({ message: 'Backup file is unavailable on disk' });
             return;
         }
-        res.download(filePath, safeBaseName(path_1.default.basename(filePath)));
+        const downloadName = buildBackupDownloadName({ type: item.type, createdAt: item.createdAt }, filePath);
+        res.download(filePath, downloadName);
     }
     catch (error) {
         console.error('adminDownloadBackup error:', error);

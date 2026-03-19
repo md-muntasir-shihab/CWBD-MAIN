@@ -38,11 +38,12 @@ import {
   adminValidateUniversityImport,
 } from '../../services/api';
 import { useAdminRuntimeFlags } from '../../hooks/useAdminRuntimeFlags';
+import { downloadFile } from '../../utils/download';
 
 type Tab = 'universities' | 'categories' | 'clusters' | 'import';
 type StatusFilter = 'all' | 'active' | 'inactive' | 'archived';
 type SortOrder = 'asc' | 'desc';
-type BulkAction = '' | 'softDelete' | 'hardDelete' | 'setCluster';
+type BulkAction = '' | 'softDelete' | 'hardDelete' | 'setCluster' | 'setCategory' | 'setStatus' | 'setFeatured';
 
 type UniversityForm = Partial<ApiUniversity> & {
   clusterSyncLocked?: boolean;
@@ -168,8 +169,6 @@ const COLUMN_VISIBILITY: Record<string, string> = {
 function dateInput(v?: string): string { if (!v) return ''; const d = new Date(v); return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10); }
 function dateText(v?: string): string { if (!v) return 'N/A'; const d = new Date(v); return Number.isNaN(d.getTime()) ? v : d.toLocaleDateString(); }
 function numOrUndef(v: unknown): number | undefined { if (v === '' || v === undefined || v === null) return undefined; const n = Number(v); return Number.isFinite(n) ? n : undefined; }
-function downloadBlob(part: BlobPart, name: string, type = 'application/octet-stream'): void { const b = new Blob([part], { type }); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href = u; a.download = name; a.click(); URL.revokeObjectURL(u); }
-
 function AdminDateField({
   label,
   value,
@@ -219,6 +218,9 @@ export default function UniversitiesPanel() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkAction, setBulkAction] = useState<BulkAction>('');
   const [targetClusterId, setTargetClusterId] = useState('');
+  const [targetCategory, setTargetCategory] = useState('');
+  const [targetStatus, setTargetStatus] = useState<'active' | 'inactive'>('active');
+  const [targetFeatured, setTargetFeatured] = useState<'featured' | 'not_featured'>('featured');
   const [bulkLoading, setBulkLoading] = useState(false);
 
   const [modalUniversity, setModalUniversity] = useState<null | ApiUniversity | 'create'>(null);
@@ -456,11 +458,24 @@ export default function UniversitiesPanel() {
         if (!targetClusterId) { toast.error('Please select a target cluster'); return; }
         await adminBulkUpdateUniversities(selectedIds, { clusterId: targetClusterId });
         toast.success('Cluster assigned to selected items');
+      } else if (bulkAction === 'setCategory') {
+        if (!targetCategory) { toast.error('Please select a target category'); return; }
+        await adminBulkUpdateUniversities(selectedIds, { category: targetCategory });
+        toast.success('Category updated for selected items');
+      } else if (bulkAction === 'setStatus') {
+        await adminBulkUpdateUniversities(selectedIds, { isActive: targetStatus === 'active' });
+        toast.success('Status updated for selected items');
+      } else if (bulkAction === 'setFeatured') {
+        await adminBulkUpdateUniversities(selectedIds, { featured: targetFeatured === 'featured' });
+        toast.success('Featured flag updated');
       }
 
       setSelectedIds([]);
       setBulkAction('');
       setTargetClusterId('');
+      setTargetCategory('');
+      setTargetStatus('active');
+      setTargetFeatured('featured');
       await invalidateUniversityQueries();
       await loadUniversities();
       await loadFacets();
@@ -479,7 +494,7 @@ export default function UniversitiesPanel() {
       if (categoryFilter) params.category = categoryFilter;
       if (clusterFilter) params.clusterId = clusterFilter;
       const r = await adminExportUniversitiesSheet(params);
-      downloadBlob(r.data, `universities_export.${format}`, format === 'csv' ? 'text/csv;charset=utf-8' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      downloadFile(r, { filename: `universities_export.${format}` });
     } catch { toast.error('Export failed'); }
   };
 
@@ -523,9 +538,9 @@ export default function UniversitiesPanel() {
         dates: {
           applicationStartDate: dateInput(source.dates?.applicationStartDate),
           applicationEndDate: dateInput(source.dates?.applicationEndDate),
-          scienceExamDate: source.dates?.scienceExamDate || '',
-          commerceExamDate: source.dates?.commerceExamDate || '',
-          artsExamDate: source.dates?.artsExamDate || '',
+          scienceExamDate: dateInput(source.dates?.scienceExamDate),
+          commerceExamDate: dateInput(source.dates?.commerceExamDate),
+          artsExamDate: dateInput(source.dates?.artsExamDate),
         }, homeVisible: Boolean(source.homeVisible), homeOrder: Number(source.homeOrder || 0),
       });
       setClusterModal(source);
@@ -610,15 +625,11 @@ export default function UniversitiesPanel() {
   const validateImport = async () => { if (!importJobId) { toast.error('Job id missing'); return; } setValidatingImport(true); try { const r = await adminValidateUniversityImport(importJobId, importMapping, importDefaults); setImportValidation(r.data as Record<string, unknown>); setImportCommit(null); toast.success('Validated'); } catch (e) { toast.error('Validation failed'); } finally { setValidatingImport(false); } };
   const commitImport = async () => { if (!importJobId) { toast.error('Job id missing'); return; } setCommittingImport(true); try { const r = await adminCommitUniversityImportWithMode(importJobId, importMode); setImportCommit(r.data as Record<string, unknown>); toast.success('Commit complete'); await invalidateUniversityQueries(); await loadUniversities(); await loadFacets(); await loadCandidates(); await loadCategoryMaster(); } catch (e) { toast.error('Commit failed'); } finally { setCommittingImport(false); } };
   const refreshImport = async () => { if (!importJobId) { toast.error('Job id missing'); return; } setRefreshingImportStatus(true); try { const r = await adminGetUniversityImportJob(importJobId); setImportValidation(r.data as Record<string, unknown>); if ((r.data as { commitSummary?: unknown }).commitSummary) setImportCommit(r.data as Record<string, unknown>); } catch (e) { toast.error('Refresh failed'); } finally { setRefreshingImportStatus(false); } };
-  const downloadErrors = async () => { if (!importJobId) return; try { const r = await adminDownloadUniversityImportErrors(importJobId); downloadBlob(r.data, `university_import_errors_${importJobId}.csv`, 'text/csv;charset=utf-8'); } catch (e) { toast.error('Download failed'); } };
+  const downloadErrors = async () => { if (!importJobId) return; try { const r = await adminDownloadUniversityImportErrors(importJobId); downloadFile(r, { filename: `university_import_errors_${importJobId}.csv` }); } catch (e) { toast.error('Download failed'); } };
   const downloadTemplate = async (format: 'csv' | 'xlsx') => {
     try {
       const r = await adminDownloadUniversityImportTemplate(format);
-      downloadBlob(
-        r.data,
-        `university_import_template.${format}`,
-        format === 'csv' ? 'text/csv;charset=utf-8' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      );
+      downloadFile(r, { filename: `university_import_template.${format}` });
       toast.success('Template downloaded');
     } catch {
       toast.error('Template download failed');
@@ -753,7 +764,13 @@ export default function UniversitiesPanel() {
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 uppercase ml-1 mb-1 block">Bulk Action</label>
                   <select value={bulkAction} onChange={(e) => setBulkAction(e.target.value as BulkAction)} className="w-full rounded-xl border border-indigo-500/10 bg-slate-950/65 px-3 py-2 text-sm text-white focus:border-indigo-500/50 outline-none transition-all">
-                    <option value="">Select Action</option><option value="softDelete">Soft Delete</option><option value="hardDelete">Hard Delete</option><option value="setCluster">Set Cluster</option>
+                    <option value="">Select Action</option>
+                    <option value="softDelete">Soft Delete</option>
+                    <option value="hardDelete">Hard Delete</option>
+                    <option value="setCluster">Set Cluster</option>
+                    <option value="setCategory">Set Category</option>
+                    <option value="setStatus">Set Status</option>
+                    <option value="setFeatured">Set Featured Flag</option>
                   </select>
                 </div>
                 {bulkAction === 'setCluster' && (
@@ -761,6 +778,32 @@ export default function UniversitiesPanel() {
                     <label className="text-[10px] font-bold text-slate-500 uppercase ml-1 mb-1 block">Target Cluster</label>
                     <select value={targetClusterId} onChange={(e) => setTargetClusterId(e.target.value)} className="w-full rounded-xl border border-indigo-500/10 bg-slate-950/65 px-3 py-2 text-sm text-white focus:border-indigo-500/50 outline-none transition-all">
                       <option value="">Choose...</option>{clusters.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                )}
+                {bulkAction === 'setCategory' && (
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase ml-1 mb-1 block">Target Category</label>
+                    <select value={targetCategory} onChange={(e) => setTargetCategory(e.target.value)} className="w-full rounded-xl border border-indigo-500/10 bg-slate-950/65 px-3 py-2 text-sm text-white focus:border-indigo-500/50 outline-none transition-all">
+                      <option value="">Choose...</option>{categorySelectOptions.map((category) => <option key={category} value={category}>{category}</option>)}
+                    </select>
+                  </div>
+                )}
+                {bulkAction === 'setStatus' && (
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase ml-1 mb-1 block">Target Status</label>
+                    <select value={targetStatus} onChange={(e) => setTargetStatus(e.target.value as 'active' | 'inactive')} className="w-full rounded-xl border border-indigo-500/10 bg-slate-950/65 px-3 py-2 text-sm text-white focus:border-indigo-500/50 outline-none transition-all">
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                  </div>
+                )}
+                {bulkAction === 'setFeatured' && (
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase ml-1 mb-1 block">Featured</label>
+                    <select value={targetFeatured} onChange={(e) => setTargetFeatured(e.target.value as 'featured' | 'not_featured')} className="w-full rounded-xl border border-indigo-500/10 bg-slate-950/65 px-3 py-2 text-sm text-white focus:border-indigo-500/50 outline-none transition-all">
+                      <option value="featured">Featured</option>
+                      <option value="not_featured">Not Featured</option>
                     </select>
                   </div>
                 )}

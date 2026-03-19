@@ -5,6 +5,9 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import User from '../models/User';
 import StudentProfile from '../models/StudentProfile';
+import UserSubscription from '../models/UserSubscription';
+import GroupMembership from '../models/GroupMembership';
+import StudentDueLedger from '../models/StudentDueLedger';
 
 // ---------------------------------------------------------------------------
 // Column definitions
@@ -355,11 +358,67 @@ export async function exportStudents(
   if (filters['status']) userQuery['status'] = filters['status'];
   if (filters['q']) {
     const re = new RegExp(String(filters['q']), 'i');
-    userQuery['$or'] = [{ full_name: re }, { email: re }, { phone_number: re }];
+    userQuery['$or'] = [{ full_name: re }, { email: re }, { phone_number: re }, { username: re }];
   }
+
+  const mergeIdFilter = (candidateIds: mongoose.Types.ObjectId[]) => {
+    const existingId = userQuery['_id'] as { $in: mongoose.Types.ObjectId[] } | undefined;
+    userQuery['_id'] = existingId
+      ? { $in: existingId.$in.filter((id) => candidateIds.some((candidate) => String(candidate) === String(id))) }
+      : { $in: candidateIds };
+  };
+
+  if (filters['group'] && mongoose.Types.ObjectId.isValid(String(filters['group']))) {
+    const memberships = await GroupMembership.find({
+      groupId: new mongoose.Types.ObjectId(String(filters['group'])),
+      membershipStatus: 'active',
+    }).select('studentId').lean();
+    mergeIdFilter(memberships.map((item) => item.studentId));
+  }
+
+  if (filters['subscriptionStatus'] || filters['expiringDays']) {
+    const subQuery: Record<string, unknown> = {};
+    if (filters['subscriptionStatus']) subQuery['status'] = filters['subscriptionStatus'];
+    if (filters['expiringDays']) {
+      const days = Number(filters['expiringDays']);
+      if (Number.isFinite(days) && days >= 0) {
+        subQuery['status'] = 'active';
+        subQuery['expiresAtUTC'] = { $lte: new Date(Date.now() + days * 24 * 60 * 60 * 1000) };
+      }
+    }
+    const subs = await UserSubscription.find(subQuery).select('userId').lean();
+    mergeIdFilter(subs.map((item) => item.userId));
+  }
+
+  if (filters['department'] || filters['sscBatch'] || filters['hscBatch'] || filters['guardianStatus']) {
+    const profileQuery: Record<string, unknown> = {};
+    if (filters['department']) profileQuery['department'] = filters['department'];
+    if (filters['sscBatch']) profileQuery['ssc_batch'] = filters['sscBatch'];
+    if (filters['hscBatch']) profileQuery['hsc_batch'] = filters['hscBatch'];
+    if (filters['guardianStatus'] === 'verified') profileQuery['guardianPhoneVerificationStatus'] = 'verified';
+    if (filters['guardianStatus'] === 'unverified') profileQuery['guardianPhoneVerificationStatus'] = { $ne: 'verified' };
+    if (filters['guardianStatus'] === 'has_guardian') profileQuery['guardian_phone'] = { $exists: true, $ne: '' };
+    if (filters['guardianStatus'] === 'no_guardian') profileQuery['guardian_phone'] = { $in: [null, '', undefined] };
+    const profiles = await StudentProfile.find(profileQuery).select('user_id').lean();
+    mergeIdFilter(profiles.map((item) => item.user_id as mongoose.Types.ObjectId));
+  }
+
+  if (filters['hasPaymentDue'] === true || filters['hasPaymentDue'] === 'true') {
+    const dueRows = await StudentDueLedger.find({ netDue: { $gt: 0 } }).select('studentId').lean();
+    mergeIdFilter(dueRows.map((item) => item.studentId));
+  }
+
+  const sortBy = String(filters['sortBy'] || '').trim().toLowerCase();
+  const sortOrder = String(filters['sortOrder'] || '').trim().toLowerCase() === 'asc' ? 1 : -1;
+  const sortField =
+    sortBy === 'name' ? 'full_name'
+    : sortBy === 'status' ? 'status'
+    : sortBy === 'lastlogin' ? 'lastLoginAtUTC'
+    : 'createdAt';
 
   const users = await User.find(userQuery)
     .select('_id full_name username email phone_number status createdAt subscription')
+    .sort({ [sortField]: sortOrder })
     .lean()
     .limit(10000);
 
@@ -388,6 +447,10 @@ export async function exportStudents(
       status:                        u.status ?? '',
       profile_completion_percentage: String(pr['profile_completion_percentage'] ?? '0'),
     };
+  }).filter((row) => {
+    const minScore = Number(filters['profileScoreMin']);
+    if (!Number.isFinite(minScore)) return true;
+    return Number(row.profile_completion_percentage || 0) >= minScore;
   });
 
   if (format === 'csv') {

@@ -1,0 +1,10 @@
+{
+  "runId": "20260312085917",
+  "baseDir": "f:\\CampusWay\\qa-artifacts\\mcp-manual\\20260312085917",
+  "dbName": "campusway_mcp_manual_20260312085917",
+  "mongodb": "mongodb://127.0.0.1:27017/campusway_mcp_manual_20260312085917",
+  "backendPid": 19804,
+  "frontendPid": 20340,
+  "backendUrl": "http://127.0.0.1:5083",
+  "frontendUrl": "http://127.0.0.1:5283"
+}

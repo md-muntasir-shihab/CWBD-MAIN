@@ -10,6 +10,7 @@ import { listAdminExams } from '../../../api/adminExamApi';
 import { listCampaigns, exportDataHub } from '../../../api/adminNotificationCampaignApi';
 import { adminUi } from '../../../lib/appRoutes';
 import { ADMIN_PATHS } from '../../../routes/adminPaths';
+import { downloadFile } from '../../../utils/download';
 import {
   ArrowLeft, Users, Search, Plus, Download, X, Pencil, Star,
   CheckCircle, XCircle, UserMinus, BookOpen, Megaphone, FileSpreadsheet,
@@ -100,10 +101,19 @@ export default function StudentGroupDetailPage() {
     setExportLoading(category);
     try {
       const result = await exportDataHub({ category, format, filters: { groupId: id } });
-      if (result.text) {
-        navigator.clipboard.writeText(result.text);
+      const axiosLike = result as { data?: unknown; headers?: Record<string, unknown> | { get?: (name: string) => unknown } };
+      if (axiosLike?.data instanceof Blob) {
+        const filename = `${String(category).replace(/[^a-z0-9_]+/gi, '_').toLowerCase()}.${format === 'csv' ? 'csv' : 'xlsx'}`;
+        downloadFile(axiosLike as { data: Blob; headers?: Record<string, unknown> }, { filename });
+        showToast(`${category.replace(/_/g, ' ')} exported`);
+        return;
+      }
+
+      const payload = result as { text?: string; data?: unknown[] };
+      if (payload.text) {
+        navigator.clipboard.writeText(payload.text);
         showToast(`${category.replace(/_/g, ' ')} copied to clipboard`);
-      } else if (result.buffer || result.data) {
+      } else if (payload.data) {
         showToast(`${category.replace(/_/g, ' ')} exported`);
       } else {
         showToast('Export completed');
@@ -154,24 +164,14 @@ export default function StudentGroupDetailPage() {
   const handleExport = async (format: 'csv' | 'xlsx' = 'csv') => {
     try {
       const blob = await exportGroupMembers(id!, format);
-      const url = URL.createObjectURL(blob as Blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `group-${g.shortCode || g.name || id}-members.${format}`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadFile(blob as Blob, { filename: `group-${g.shortCode || g.name || id}-members.${format}` });
     } catch { showToast('Export failed', 'error'); }
   };
 
   const handleDownloadTemplate = async () => {
     try {
       const blob = await downloadMemberImportTemplate();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'group_members_import_template.xlsx';
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadFile(blob, { filename: 'group_members_import_template.xlsx' });
     } catch { showToast('Template download failed', 'error'); }
   };
 

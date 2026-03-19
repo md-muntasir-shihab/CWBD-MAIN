@@ -361,8 +361,33 @@ export const updateNotificationSettings = (data: Partial<NotificationSettings>) 
     testSendPhoneNumber: data.testSendPhone,
   }).then(r => normalizeSettings(r.data));
 
-export const exportDataHub = (data: { category: string; format: string; filters?: Record<string, unknown> }) =>
-  api.post('/admin/data-hub/export', data).then(r => r.data);
+type DataHubExportRequest = {
+  category: string;
+  format: string;
+  filters?: Record<string, unknown>;
+  selectedFields?: string[];
+  groupId?: string;
+  jobId?: string;
+  channel?: string;
+  includeGuardians?: boolean;
+};
+
+type DataHubTextOrJsonResponse = {
+  text?: string;
+  data?: Record<string, unknown>[];
+  count?: number;
+  rowCount?: number;
+  fileName?: string;
+};
+
+export const exportDataHub = async (data: DataHubExportRequest) => {
+  const format = String(data.format || 'xlsx').toLowerCase();
+  if (format === 'json' || format === 'txt' || format === 'clipboard') {
+    const res = await api.post('/admin/data-hub/export', data);
+    return res.data as DataHubTextOrJsonResponse;
+  }
+  return api.post('/admin/data-hub/export', data, { responseType: 'blob' });
+};
 
 export const getExportHistory = (params: Params = {}) =>
   api.get('/admin/data-hub/history', { params }).then(r => r.data);

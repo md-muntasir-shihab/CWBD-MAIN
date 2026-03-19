@@ -8,7 +8,6 @@ import University from '../models/University';
 import Notification from '../models/Notification';
 import StudentDashboardConfig from '../models/StudentDashboardConfig';
 import StudentBadge from '../models/StudentBadge';
-import { computeStudentProfileScore } from './studentProfileScoreService';
 import StudentApplication from '../models/StudentApplication';
 import StudentDueLedger from '../models/StudentDueLedger';
 import { getExamCardMetrics } from './examCardMetricsService';
@@ -149,8 +148,8 @@ export async function getStudentDashboardHeader(studentId: string) {
         throw new Error('Student not found');
     }
 
-    const scoreResult = computeStudentProfileScore(profile as unknown as Record<string, unknown>, user as unknown as Record<string, unknown>);
-    const completion = scoreResult.score;
+    const persistedCompletion = Number(profile.profile_completion_percentage);
+    const completion = Number.isFinite(persistedCompletion) ? persistedCompletion : 0;
     const messageTemplate = String(config?.welcomeMessageTemplate || 'স্বাগতম, {{name}}!');
     const welcomeMessage = messageTemplate
         .replace('{{name}}', String(profile.full_name || user.full_name || user.username))

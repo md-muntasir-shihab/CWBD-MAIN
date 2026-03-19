@@ -1,8 +1,12 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.adminNewsRoutes = void 0;
 const express_1 = require("express");
 const json2csv_1 = require("json2csv");
+const xlsx_1 = __importDefault(require("xlsx"));
 const newsItem_model_1 = require("../models/newsItem.model");
 const newsSettings_model_1 = require("../models/newsSettings.model");
 const rssSource_model_1 = require("../models/rssSource.model");
@@ -54,10 +58,37 @@ exports.adminNewsRoutes.get("/news/:id", async (req, res) => {
     res.json(item);
 });
 exports.adminNewsRoutes.get("/news/export", async (req, res) => {
-    const { status } = req.query;
-    const rows = await newsItem_model_1.NewsItemModel.find(status ? { status } : {}).lean();
+    const { status, sourceId, dateRange } = req.query;
+    const format = String(req.query.format || req.query.type || 'csv').trim().toLowerCase() === 'xlsx' ? 'xlsx' : 'csv';
+    const filters = {};
+    if (status)
+        filters.status = status;
+    if (sourceId)
+        filters.sourceId = sourceId;
+    if (dateRange) {
+        const [fromRaw, toRaw] = String(dateRange).split(',').map((part) => part.trim());
+        const createdAt = {};
+        if (fromRaw)
+            createdAt.$gte = new Date(fromRaw);
+        if (toRaw)
+            createdAt.$lte = new Date(`${toRaw}T23:59:59.999Z`);
+        if (Object.keys(createdAt).length > 0)
+            filters.createdAt = createdAt;
+    }
+    const rows = await newsItem_model_1.NewsItemModel.find(filters).lean();
+    if (format === 'xlsx') {
+        const workbook = xlsx_1.default.utils.book_new();
+        const sheet = xlsx_1.default.utils.json_to_sheet(rows);
+        xlsx_1.default.utils.book_append_sheet(workbook, sheet, 'News');
+        const buffer = xlsx_1.default.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        res.setHeader("Content-Disposition", 'attachment; filename="news_export.xlsx"');
+        res.send(buffer);
+        return;
+    }
     const csv = new json2csv_1.Parser().parse(rows);
-    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="news_export.csv"');
     res.send(csv);
 });
 exports.adminNewsRoutes.get("/audit-logs", async (_req, res) => {

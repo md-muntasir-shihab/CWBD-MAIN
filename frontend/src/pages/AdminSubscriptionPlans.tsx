@@ -8,6 +8,7 @@ import {
     adminExportSubscriptions,
     type AdminSubscriptionPlan,
 } from '../services/api';
+import { downloadFile } from '../utils/download';
 import {
     useAdminSubscriptionPlans,
     useAssignSubscriptionMutation,
@@ -74,15 +75,6 @@ function fromPlan(plan: AdminSubscriptionPlan): PlanFormState {
         contactCtaLabel: plan.contactCtaLabel || 'Contact to Subscribe',
         contactCtaUrl: plan.contactCtaUrl || '/contact',
     };
-}
-
-function downloadBlob(blob: Blob, filename: string) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
 }
 
 export default function AdminSubscriptionPlansPage() {
@@ -229,21 +221,21 @@ export default function AdminSubscriptionPlansPage() {
         setDraggingId('');
     };
 
-    const exportPlans = async (type: 'csv' | 'xlsx') => {
+    const exportPlans = async (format: 'csv' | 'xlsx') => {
         try {
-            const response = await adminExportSubscriptionPlans(type);
-            downloadBlob(response.data as Blob, `subscription_plans.${type}`);
-            toast.success(`Exported ${type.toUpperCase()}`);
+            const response = await adminExportSubscriptionPlans(format);
+            downloadFile(response, { filename: `subscription_plans.${format}` });
+            toast.success(`Exported ${format.toUpperCase()}`);
         } catch {
             toast.error('Export failed');
         }
     };
 
-    const exportSubscriptions = async (type: 'csv' | 'xlsx') => {
+    const exportSubscriptions = async (format: 'csv' | 'xlsx') => {
         try {
-            const response = await adminExportSubscriptions(type);
-            downloadBlob(response.data as Blob, `subscriptions.${type}`);
-            toast.success(`Exported ${type.toUpperCase()}`);
+            const response = await adminExportSubscriptions(format);
+            downloadFile(response, { filename: `subscriptions.${format}` });
+            toast.success(`Exported ${format.toUpperCase()}`);
         } catch {
             toast.error('Export failed');
         }

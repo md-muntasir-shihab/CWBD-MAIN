@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { Parser as CsvParser } from "json2csv";
+import XLSX from "xlsx";
 import { NewsItemModel } from "../models/newsItem.model";
 import { NewsSettingsModel } from "../models/newsSettings.model";
 import { RssSourceModel } from "../models/rssSource.model";
@@ -63,10 +64,33 @@ adminNewsRoutes.get("/news/:id", async (req, res) => {
 });
 
 adminNewsRoutes.get("/news/export", async (req, res) => {
-  const { status } = req.query as Record<string, string>;
-  const rows = await NewsItemModel.find(status ? { status } : {}).lean();
+  const { status, sourceId, dateRange } = req.query as Record<string, string>;
+  const format = String(req.query.format || req.query.type || 'csv').trim().toLowerCase() === 'xlsx' ? 'xlsx' : 'csv';
+  const filters: Record<string, unknown> = {};
+  if (status) filters.status = status;
+  if (sourceId) filters.sourceId = sourceId;
+  if (dateRange) {
+    const [fromRaw, toRaw] = String(dateRange).split(',').map((part) => part.trim());
+    const createdAt: Record<string, Date> = {};
+    if (fromRaw) createdAt.$gte = new Date(fromRaw);
+    if (toRaw) createdAt.$lte = new Date(`${toRaw}T23:59:59.999Z`);
+    if (Object.keys(createdAt).length > 0) filters.createdAt = createdAt;
+  }
+  const rows = await NewsItemModel.find(filters).lean();
+  if (format === 'xlsx') {
+    const workbook = XLSX.utils.book_new();
+    const sheet = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(workbook, sheet, 'News');
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", 'attachment; filename="news_export.xlsx"');
+    res.send(buffer);
+    return;
+  }
+
   const csv = new CsvParser().parse(rows);
-  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", 'attachment; filename="news_export.csv"');
   res.send(csv);
 });
 

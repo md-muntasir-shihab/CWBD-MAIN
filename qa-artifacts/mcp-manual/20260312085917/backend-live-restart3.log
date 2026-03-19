@@ -1,0 +1,105 @@
+[db] MongoDB connected successfully
+[db] All critical indexes ensured
+ℹ️  INITIAL_ACCESS_INFO.txt exists — default setup already completed.
+[cron] Starting exam auto-submit worker (every minute).
+[cron] Starting modern exam auto-submit worker (every minute).
+[2026-03-12T09:48:19.737Z] [INFO] [subscriptionExpiryCron] Scheduled daily at 01:00 UTC
+[finance-cron] Recurring engine cron registered
+🚀 CampusWay Backend running on port 5083
+📡 Public API: http://localhost:5083/api
+🔒 Admin API:  http://localhost:5083/api/campusway-secure-admin
+[0mGET /api/health [32m200[0m 3.720 ms - 87[0m
+[0mGET /api/settings/public [32m200[0m 9.323 ms - -[0m
+[0mGET /api/settings/public [36m304[0m 53.460 ms - -[0m
+[0mGET /api/home [32m200[0m 61.369 ms - -[0m
+[0mGET /api/auth/me [32m200[0m 43.333 ms - -[0m
+[auth-stream] connected {
+  userId: '69b280eb570edabf1d83cb77',
+  sessionId: '8a85b4c8-a5c2-4d23-badf-0299c16b64af',
+  clientsForSession: 1
+}
+[0mGET /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/questions [32m200[0m 18.116 ms - -[0m
+[0mPOST /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/answers [32m200[0m 54.440 ms - 71[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/questions [32m200[0m 19.489 ms - -[0m
+[0mPOST /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/answers [32m200[0m 19.050 ms - 71[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/questions [32m200[0m 10.042 ms - -[0m
+[0mGET /api/settings/public [36m304[0m 10.669 ms - -[0m
+[0mGET /api/settings/public [36m304[0m 25.606 ms - -[0m
+[0mGET /api/home [32m200[0m 34.142 ms - -[0m
+[0mGET /api/auth/me [36m304[0m 34.635 ms - -[0m
+[0mPOST /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/submit [32m200[0m 155.302 ms - 345[0m
+[0mHEAD /api/exams/69b280eb570edabf1d83cbab/pdf/questions [33m404[0m 3.968 ms - 28[0m
+[0mHEAD /api/exams/69b280eb570edabf1d83cbab/pdf/solutions [33m404[0m 19.803 ms - 28[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/questions [32m200[0m 158.245 ms - -[0m
+[0mHEAD /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/pdf/answers [33m401[0m 0.582 ms - 37[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab [32m200[0m 156.310 ms - -[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/result [33m404[0m 18.193 ms - 38[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/solutions [33m404[0m 9.338 ms - 41[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/result [32m200[0m 14.895 ms - 249[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/result [36m304[0m 13.595 ms - -[0m
+[0mGET /api/home [32m200[0m 18.527 ms - -[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/result [33m404[0m 4.088 ms - 38[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/solutions [33m404[0m 6.295 ms - 41[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/result [36m304[0m 9.880 ms - -[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/result [36m304[0m 6.423 ms - -[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/result [33m404[0m 3.213 ms - 38[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/solutions [33m404[0m 5.480 ms - 41[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/result [36m304[0m 10.154 ms - -[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/result [36m304[0m 7.195 ms - -[0m
+[0mGET /api/settings/public [36m304[0m 4.139 ms - -[0m
+[0mGET /api/settings/public [36m304[0m 22.909 ms - -[0m
+[0mGET /api/auth/me [36m304[0m 27.520 ms - -[0m
+[0mGET /api/home [32m200[0m 27.682 ms - -[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/result [33m404[0m 3.713 ms - 38[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/solutions [33m404[0m 3.920 ms - 41[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/result [36m304[0m 7.596 ms - -[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/result [36m304[0m 7.858 ms - -[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/result [33m404[0m 3.236 ms - 38[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/solutions [33m404[0m 5.574 ms - 41[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/result [36m304[0m 12.502 ms - -[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/result [36m304[0m 8.112 ms - -[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/result [33m404[0m 3.754 ms - 38[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/solutions [33m404[0m 5.567 ms - 41[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/result [36m304[0m 10.089 ms - -[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/result [36m304[0m 6.723 ms - -[0m
+[0mGET /api/settings/public [36m304[0m 5.600 ms - -[0m
+[0mGET /api/settings/public [36m304[0m 21.484 ms - -[0m
+[0mGET /api/home [32m200[0m 27.000 ms - -[0m
+[0mGET /api/auth/me [36m304[0m 18.848 ms - -[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/result [33m404[0m 4.128 ms - 38[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/solutions [33m404[0m 4.137 ms - 41[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/result [36m304[0m 6.659 ms - -[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/result [36m304[0m 6.345 ms - -[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/result [33m404[0m 5.111 ms - 38[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/sessions/69b28a43ca6e00027196873b/solutions [33m404[0m 5.290 ms - 41[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/result [36m304[0m 6.831 ms - -[0m
+[0mGET /api/exams/69b280eb570edabf1d83cbab/result [36m304[0m 7.280 ms - -[0m
+[auth-stream] disconnected {
+  userId: '69b280eb570edabf1d83cb77',
+  sessionId: '8a85b4c8-a5c2-4d23-badf-0299c16b64af'
+}
+[0mGET /api/auth/session-stream?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2OWIyODBlYjU3MGVkYWJmMWQ4M2NiNzciLCJ1c2VybmFtZSI6ImUyZV9zdHVkZW50X2Rlc2t0b3AiLCJlbWFpbCI6ImUyZV9zdHVkZW50X2Rlc2t0b3BAY2FtcHVzd2F5LmxvY2FsIiwicm9sZSI6InN0dWRlbnQiLCJmdWxsTmFtZSI6IkUyRSBTdHVkZW50IERlc2t0b3AiLCJwZXJtaXNzaW9ucyI6eyJjYW5FZGl0RXhhbXMiOmZhbHNlLCJjYW5NYW5hZ2VTdHVkZW50cyI6ZmFsc2UsImNhblZpZXdSZXBvcnRzIjpmYWxzZSwiY2FuRGVsZXRlRGF0YSI6ZmFsc2UsImNhbk1hbmFnZUZpbmFuY2UiOmZhbHNlLCJjYW5NYW5hZ2VQbGFucyI6ZmFsc2UsImNhbk1hbmFnZVRpY2tldHMiOmZhbHNlLCJjYW5NYW5hZ2VCYWNrdXBzIjpmYWxzZSwiY2FuUmV2ZWFsUGFzc3dvcmRzIjpmYWxzZX0sInBlcm1pc3Npb25zVjIiOnsic2l0ZV9zZXR0aW5ncyI6eyJ2aWV3IjpmYWxzZSwiY3JlYXRlIjpmYWxzZSwiZWRpdCI6ZmFsc2UsImRlbGV0ZSI6ZmFsc2UsInB1Ymxpc2giOmZhbHNlLCJhcHByb3ZlIjpmYWxzZSwiZXhwb3J0IjpmYWxzZSwiYnVsayI6ZmFsc2V9LCJob21lX2NvbnRyb2wiOnsidmlldyI6ZmFsc2UsImNyZWF0ZSI6ZmFsc2UsImVkaXQiOmZhbHNlLCJkZWxldGUiOmZhbHNlLCJwdWJsaXNoIjpmYWxzZSwiYXBwcm92ZSI6ZmFsc2UsImV4cG9ydCI6ZmFsc2UsImJ1bGsiOmZhbHNlfSwiYmFubmVyX21hbmFnZXIiOnsidmlldyI6ZmFsc2UsImNyZWF0ZSI6ZmFsc2UsImVkaXQiOmZhbHNlLCJkZWxldGUiOmZhbHNlLCJwdWJsaXNoIjpmYWxzZSwiYXBwcm92ZSI6ZmFsc2UsImV4cG9ydCI6ZmFsc2UsImJ1bGsiOmZhbHNlfSwidW5pdmVyc2l0aWVzIjp7InZpZXciOmZhbHNlLCJjcmVhdGUiOmZhbHNlLCJlZGl0IjpmYWxzZSwiZGVsZXRlIjpmYWxzZSwicHVibGlzaCI6ZmFsc2UsImFwcHJvdmUiOmZhbHNlLCJleHBvcnQiOmZhbHNlLCJidWxrIjpmYWxzZX0sIm5ld3MiOnsidmlldyI6ZmFsc2UsImNyZWF0ZSI6ZmFsc2UsImVkaXQiOmZhbHNlLCJkZWxldGUiOmZhbHNlLCJwdWJsaXNoIjpmYWxzZSwiYXBwcm92ZSI6ZmFsc2UsImV4cG9ydCI6ZmFsc2UsImJ1bGsiOmZhbHNlfSwiZXhhbXMiOnsidmlldyI6ZmFsc2UsImNyZWF0ZSI6ZmFsc2UsImVkaXQiOmZhbHNlLCJkZWxldGUiOmZhbHNlLCJwdWJsaXNoIjpmYWxzZSwiYXBwcm92ZSI6ZmFsc2UsImV4cG9ydCI6ZmFsc2UsImJ1bGsiOmZhbHNlfSwicXVlc3Rpb25fYmFuayI6eyJ2aWV3IjpmYWxzZSwiY3JlYXRlIjpmYWxzZSwiZWRpdCI6ZmFsc2UsImRlbGV0ZSI6ZmFsc2UsInB1Ymxpc2giOmZhbHNlLCJhcHByb3ZlIjpmYWxzZSwiZXhwb3J0IjpmYWxzZSwiYnVsayI6ZmFsc2V9LCJzdHVkZW50c19ncm91cHMiOnsidmlldyI6ZmFsc2UsImNyZWF0ZSI6ZmFsc2UsImVkaXQiOmZhbHNlLCJkZWxldGUiOmZhbHNlLCJwdWJsaXNoIjpmYWxzZSwiYXBwcm92ZSI6ZmFsc2UsImV4cG9ydCI6ZmFsc2UsImJ1bGsiOmZhbHNlfSwic3Vic2NyaXB0aW9uX3BsYW5zIjp7InZpZXciOmZhbHNlLCJjcmVhdGUiOmZhbHNlLCJlZGl0IjpmYWxzZSwiZGVsZXRlIjpmYWxzZSwicHVibGlzaCI6ZmFsc2UsImFwcHJvdmUiOmZhbHNlLCJleHBvcnQiOmZhbHNlLCJidWxrIjpmYWxzZX0sInBheW1lbnRzIjp7InZpZXciOmZhbHNlLCJjcmVhdGUiOmZhbHNlLCJlZGl0IjpmYWxzZSwiZGVsZXRlIjpmYWxzZSwicHVibGlzaCI6ZmFsc2UsImFwcHJvdmUiOmZhbHNlLCJleHBvcnQiOmZhbHNlLCJidWxrIjpmYWxzZX0sImZpbmFuY2VfY2VudGVyIjp7InZpZXciOmZhbHNlLCJjcmVhdGUiOmZhbHNlLCJlZGl0IjpmYWxzZSwiZGVsZXRlIjpmYWxzZSwicHVibGlzaCI6ZmFsc2UsImFwcHJvdmUiOmZhbHNlLCJleHBvcnQiOmZhbHNlLCJidWxrIjpmYWxzZX0sInJlc291cmNlcyI6eyJ2aWV3IjpmYWxzZSwiY3JlYXRlIjpmYWxzZSwiZWRpdCI6ZmFsc2UsImRlbGV0ZSI6ZmFsc2UsInB1Ymxpc2giOmZhbHNlLCJhcHByb3ZlIjpmYWxzZSwiZXhwb3J0IjpmYWxzZSwiYnVsayI6ZmFsc2V9LCJzdXBwb3J0X2NlbnRlciI6eyJ2aWV3IjpmYWxzZSwiY3JlYXRlIjpmYWxzZSwiZWRpdCI6ZmFsc2UsImRlbGV0ZSI6ZmFsc2UsInB1Ymxpc2giOmZhbHNlLCJhcHByb3ZlIjpmYWxzZSwiZXhwb3J0IjpmYWxzZSwiYnVsayI6ZmFsc2V9LCJyZXBvcnRzX2FuYWx5dGljcyI6eyJ2aWV3IjpmYWxzZSwiY3JlYXRlIjpmYWxzZSwiZWRpdCI6ZmFsc2UsImRlbGV0ZSI6ZmFsc2UsInB1Ymxpc2giOmZhbHNlLCJhcHByb3ZlIjpmYWxzZSwiZXhwb3J0IjpmYWxzZSwiYnVsayI6ZmFsc2V9LCJzZWN1cml0eV9sb2dzIjp7InZpZXciOmZhbHNlLCJjcmVhdGUiOmZhbHNlLCJlZGl0IjpmYWxzZSwiZGVsZXRlIjpmYWxzZSwicHVibGlzaCI6ZmFsc2UsImFwcHJvdmUiOmZhbHNlLCJleHBvcnQiOmZhbHNlLCJidWxrIjpmYWxzZX0sInRlYW1fYWNjZXNzX2NvbnRyb2wiOnsidmlldyI6ZmFsc2UsImNyZWF0ZSI6ZmFsc2UsImVkaXQiOmZhbHNlLCJkZWxldGUiOmZhbHNlLCJwdWJsaXNoIjpmYWxzZSwiYXBwcm92ZSI6ZmFsc2UsImV4cG9ydCI6ZmFsc2UsImJ1bGsiOmZhbHNlfX0sInNlc3Npb25JZCI6IjhhODViNGM4LWE1YzItNGQyMy1iYWRmLTAyOTljMTZiNjRhZiIsImlhdCI6MTc3MzMwODExMSwiZXhwIjoxNzczMzA5MzExfQ.0ozAqNcey6Mcdaz8p-2lE372G3OZS9w92i-LNmFKyHU [32m200[0m 5.438 ms - -[0m
+[0mGET /api/home/stream [32m200[0m 0.376 ms - -[0m
+[0mGET /api/settings/public [36m304[0m 115.435 ms - -[0m
+[0mGET /api/auth/me [36m304[0m 117.765 ms - -[0m
+[0mGET /api/auth/me [36m304[0m 23.340 ms - -[0m
+[auth-stream] connected {
+  userId: '69b280eb570edabf1d83cb77',
+  sessionId: '8a85b4c8-a5c2-4d23-badf-0299c16b64af',
+  clientsForSession: 1
+}
+[0mGET /api/alerts/active [36m304[0m 37.477 ms - -[0m
+[0mGET /api/students/me/notifications?type=all [32m200[0m 48.937 ms - 909[0m
+[auth-stream] connected {
+  userId: '69b280eb570edabf1d83cb77',
+  sessionId: '8a85b4c8-a5c2-4d23-badf-0299c16b64af',
+  clientsForSession: 2
+}
+[0mGET /api/students/me/results [32m200[0m 56.143 ms - -[0m
+[0mGET /api/alerts/active [36m304[0m 84.904 ms - -[0m
+[0mGET /api/settings/public [36m304[0m 6.133 ms - -[0m
+[0mGET /api/students/me/results/69b280eb570edabf1d83cbab [32m200[0m 12.826 ms - -[0m
+[0mGET /api/home [32m200[0m 21.100 ms - -[0m
+[0mGET /api/settings/public [36m304[0m 4.829 ms - -[0m
+[0mGET /api/alerts/active [36m304[0m 17.468 ms - -[0m
+[0mGET /api/settings/public [36m304[0m 5.238 ms - -[0m

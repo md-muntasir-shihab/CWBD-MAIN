@@ -70,6 +70,7 @@ exports.adminGetResourceSettings = adminGetResourceSettings;
 exports.adminUpdateResourceSettings = adminUpdateResourceSettings;
 exports.adminGetContactMessages = adminGetContactMessages;
 exports.adminDeleteContactMessage = adminDeleteContactMessage;
+exports.adminUpdateContactMessage = adminUpdateContactMessage;
 exports.getSiteSettings = getSiteSettings;
 exports.updateSiteSettings = updateSiteSettings;
 exports.adminUpdateUserRole = adminUpdateUserRole;
@@ -708,6 +709,27 @@ async function adminDeleteContactMessage(req, res) {
     }
     catch (err) {
         console.error('adminDeleteContactMessage error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+}
+async function adminUpdateContactMessage(req, res) {
+    try {
+        const update = {};
+        if (req.body.isRead !== undefined) {
+            update.isRead = Boolean(req.body.isRead);
+        }
+        if (req.body.isReplied !== undefined) {
+            update.isReplied = Boolean(req.body.isReplied);
+        }
+        const msg = await ContactMessage_1.default.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true }).lean();
+        if (!msg) {
+            res.status(404).json({ message: 'Message not found' });
+            return;
+        }
+        res.json({ item: msg, message: 'Contact message updated' });
+    }
+    catch (err) {
+        console.error('adminUpdateContactMessage error:', err);
         res.status(500).json({ message: 'Server error' });
     }
 }

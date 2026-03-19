@@ -5,8 +5,9 @@ import AdminGuardShell from '../../../components/admin/AdminGuardShell';
 import { ADMIN_PATHS } from '../../../routes/adminPaths';
 import {
   getStudentsList, suspendStudent, activateStudent, resetStudentPassword,
-  exportStudents, importStudentsPreview, importStudentsCommit, bulkUpdateStudents,
+  exportStudents, importStudentsPreview, importStudentsCommit, bulkDeleteStudents, bulkUpdateStudents,
 } from '../../../api/adminStudentApi';
+import { downloadFile } from '../../../utils/download';
 
 type Toast = { show: boolean; message: string; type: 'success' | 'error' };
 
@@ -29,6 +30,12 @@ const SUB_BADGE: Record<string, string> = {
 };
 
 const SYSTEM_FIELDS = ['fullName', 'phone', 'email', 'department', 'sscBatch', 'hscBatch', 'gender', 'dob', 'district'];
+const BULK_FIELDS = [
+  { label: 'Status', value: 'status' },
+  { label: 'Department', value: 'department' },
+  { label: 'SSC Batch', value: 'ssc_batch' },
+  { label: 'HSC Batch', value: 'hsc_batch' },
+] as const;
 
 export default function StudentsListPage() {
   const navigate = useNavigate();
@@ -46,6 +53,9 @@ export default function StudentsListPage() {
   const [importPreview, setImportPreview] = useState<{ headers: string[]; rows: Record<string, string>[] } | null>(null);
   const [importMapping, setImportMapping] = useState<Record<string, string>>({});
   const [importBusy, setImportBusy] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'csv' | 'xlsx'>('xlsx');
+  const [bulkField, setBulkField] = useState<(typeof BULK_FIELDS)[number]['value']>('status');
+  const [bulkValue, setBulkValue] = useState('active');
 
   useEffect(() => {
     const t = setTimeout(() => { setDSearch(search); setPage(1); }, 300);
@@ -69,10 +79,8 @@ export default function StudentsListPage() {
 
   const handleExport = async () => {
     try {
-      const blob = await exportStudents({ q: dSearch, ...filterParams }, 'csv');
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = 'students.csv'; a.click();
-      URL.revokeObjectURL(url);
+      const blob = await exportStudents({ q: dSearch, ...filterParams }, exportFormat);
+      downloadFile(blob, { filename: `students.${exportFormat}` });
     } catch { showToast('Export failed', 'error'); }
   };
 
@@ -125,12 +133,31 @@ export default function StudentsListPage() {
   const totalPages = Math.ceil(total / 20) || 1;
   const allChecked = students.length > 0 && selected.length === students.length;
 
-  const handleBulkUpdate = async (status: string) => {
+  const handleBulkUpdate = async (update: Record<string, unknown>, successMessage: string) => {
     try {
-      await bulkUpdateStudents(selected, { status });
+      await bulkUpdateStudents(selected, update);
       qc.invalidateQueries({ queryKey: ['admin-students'] }); setSelected([]);
-      showToast(`Bulk update done`);
+      showToast(successMessage);
     } catch { showToast('Bulk action failed', 'error'); }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Delete ${selected.length} selected students?`)) return;
+    try {
+      await bulkDeleteStudents(selected);
+      qc.invalidateQueries({ queryKey: ['admin-students'] });
+      setSelected([]);
+      showToast('Selected students deleted');
+    } catch { showToast('Bulk delete failed', 'error'); }
+  };
+
+  const handleBulkEdit = async () => {
+    const nextValue = bulkValue.trim();
+    if (!nextValue) {
+      showToast('Enter a bulk value', 'error');
+      return;
+    }
+    await handleBulkUpdate({ [bulkField]: nextValue }, 'Bulk update done');
   };
 
   const inp = 'w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
@@ -164,7 +191,11 @@ export default function StudentsListPage() {
         <div className="flex flex-col sm:flex-row gap-2">
           <input className={inp + ' flex-1'} placeholder="Search name, phone, user ID..." value={search} onChange={e => setSearch(e.target.value)} />
           <div className="flex gap-2">
-            <button onClick={handleExport} className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">Export CSV</button>
+            <select value={exportFormat} onChange={e => setExportFormat(e.target.value as 'csv' | 'xlsx')} className={inp}>
+              <option value="xlsx">XLSX</option>
+              <option value="csv">CSV</option>
+            </select>
+            <button onClick={handleExport} className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">Export {exportFormat.toUpperCase()}</button>
             <button onClick={() => { setImportOpen(true); setImportPreview(null); setImportFile(null); }} className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Import</button>
           </div>
         </div>
@@ -183,8 +214,29 @@ export default function StudentsListPage() {
         {selected.length > 0 && (
           <div className="flex flex-wrap items-center gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
             <span className="text-sm font-medium text-blue-700 dark:text-blue-400">{selected.length} selected</span>
-            <button onClick={() => handleBulkUpdate('suspended')} className="px-3 py-1 text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded-full hover:bg-orange-200">Suspend All</button>
-            <button onClick={() => handleBulkUpdate('active')} className="px-3 py-1 text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full hover:bg-green-200">Activate All</button>
+            <button onClick={() => handleBulkUpdate({ status: 'suspended' }, 'Selected students suspended')} className="px-3 py-1 text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded-full hover:bg-orange-200">Suspend All</button>
+            <button onClick={() => handleBulkUpdate({ status: 'active' }, 'Selected students activated')} className="px-3 py-1 text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full hover:bg-green-200">Activate All</button>
+            <div className="flex flex-wrap items-center gap-2 rounded-full border border-blue-200 bg-white/70 px-2 py-1 dark:border-blue-700 dark:bg-slate-900/50">
+              <select value={bulkField} onChange={e => {
+                const nextField = e.target.value as (typeof BULK_FIELDS)[number]['value'];
+                setBulkField(nextField);
+                setBulkValue(nextField === 'status' ? 'active' : '');
+              }} className="rounded-full bg-transparent px-2 py-1 text-xs text-blue-700 outline-none dark:text-blue-300">
+                {BULK_FIELDS.map((field) => <option key={field.value} value={field.value}>{field.label}</option>)}
+              </select>
+              {bulkField === 'status' ? (
+                <select value={bulkValue} onChange={e => setBulkValue(e.target.value)} className="rounded-full bg-transparent px-2 py-1 text-xs text-gray-700 outline-none dark:text-gray-200">
+                  <option value="active">Active</option>
+                  <option value="suspended">Suspended</option>
+                  <option value="blocked">Blocked</option>
+                  <option value="pending">Pending</option>
+                </select>
+              ) : (
+                <input value={bulkValue} onChange={e => setBulkValue(e.target.value)} placeholder="Value" className="min-w-[110px] rounded-full bg-transparent px-2 py-1 text-xs text-gray-700 outline-none dark:text-gray-200" />
+              )}
+              <button onClick={() => void handleBulkEdit()} className="rounded-full bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700">Bulk Edit</button>
+            </div>
+            <button onClick={() => void handleBulkDelete()} className="px-3 py-1 text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-full hover:bg-red-200">Delete All</button>
             <button onClick={() => navigate(ADMIN_PATHS.campaignsNew)} className="px-3 py-1 text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full hover:bg-purple-200">New Campaign</button>
             <button onClick={() => setSelected([])} className="ml-auto text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700">Clear</button>
           </div>

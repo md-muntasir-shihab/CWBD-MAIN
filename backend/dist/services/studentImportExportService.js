@@ -15,6 +15,9 @@ const mongoose_1 = __importDefault(require("mongoose"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const User_1 = __importDefault(require("../models/User"));
 const StudentProfile_1 = __importDefault(require("../models/StudentProfile"));
+const UserSubscription_1 = __importDefault(require("../models/UserSubscription"));
+const GroupMembership_1 = __importDefault(require("../models/GroupMembership"));
+const StudentDueLedger_1 = __importDefault(require("../models/StudentDueLedger"));
 // ---------------------------------------------------------------------------
 // Column definitions
 // ---------------------------------------------------------------------------
@@ -327,10 +330,67 @@ async function exportStudents(filters, format) {
         userQuery['status'] = filters['status'];
     if (filters['q']) {
         const re = new RegExp(String(filters['q']), 'i');
-        userQuery['$or'] = [{ full_name: re }, { email: re }, { phone_number: re }];
+        userQuery['$or'] = [{ full_name: re }, { email: re }, { phone_number: re }, { username: re }];
     }
+    const mergeIdFilter = (candidateIds) => {
+        const existingId = userQuery['_id'];
+        userQuery['_id'] = existingId
+            ? { $in: existingId.$in.filter((id) => candidateIds.some((candidate) => String(candidate) === String(id))) }
+            : { $in: candidateIds };
+    };
+    if (filters['group'] && mongoose_1.default.Types.ObjectId.isValid(String(filters['group']))) {
+        const memberships = await GroupMembership_1.default.find({
+            groupId: new mongoose_1.default.Types.ObjectId(String(filters['group'])),
+            membershipStatus: 'active',
+        }).select('studentId').lean();
+        mergeIdFilter(memberships.map((item) => item.studentId));
+    }
+    if (filters['subscriptionStatus'] || filters['expiringDays']) {
+        const subQuery = {};
+        if (filters['subscriptionStatus'])
+            subQuery['status'] = filters['subscriptionStatus'];
+        if (filters['expiringDays']) {
+            const days = Number(filters['expiringDays']);
+            if (Number.isFinite(days) && days >= 0) {
+                subQuery['status'] = 'active';
+                subQuery['expiresAtUTC'] = { $lte: new Date(Date.now() + days * 24 * 60 * 60 * 1000) };
+            }
+        }
+        const subs = await UserSubscription_1.default.find(subQuery).select('userId').lean();
+        mergeIdFilter(subs.map((item) => item.userId));
+    }
+    if (filters['department'] || filters['sscBatch'] || filters['hscBatch'] || filters['guardianStatus']) {
+        const profileQuery = {};
+        if (filters['department'])
+            profileQuery['department'] = filters['department'];
+        if (filters['sscBatch'])
+            profileQuery['ssc_batch'] = filters['sscBatch'];
+        if (filters['hscBatch'])
+            profileQuery['hsc_batch'] = filters['hscBatch'];
+        if (filters['guardianStatus'] === 'verified')
+            profileQuery['guardianPhoneVerificationStatus'] = 'verified';
+        if (filters['guardianStatus'] === 'unverified')
+            profileQuery['guardianPhoneVerificationStatus'] = { $ne: 'verified' };
+        if (filters['guardianStatus'] === 'has_guardian')
+            profileQuery['guardian_phone'] = { $exists: true, $ne: '' };
+        if (filters['guardianStatus'] === 'no_guardian')
+            profileQuery['guardian_phone'] = { $in: [null, '', undefined] };
+        const profiles = await StudentProfile_1.default.find(profileQuery).select('user_id').lean();
+        mergeIdFilter(profiles.map((item) => item.user_id));
+    }
+    if (filters['hasPaymentDue'] === true || filters['hasPaymentDue'] === 'true') {
+        const dueRows = await StudentDueLedger_1.default.find({ netDue: { $gt: 0 } }).select('studentId').lean();
+        mergeIdFilter(dueRows.map((item) => item.studentId));
+    }
+    const sortBy = String(filters['sortBy'] || '').trim().toLowerCase();
+    const sortOrder = String(filters['sortOrder'] || '').trim().toLowerCase() === 'asc' ? 1 : -1;
+    const sortField = sortBy === 'name' ? 'full_name'
+        : sortBy === 'status' ? 'status'
+            : sortBy === 'lastlogin' ? 'lastLoginAtUTC'
+                : 'createdAt';
     const users = await User_1.default.find(userQuery)
         .select('_id full_name username email phone_number status createdAt subscription')
+        .sort({ [sortField]: sortOrder })
         .lean()
         .limit(10000);
     const userIds = users.map((u) => u._id);
@@ -357,6 +417,11 @@ async function exportStudents(filters, format) {
             status: u.status ?? '',
             profile_completion_percentage: String(pr['profile_completion_percentage'] ?? '0'),
         };
+    }).filter((row) => {
+        const minScore = Number(filters['profileScoreMin']);
+        if (!Number.isFinite(minScore))
+            return true;
+        return Number(row.profile_completion_percentage || 0) >= minScore;
     });
     if (format === 'csv') {
         const headers = STUDENT_COLUMNS.map((c) => c.label).join(',');

@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import GlobalAlertGate from '../../components/student/GlobalAlertGate';
-import ThemeSwitchPro from '../../components/ui/ThemeSwitchPro';
 
 type NavItem = {
     label: string;
@@ -74,7 +73,6 @@ export default function StudentLayout() {
 
     const mobileNavItems = NAV_ITEMS.filter((item) => item.mobile);
     const activeItem = NAV_ITEMS.find((item) => isActivePath(location.pathname, item.path));
-    const displayName = user?.fullName || user?.username || 'Student';
 
     return (
         <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
@@ -108,25 +106,6 @@ export default function StudentLayout() {
                             <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
                                 {activeItem?.label || 'Dashboard'}
                             </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <ThemeSwitchPro />
-                            <Link
-                                to="/profile"
-                                className="inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-800"
-                                aria-label="Open profile"
-                                title={displayName}
-                            >
-                                {user?.profile_photo ? (
-                                    <img
-                                        src={user.profile_photo}
-                                        alt={displayName}
-                                        className="h-full w-full rounded-full aspect-square object-cover"
-                                    />
-                                ) : (
-                                    <UserRound className="h-4 w-4 text-slate-600 dark:text-slate-300" />
-                                )}
-                            </Link>
                         </div>
                     </header>
                     <Outlet />
