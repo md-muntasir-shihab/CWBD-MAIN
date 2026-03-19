@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import AdminGuardShell from '../../../components/admin/AdminGuardShell';
+import { ADMIN_PATHS } from '../../../routes/adminPaths';
 import {
   getStudentsList, suspendStudent, activateStudent, resetStudentPassword,
   exportStudents, importStudentsPreview, importStudentsCommit, bulkUpdateStudents,
@@ -184,7 +185,7 @@ export default function StudentsListPage() {
             <span className="text-sm font-medium text-blue-700 dark:text-blue-400">{selected.length} selected</span>
             <button onClick={() => handleBulkUpdate('suspended')} className="px-3 py-1 text-xs bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 rounded-full hover:bg-orange-200">Suspend All</button>
             <button onClick={() => handleBulkUpdate('active')} className="px-3 py-1 text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full hover:bg-green-200">Activate All</button>
-            <button onClick={() => navigate('/__cw_admin__/notification-center')} className="px-3 py-1 text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full hover:bg-purple-200">Send Notification</button>
+            <button onClick={() => navigate(ADMIN_PATHS.campaignsNew)} className="px-3 py-1 text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full hover:bg-purple-200">New Campaign</button>
             <button onClick={() => setSelected([])} className="ml-auto text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700">Clear</button>
           </div>
         )}

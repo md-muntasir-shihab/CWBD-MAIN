@@ -47,6 +47,7 @@ import AdminSettingsNotificationsPage from './pages/AdminSettingsNotifications';
 import AdminSettingsAnalyticsPage from './pages/AdminSettingsAnalytics';
 import AdminSettingsNewsPage from './pages/AdminSettingsNews';
 import AdminReportsPage from './pages/AdminReports';
+import AdminGuardShell from './components/admin/AdminGuardShell';
 import AdminNewsConsole from './pages/admin-news/AdminNewsConsole';
 import FinanceLayout from './components/admin/finance/FinanceLayout';
 import StudentManagementLayout from './components/admin/students/StudentManagementLayout';
@@ -162,6 +163,11 @@ function resolveRouteTitle(pathname: string, siteName: string, defaultTitle: str
     if (pathname === STUDENT_LOGIN) return withSite('Student Login');
     if (pathname === CHAIRMAN_LOGIN) return withSite('Chairman Login');
     if (pathname === ADMIN_LOGIN) return withSite('Admin Login');
+    if (pathname === '/support') return withSite('Student Support');
+    if (pathname.startsWith('/support/')) return withSite('Support Ticket');
+    if (pathname === '/notifications') return withSite('Student Notifications');
+    if (pathname === '/payments') return withSite('Student Payments');
+    if (pathname === '/results') return withSite('Student Results');
     if (pathname.startsWith('/__cw_admin__/settings')) return withSite('Admin Settings');
     if (pathname === ADMIN_DASHBOARD) return withSite('Admin Dashboard');
     if (pathname === '/__cw_admin__/universities') return withSite('Admin Universities');
@@ -170,8 +176,15 @@ function resolveRouteTitle(pathname: string, siteName: string, defaultTitle: str
     if (pathname === '/__cw_admin__/payments') return withSite('Admin Payments');
     if (pathname === '/__cw_admin__/exams') return withSite('Admin Exams');
     if (pathname === '/__cw_admin__/resources') return withSite('Admin Resources');
+    if (pathname.startsWith('/__cw_admin__/finance')) return withSite('Admin Finance Center');
     if (pathname.startsWith('/__cw_admin__/subscription-plans')) return withSite('Admin Subscription Plans');
     if (pathname === '/__cw_admin__/support-center') return withSite('Admin Support Center');
+    if (pathname === '/__cw_admin__/contact') return withSite('Admin Contact Messages');
+    if (pathname === '/__cw_admin__/notification-center') return withSite('Admin Actionable Alerts');
+    if (pathname === '/__cw_admin__/settings/notifications') return withSite('Admin Notification Settings');
+    if (pathname === '/__cw_admin__/notifications/test-send') return withSite('Admin Notification Test Send');
+    if (pathname === '/__cw_admin__/notifications/triggers') return withSite('Admin Notification Triggers');
+    if (pathname.startsWith('/__cw_admin__/campaigns')) return withSite('Admin Campaign Platform');
     if (pathname === '/__cw_admin__/reports') return withSite('Admin Reports');
     if (pathname === '/__cw_admin__/question-bank') return withSite('Admin Question Bank');
     if (pathname.startsWith('/__cw_admin__/team/')) return withSite('Admin Team & Access Control');
@@ -326,7 +339,18 @@ export default function App() {
                                 <Route path={adminUi('universities/:id/edit')} element={<AdminUniversitiesPage />} />
                                 <Route path={ADMIN_PATHS.news} element={<Navigate to={adminUi('news/dashboard')} replace />} />
                                 <Route path={adminUi('news/*')} element={<AdminNewsConsole />} />
-                                <Route path={ADMIN_PATHS.exams} element={<AdminExamsPage />} />
+                                <Route
+                                    path={ADMIN_PATHS.exams}
+                                    element={
+                                        <AdminGuardShell
+                                            title="Exams"
+                                            description="Create and manage exams, questions, results, and payments."
+                                            allowedRoles={['superadmin', 'admin', 'moderator', 'editor']}
+                                        >
+                                            <AdminExamsPage />
+                                        </AdminGuardShell>
+                                    }
+                                />
                                 <Route path={ADMIN_PATHS.questionBank} element={<AdminQuestionBankPage />} />
                                 <Route path={adminUi('question-bank/*')} element={<AdminQuestionBankPage />} />
                                 <Route path={ADMIN_PATHS.students} element={<Navigate to={adminUi('student-management/list')} replace />} />
