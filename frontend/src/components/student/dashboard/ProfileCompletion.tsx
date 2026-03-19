@@ -10,12 +10,10 @@ interface Props {
 
 export default function ProfileCompletion({ header, gatingMessage }: Props) {
     const pct = Math.min(100, Math.max(0, header.profileCompletionPercentage));
-    const isLow = pct < 60;
-    const isComplete = pct >= 100;
+    const threshold = Math.min(100, Math.max(1, header.profileCompletionThreshold || 60));
+    const isLow = pct < threshold;
     const isBlocked = !header.isProfileEligible;
     const missingFields: string[] = [...new Set(((header as unknown) as Record<string, unknown>).missingFields as string[] ?? [])];
-
-    if (isComplete && !isBlocked) return null;
 
     return (
         <DashboardSection delay={0.1}>

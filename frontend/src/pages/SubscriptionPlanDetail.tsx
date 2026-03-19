@@ -1,135 +1,143 @@
-import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, CalendarClock, CheckCircle2, ExternalLink, Loader2 } from 'lucide-react';
-import { useWebsiteSettings } from '../hooks/useWebsiteSettings';
+import { ArrowLeft } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useState } from 'react';
+import PlanCard from '../components/subscription/PlanCard';
+import PlanDetailsDrawer from '../components/subscription/PlanDetailsDrawer';
 import { useSubscriptionPlanById } from '../hooks/useSubscriptionPlans';
-import { normalizeInternalOrExternalUrl } from '../utils/url';
+import type { SubscriptionPlanPublic } from '../services/api';
 
-function formatCurrency(amount: number, symbol: string, locale: string): string {
-    try {
-        return new Intl.NumberFormat(locale || 'bn-BD', {
-            style: 'currency',
-            currency: 'BDT',
-            currencyDisplay: 'symbol',
-            maximumFractionDigits: 0,
-        }).format(amount);
-    } catch {
-        return `${symbol}${Math.round(amount || 0)}`;
-    }
-}
-
-function isHttpUrl(raw?: string): boolean {
-    return /^https?:\/\//i.test(String(raw || '').trim());
+function getCheckoutPath(plan: SubscriptionPlanPublic): string {
+    return `/subscription-plans/checkout/${plan.slug || plan.code || plan._id}`;
 }
 
 export default function SubscriptionPlanDetailPage() {
-    const params = useParams<{ planId: string }>();
-    const { data: websiteSettings } = useWebsiteSettings();
-    const planQuery = useSubscriptionPlanById(params.planId || '');
+    const navigate = useNavigate();
+    const { planId } = useParams<{ planId: string }>();
+    const planQuery = useSubscriptionPlanById(planId || '');
+    const [showDrawer, setShowDrawer] = useState(false);
 
     const plan = planQuery.data;
-    const defaultBanner = websiteSettings?.subscriptionDefaultBannerUrl || websiteSettings?.logo || '/logo.png';
-    const currencySymbol = websiteSettings?.pricingUi?.currencySymbol || '\u09F3';
-    const currencyLocale = websiteSettings?.pricingUi?.currencyLocale || 'bn-BD';
 
     if (planQuery.isLoading) {
         return (
-            <div className="section-container py-20">
-                <div className="mx-auto max-w-3xl rounded-2xl border border-card-border/70 bg-card/70 p-10 text-center dark:border-dark-border/70 dark:bg-slate-900/50">
-                    <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" />
-                    <p className="mt-3 text-sm text-text-muted dark:text-dark-text/70">Loading plan details...</p>
-                </div>
+            <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+                <div className="h-[28rem] animate-pulse rounded-[2rem] bg-slate-200/70 dark:bg-slate-800/70" />
             </div>
         );
     }
 
     if (!plan) {
         return (
-            <div className="section-container py-20">
-                <div className="mx-auto max-w-3xl rounded-2xl border border-dashed border-card-border/70 bg-card/70 p-10 text-center dark:border-dark-border/70 dark:bg-slate-900/50">
-                    <h1 className="text-2xl font-bold text-text dark:text-dark-text">Plan not found</h1>
-                    <Link to="/subscription-plans" className="btn-primary mt-4 inline-flex">
-                        Back to Subscription Plans
-                    </Link>
-                </div>
+            <div className="mx-auto max-w-4xl px-4 py-16 text-center sm:px-6 lg:px-8">
+                <h1 className="text-3xl font-black tracking-tight text-slate-950 dark:text-white">Plan not found</h1>
+                <Link to="/subscription-plans" className="mt-5 inline-flex rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white dark:bg-white dark:text-slate-950">
+                    Back to plans
+                </Link>
             </div>
         );
     }
 
-    const price = Number(plan.priceBDT ?? plan.price ?? 0);
-    const priceLabel = plan.type === 'free' || price <= 0
-        ? 'Free'
-        : formatCurrency(price, currencySymbol, currencyLocale);
-    const ctaUrl = normalizeInternalOrExternalUrl(plan.contactCtaUrl) || '/contact';
-    const features = Array.from(new Set([...(plan.features || []), ...(plan.includedModules || [])]));
-    const tags = (plan.tags || []).filter(Boolean);
-
     return (
-        <div className="section-container py-10 md:py-14">
-            <Link to="/subscription-plans" className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-primary">
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+            <Link to="/subscription-plans" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-950 dark:text-slate-400 dark:hover:text-white">
                 <ArrowLeft className="h-4 w-4" />
-                Back to plans
+                Back to subscription plans
             </Link>
 
-            <article className="overflow-hidden rounded-3xl border border-card-border/70 bg-card/80 shadow-xl dark:border-dark-border/70 dark:bg-slate-900/55">
-                <div className="h-56 w-full border-b border-card-border/70 dark:border-dark-border/70 md:h-72">
-                    <img src={plan.bannerImageUrl || defaultBanner} alt={plan.name} className="h-full w-full object-cover" />
+            <div className="mt-6 grid gap-6 xl:grid-cols-[0.9fr,1.1fr]">
+                <div className="xl:sticky xl:top-24 xl:self-start">
+                    <PlanCard
+                        plan={plan}
+                        currencyLabel={plan.currency || 'BDT'}
+                        onPrimaryAction={(item) => navigate(getCheckoutPath(item))}
+                        onViewDetails={() => setShowDrawer(true)}
+                    />
                 </div>
-                <div className="p-6 md:p-8">
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                        <div>
-                            <h1 className="text-3xl font-heading font-bold text-text dark:text-dark-text">{plan.name}</h1>
-                            <p className="mt-2 text-sm text-text-muted dark:text-dark-text/70">{plan.shortDescription || plan.description || 'This plan unlocks premium CampusWay features.'}</p>
-                        </div>
-                        <div className="rounded-2xl border border-primary/20 bg-primary/10 px-4 py-3 text-right">
-                            <p className="text-xs font-medium text-text-muted dark:text-dark-text/70">Price</p>
-                            <p className="text-2xl font-bold text-primary">{priceLabel}</p>
-                            <p className="mt-1 inline-flex items-center gap-1 text-xs text-text-muted dark:text-dark-text/70">
-                                <CalendarClock className="h-3.5 w-3.5" />
-                                Valid for {plan.durationDays || plan.durationValue} {plan.durationUnit || 'days'}
-                            </p>
-                        </div>
-                    </div>
 
-                    {tags.length > 0 ? (
-                        <div className="mt-4 flex flex-wrap gap-2">
-                            {tags.map((tag) => (
-                                <span key={tag} className="rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs text-primary">
-                                    {tag}
-                                </span>
-                            ))}
-                        </div>
+                <div className="space-y-5">
+                    <section className="rounded-[2rem] border border-slate-200/80 bg-white/92 p-6 shadow-[0_22px_60px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:bg-slate-950/86">
+                        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">Plan Overview</p>
+                        <h1 className="mt-2 text-4xl font-black tracking-tight text-slate-950 dark:text-white">{plan.name}</h1>
+                        {plan.tagline ? (
+                            <p className="mt-3 text-lg text-slate-600 dark:text-slate-300">{plan.tagline}</p>
+                        ) : null}
+                        <p className="mt-5 text-sm leading-8 text-slate-600 dark:text-slate-300">
+                            {plan.fullDescription || plan.shortDescription}
+                        </p>
+                    </section>
+
+                    {plan.fullFeatures?.length ? (
+                        <section className="rounded-[2rem] border border-slate-200/80 bg-white/92 p-6 shadow-[0_22px_60px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:bg-slate-950/86">
+                            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">Included Features</p>
+                            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                                {plan.fullFeatures.map((feature) => (
+                                    <div key={feature} className="rounded-[1.5rem] bg-slate-100 px-4 py-3 text-sm text-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                                        {feature}
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
                     ) : null}
 
-                    <div className="mt-6">
-                        <h2 className="text-lg font-semibold text-text dark:text-dark-text">Plan Features</h2>
-                        <ul className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
-                            {features.length === 0 ? (
-                                <li className="text-sm text-text-muted dark:text-dark-text/70">Feature list will be updated by admin.</li>
-                            ) : features.map((feature, index) => (
-                                <li key={`${plan._id}-feature-${index}`} className="flex items-start gap-2 rounded-xl border border-card-border/60 bg-surface/80 px-3 py-2 text-sm text-text-muted dark:border-dark-border/70 dark:bg-dark-surface/60 dark:text-dark-text/80">
-                                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
-                                    <span>{feature}</span>
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
+                    {(plan.recommendedFor || plan.accessScope || plan.renewalNotes || plan.policyNote) ? (
+                        <section className="rounded-[2rem] border border-slate-200/80 bg-white/92 p-6 shadow-[0_22px_60px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:bg-slate-950/86">
+                            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">Extra Details</p>
+                            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                                {plan.recommendedFor ? (
+                                    <div className="rounded-[1.5rem] bg-slate-100 p-4 dark:bg-slate-900">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Recommended For</p>
+                                        <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">{plan.recommendedFor}</p>
+                                    </div>
+                                ) : null}
+                                {plan.accessScope ? (
+                                    <div className="rounded-[1.5rem] bg-slate-100 p-4 dark:bg-slate-900">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Access Scope</p>
+                                        <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">{plan.accessScope}</p>
+                                    </div>
+                                ) : null}
+                                {plan.renewalNotes ? (
+                                    <div className="rounded-[1.5rem] bg-slate-100 p-4 dark:bg-slate-900">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Renewal</p>
+                                        <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">{plan.renewalNotes}</p>
+                                    </div>
+                                ) : null}
+                                {plan.policyNote ? (
+                                    <div className="rounded-[1.5rem] bg-slate-100 p-4 dark:bg-slate-900">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Policy Note</p>
+                                        <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">{plan.policyNote}</p>
+                                    </div>
+                                ) : null}
+                            </div>
+                        </section>
+                    ) : null}
 
-                    <div className="mt-6 flex flex-wrap gap-3">
-                        <Link to="/subscription-plans" className="btn-outline">
-                            Browse Other Plans
-                        </Link>
-                        <a
-                            href={ctaUrl}
-                            target={isHttpUrl(ctaUrl) ? '_blank' : undefined}
-                            rel={isHttpUrl(ctaUrl) ? 'noopener noreferrer' : undefined}
-                            className="btn-primary"
-                        >
-                            {plan.contactCtaLabel || 'Contact to Subscribe'}
-                            {isHttpUrl(ctaUrl) ? <ExternalLink className="h-4 w-4" /> : null}
-                        </a>
-                    </div>
+                    {plan.faqItems?.length ? (
+                        <section className="rounded-[2rem] border border-slate-200/80 bg-white/92 p-6 shadow-[0_22px_60px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:bg-slate-950/86">
+                            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">Plan FAQ</p>
+                            <div className="mt-5 space-y-3">
+                                {plan.faqItems.map((item) => (
+                                    <details
+                                        key={item.question}
+                                        className="rounded-[1.5rem] border border-slate-200/80 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900"
+                                    >
+                                        <summary className="cursor-pointer list-none text-sm font-semibold text-slate-950 dark:text-white">
+                                            {item.question}
+                                        </summary>
+                                        <p className="mt-3 text-sm leading-7 text-slate-600 dark:text-slate-300">{item.answer}</p>
+                                    </details>
+                                ))}
+                            </div>
+                        </section>
+                    ) : null}
                 </div>
-            </article>
+            </div>
+
+            <PlanDetailsDrawer
+                open={showDrawer}
+                plan={plan}
+                onClose={() => setShowDrawer(false)}
+                onPrimaryAction={(item) => navigate(getCheckoutPath(item))}
+            />
         </div>
     );
 }

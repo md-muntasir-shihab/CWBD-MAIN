@@ -155,6 +155,11 @@ export interface ExamQuestionsResponse {
         resultPublishAtUTC: string;
         rules: ExamRules;
     };
+    session?: {
+        sessionId: string;
+        isActive: boolean;
+        submittedAtUTC?: string;
+    };
     questions: ExamQuestion[];
     answers: ExamAnswer[];
 }
@@ -164,7 +169,7 @@ export interface SaveAnswersPayload {
 }
 
 export interface SaveAnswersResponse {
-    ok: true;
+    ok: boolean;
     serverSavedAtUTC: string;
     updated: Array<{
         questionId: string;
@@ -174,7 +179,7 @@ export interface SaveAnswersResponse {
 }
 
 export interface SubmitExamResponse {
-    ok: true;
+    ok: boolean;
     submittedAtUTC: string;
 }
 

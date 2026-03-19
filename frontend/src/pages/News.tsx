@@ -172,13 +172,27 @@ export default function NewsPage() {
     const pages = Math.max(1, listQuery.data?.pages || 1);
     const paginationMode = settings.appearance.paginationMode || 'pages';
     const layoutMode = settings.appearance.layoutMode || 'rss_reader';
-    const categories = useMemo(
-        () => ['All', ...(widgetsQuery.data?.categories || []).map((item) => item._id).filter(Boolean)],
-        [widgetsQuery.data?.categories]
-    );
-    const tags = settings.appearance.showWidgets?.tagChips === false
-        ? []
-        : (widgetsQuery.data?.tags || []).map((item) => item._id).filter(Boolean);
+    const categories = useMemo(() => {
+        const raw = ['All', ...(widgetsQuery.data?.categories || []).map((item) => item._id).filter(Boolean)];
+        const seen = new Set<string>();
+        return raw.filter((item) => {
+            const key = String(item).trim().toLowerCase();
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+    }, [widgetsQuery.data?.categories]);
+    const tags = useMemo(() => {
+        if (settings.appearance.showWidgets?.tagChips === false) return [];
+        const raw = (widgetsQuery.data?.tags || []).map((item) => item._id).filter(Boolean);
+        const seen = new Set<string>();
+        return raw.filter((item) => {
+            const key = String(item).trim().toLowerCase();
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+    }, [settings.appearance.showWidgets?.tagChips, widgetsQuery.data?.tags]);
     const sources = sourcesQuery.data?.items || [];
     const isLoading = settingsQuery.isLoading || sourcesQuery.isLoading || widgetsQuery.isLoading || listQuery.isLoading;
 

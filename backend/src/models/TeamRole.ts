@@ -26,7 +26,6 @@ const TeamRoleSchema = new Schema<ITeamRole>(
     { timestamps: true, collection: 'team_roles' },
 );
 
-TeamRoleSchema.index({ slug: 1 }, { unique: true });
 TeamRoleSchema.index({ isActive: 1 });
 
 export default mongoose.model<ITeamRole>('TeamRole', TeamRoleSchema);

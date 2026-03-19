@@ -249,6 +249,27 @@ function isLegacyTokenBlocked(security: SecurityConfig): boolean {
     return security.singleBrowserLogin && security.forceLogoutOnNewLogin && !security.allowLegacyTokens;
 }
 
+function mergePermissionsV2Layers(
+    ...layers: Array<Record<string, Record<string, boolean>> | Partial<Record<string, Partial<Record<string, boolean>>>> | undefined>
+): Record<string, Record<string, boolean>> {
+    const merged: Record<string, Record<string, boolean>> = {};
+
+    for (const layer of layers) {
+        if (!layer || typeof layer !== 'object') continue;
+        for (const [moduleName, actions] of Object.entries(layer)) {
+            if (!actions || typeof actions !== 'object') continue;
+            if (!merged[moduleName]) merged[moduleName] = {};
+            for (const [action, allowed] of Object.entries(actions)) {
+                if (typeof allowed === 'boolean') {
+                    merged[moduleName][action] = allowed;
+                }
+            }
+        }
+    }
+
+    return merged;
+}
+
 async function buildUserPayload(user: IUser): Promise<Record<string, unknown>> {
     const fullName = await getUserDisplayName(user);
 
@@ -272,22 +293,19 @@ async function buildUserPayload(user: IUser): Promise<Record<string, unknown>> {
         };
     }
 
-    let resolvedPermissionsV2 = (user.permissionsV2 && Object.keys(user.permissionsV2).length > 0)
-        ? user.permissionsV2
-        : resolvePermissionsV2(user.role);
+    let resolvedPermissionsV2 = mergePermissionsV2Layers(
+        resolvePermissionsV2(user.role) as Record<string, Record<string, boolean>>,
+        user.permissionsV2 as Record<string, Record<string, boolean>> | undefined,
+    );
 
     // Merge team role module permissions into permissionsV2
     if (user.teamRoleId) {
         const permSet = await RolePermissionSet.findOne({ roleId: user.teamRoleId }).lean();
         if (permSet?.modulePermissions) {
-            const merged = { ...resolvedPermissionsV2 } as Record<string, Record<string, boolean>>;
-            for (const [mod, acts] of Object.entries(permSet.modulePermissions)) {
-                if (!merged[mod]) merged[mod] = {};
-                for (const [act, allowed] of Object.entries(acts as Record<string, boolean>)) {
-                    if (allowed) merged[mod][act] = true;
-                }
-            }
-            resolvedPermissionsV2 = merged;
+            resolvedPermissionsV2 = mergePermissionsV2Layers(
+                resolvedPermissionsV2,
+                permSet.modulePermissions as Record<string, Record<string, boolean>>,
+            );
         }
     }
 
@@ -568,9 +586,10 @@ export async function login(req: Request, res: Response): Promise<void> {
         if (!user.permissions) {
             user.permissions = resolvePermissions(user.role);
         }
-        if (!user.permissionsV2 || typeof user.permissionsV2 !== 'object' || Object.keys(user.permissionsV2).length === 0) {
-            user.permissionsV2 = resolvePermissionsV2(user.role);
-        }
+        user.permissionsV2 = mergePermissionsV2Layers(
+            resolvePermissionsV2(user.role) as Record<string, Record<string, boolean>>,
+            user.permissionsV2 as Record<string, Record<string, boolean>> | undefined,
+        );
         await user.save();
 
         await logLoginAttempt({
@@ -836,9 +855,10 @@ export async function verify2fa(req: Request, res: Response): Promise<void> {
         if (!user.permissions) {
             user.permissions = resolvePermissions(user.role);
         }
-        if (!user.permissionsV2 || typeof user.permissionsV2 !== 'object' || Object.keys(user.permissionsV2).length === 0) {
-            user.permissionsV2 = resolvePermissionsV2(user.role);
-        }
+        user.permissionsV2 = mergePermissionsV2Layers(
+            resolvePermissionsV2(user.role) as Record<string, Record<string, boolean>>,
+            user.permissionsV2 as Record<string, Record<string, boolean>> | undefined,
+        );
         await user.save();
 
         const session = await createSessionForUser({

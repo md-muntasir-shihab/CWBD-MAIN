@@ -44,7 +44,7 @@ const ADMIN_TAB_ROUTE_MAP: Record<string, string> = {
     'notification-center': adminUi('notification-center'),
     'student-settings': adminUi('settings/student-settings'),
     'subscriptions-v2': adminUi('subscriptions-v2'),
-    'subscription-plans': adminUi('subscription-plans'),
+    'subscription-plans': adminUi('subscriptions/plans'),
     news: adminUi('news/dashboard'),
     resources: adminUi('resources'),
     banners: adminUi('settings/banner-manager'),
@@ -76,6 +76,7 @@ const PATH_TAB_RULES: Array<{ match: (path: string) => boolean; tab: string }> =
     { match: (path) => path.startsWith(adminUi('settings/site-settings')), tab: 'settings' },
     { match: (path) => path.startsWith(adminUi('settings/student-settings')), tab: 'student-settings' },
     { match: (path) => path.startsWith(adminUi('team')), tab: 'team-access-control' },
+    { match: (path) => path.startsWith(adminUi('subscriptions/plans')), tab: 'subscription-plans' },
     { match: (path) => path.startsWith(adminUi('subscription-plans')), tab: 'subscription-plans' },
     { match: (path) => path.startsWith(adminUi('subscriptions-v2')), tab: 'subscriptions-v2' },
     { match: (path) => path.startsWith(adminUi('support-center')), tab: 'support-tickets' },
@@ -109,7 +110,7 @@ const PATH_TAB_RULES: Array<{ match: (path: string) => boolean; tab: string }> =
 export function adminRouteFromTab(tab: string, subtab?: StudentManagementSubtab): string {
     if (tab === 'student-management') {
         if (subtab === 'groups') return adminUi('student-management/groups');
-        if (subtab === 'plans') return adminUi('subscription-plans');
+        if (subtab === 'plans') return adminUi('subscriptions/plans');
         return adminUi('student-management/list');
     }
     return ADMIN_TAB_ROUTE_MAP[tab] || ADMIN_DASHBOARD;

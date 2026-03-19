@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import AdminGuardShell from '../../../components/admin/AdminGuardShell';
+import { useModuleAccess } from '../../../hooks/useModuleAccess';
 import {
   teamApi,
   type TeamMemberItem,
@@ -62,6 +63,7 @@ const TABS: { key: DetailTab; label: string; icon: React.ElementType }[] = [
 export default function MemberDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { hasAccess } = useModuleAccess();
   const [tab, setTab] = useState<DetailTab>('overview');
   const [loading, setLoading] = useState(true);
   const [member, setMember] = useState<TeamMemberItem | null>(null);
@@ -69,6 +71,8 @@ export default function MemberDetailPage() {
   const [activityItems, setActivityItems] = useState<TeamAuditItem[]>([]);
   const [editForm, setEditForm] = useState({ fullName: '', email: '', phone: '', notes: '', roleId: '' });
   const [saving, setSaving] = useState(false);
+  const canCreateTeam = hasAccess('team_access_control', 'create');
+  const canEditTeam = hasAccess('team_access_control', 'edit');
 
   async function loadMember() {
     if (!id) return;
@@ -214,12 +218,14 @@ export default function MemberDetailPage() {
                     )}
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={() => handleAction('activate')} className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 px-3 py-1.5 text-xs text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400"><UserCheck className="h-3.5 w-3.5" /> Activate</button>
-                  <button onClick={() => handleAction('suspend')} className="inline-flex items-center gap-1 rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-400"><UserX className="h-3.5 w-3.5" /> Suspend</button>
-                  <button onClick={() => handleAction('reset')} className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-3 py-1.5 text-xs text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-400"><KeyRound className="h-3.5 w-3.5" /> Reset Password</button>
-                  <button onClick={() => handleAction('revoke')} className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-3 py-1.5 text-xs text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-400"><Lock className="h-3.5 w-3.5" /> Revoke Sessions</button>
-                </div>
+                {canCreateTeam && (
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={() => handleAction('activate')} className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 px-3 py-1.5 text-xs text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400"><UserCheck className="h-3.5 w-3.5" /> Activate</button>
+                    <button onClick={() => handleAction('suspend')} className="inline-flex items-center gap-1 rounded-lg border border-amber-200 px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-400"><UserX className="h-3.5 w-3.5" /> Suspend</button>
+                    <button onClick={() => handleAction('reset')} className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-3 py-1.5 text-xs text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-400"><KeyRound className="h-3.5 w-3.5" /> Reset Password</button>
+                    <button onClick={() => handleAction('revoke')} className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-3 py-1.5 text-xs text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-400"><Lock className="h-3.5 w-3.5" /> Revoke Sessions</button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -247,19 +253,21 @@ export default function MemberDetailPage() {
                   <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Profile Information</h3>
                   <div>
                     <label className="mb-1 block text-xs text-slate-500">Full Name</label>
-                    <input className="admin-input w-full" value={editForm.fullName} onChange={(e) => setEditForm(v => ({ ...v, fullName: e.target.value }))} />
+                    <input className="admin-input w-full" value={editForm.fullName} onChange={(e) => setEditForm(v => ({ ...v, fullName: e.target.value }))} disabled={!canEditTeam} />
                   </div>
                   <div>
                     <label className="mb-1 block text-xs text-slate-500">Email</label>
-                    <input className="admin-input w-full" value={editForm.email} onChange={(e) => setEditForm(v => ({ ...v, email: e.target.value }))} />
+                    <input className="admin-input w-full" value={editForm.email} onChange={(e) => setEditForm(v => ({ ...v, email: e.target.value }))} disabled={!canEditTeam} />
                   </div>
                   <div>
                     <label className="mb-1 block text-xs text-slate-500">Phone</label>
-                    <input className="admin-input w-full" value={editForm.phone} onChange={(e) => setEditForm(v => ({ ...v, phone: e.target.value }))} />
+                    <input className="admin-input w-full" value={editForm.phone} onChange={(e) => setEditForm(v => ({ ...v, phone: e.target.value }))} disabled={!canEditTeam} />
                   </div>
-                  <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
-                    <Save className="h-4 w-4" /> {saving ? 'Saving...' : 'Save Changes'}
-                  </button>
+                  {canEditTeam && (
+                    <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
+                      <Save className="h-4 w-4" /> {saving ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  )}
                 </div>
                 <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
                   <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Account Details</h3>
@@ -279,13 +287,15 @@ export default function MemberDetailPage() {
                 <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
                   <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">Assign Role</h3>
                   <div className="flex items-center gap-3">
-                    <select className="admin-input max-w-xs" value={editForm.roleId} onChange={(e) => setEditForm(v => ({ ...v, roleId: e.target.value }))}>
+                    <select className="admin-input max-w-xs" value={editForm.roleId} onChange={(e) => setEditForm(v => ({ ...v, roleId: e.target.value }))} disabled={!canEditTeam}>
                       <option value="">No role assigned</option>
                       {roles.map((role) => <option key={role._id} value={role._id}>{role.name}{role.isSystemRole ? ' (System)' : ''}</option>)}
                     </select>
-                    <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
-                      <Save className="h-4 w-4" /> Save
-                    </button>
+                    {canEditTeam && (
+                      <button onClick={handleSave} disabled={saving} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
+                        <Save className="h-4 w-4" /> Save
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
@@ -350,14 +360,16 @@ export default function MemberDetailPage() {
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
                   <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">Security Actions</h3>
-                  <div className="flex flex-wrap gap-2">
-                    <button onClick={() => handleAction('reset')} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500"><KeyRound className="h-3.5 w-3.5" /> Reset Password</button>
-                    <button onClick={() => handleAction('revoke')} className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-500"><Lock className="h-3.5 w-3.5" /> Revoke All Sessions</button>
-                    {member.status === 'suspended'
-                      ? <button onClick={() => handleAction('activate')} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500"><UserCheck className="h-3.5 w-3.5" /> Activate Account</button>
-                      : <button onClick={() => handleAction('suspend')} className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-500"><UserX className="h-3.5 w-3.5" /> Suspend Account</button>
-                    }
-                  </div>
+                  {canCreateTeam && (
+                    <div className="flex flex-wrap gap-2">
+                      <button onClick={() => handleAction('reset')} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500"><KeyRound className="h-3.5 w-3.5" /> Reset Password</button>
+                      <button onClick={() => handleAction('revoke')} className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-500"><Lock className="h-3.5 w-3.5" /> Revoke All Sessions</button>
+                      {member.status === 'suspended'
+                        ? <button onClick={() => handleAction('activate')} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500"><UserCheck className="h-3.5 w-3.5" /> Activate Account</button>
+                        : <button onClick={() => handleAction('suspend')} className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-500"><UserX className="h-3.5 w-3.5" /> Suspend Account</button>
+                      }
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -370,11 +382,14 @@ export default function MemberDetailPage() {
                   rows={6}
                   placeholder="Add internal notes about this member (not visible to the member)..."
                   value={editForm.notes}
+                  disabled={!canEditTeam}
                   onChange={(e) => setEditForm(v => ({ ...v, notes: e.target.value }))}
                 />
-                <button onClick={handleSave} disabled={saving} className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
-                  <Save className="h-4 w-4" /> Save Notes
-                </button>
+                {canEditTeam && (
+                  <button onClick={handleSave} disabled={saving} className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
+                    <Save className="h-4 w-4" /> Save Notes
+                  </button>
+                )}
               </div>
             )}
           </>

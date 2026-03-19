@@ -65,6 +65,16 @@ function writeSessionPointer(examId: string, sessionId: string): void {
     window.localStorage.setItem(sessionPointerKey(examId), sessionId);
 }
 
+function clearSessionPointer(examId: string): void {
+    if (!examId || typeof window === "undefined") return;
+    window.localStorage.removeItem(sessionPointerKey(examId));
+}
+
+function clearRunnerCache(examId: string, sessionId: string): void {
+    if (!examId || !sessionId || typeof window === "undefined") return;
+    window.localStorage.removeItem(runnerCacheKey(examId, sessionId));
+}
+
 function readRunnerCache(examId: string, sessionId: string): RunnerCache | null {
     if (!examId || !sessionId || typeof window === "undefined") return null;
     try {
@@ -209,6 +219,16 @@ export const ExamRunnerPage = () => {
 
     useEffect(() => {
         if (!sessionId || !sessionData) return;
+        if (sessionData.session && (!sessionData.session.isActive || sessionData.session.submittedAtUTC)) {
+            clearSessionPointer(examId);
+            clearRunnerCache(examId, sessionId);
+            if (sessionData.session.submittedAtUTC) {
+                navigate(`/exam/${examId}/result?sessionId=${sessionId}`, { replace: true });
+            } else {
+                setSessionId(undefined);
+            }
+            return;
+        }
         if (hydrationSessionRef.current === sessionId) return;
         hydrationSessionRef.current = sessionId;
         writeSessionPointer(examId, sessionId);
@@ -233,7 +253,7 @@ export const ExamRunnerPage = () => {
         queueRef.current.clear();
         cache?.unsynced.forEach((row) => queueRef.current.set(row.questionId, row));
         setQueueVersion((value) => value + 1);
-    }, [examId, sessionData, sessionId]);
+    }, [examId, navigate, sessionData, sessionId]);
 
     const flushQueue = useCallback(async (): Promise<boolean> => {
         if (!sessionId || isOffline || saveInFlightRef.current) return false;
@@ -358,7 +378,8 @@ export const ExamRunnerPage = () => {
 
             try {
                 const response = await submitMutation.mutateAsync();
-                writeSessionPointer(examId, sessionId);
+                clearSessionPointer(examId);
+                clearRunnerCache(examId, sessionId);
                 navigate(`/exam/${examId}/result?sessionId=${sessionId}`, { replace: true });
                 toast.success(`Submitted at ${formatDateTime(response.submittedAtUTC)}`);
             } catch {

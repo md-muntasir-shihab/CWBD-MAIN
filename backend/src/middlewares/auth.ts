@@ -4,6 +4,7 @@ import { Request, Response, NextFunction } from 'express';
 import AuditLog from '../models/AuditLog';
 import ActiveSession from '../models/ActiveSession';
 import User, { UserRole } from '../models/User';
+import UserSubscription from '../models/UserSubscription';
 import { IUserPermissions } from '../models/User';
 import { getSecurityConfig } from '../services/securityConfigService';
 import {
@@ -277,20 +278,44 @@ export async function requireActiveSubscription(req: AuthRequest, res: Response,
             return;
         }
 
-        const user = await User.findById(req.user._id).select('role subscription').lean();
+        const [user, activeSubscription, latestSubscription] = await Promise.all([
+            User.findById(req.user._id).select('role subscription').lean(),
+            UserSubscription.findOne({
+                userId: req.user._id,
+                status: 'active',
+                expiresAtUTC: { $gt: new Date() },
+            })
+                .select('expiresAtUTC')
+                .lean(),
+            UserSubscription.findOne({ userId: req.user._id })
+                .sort({ expiresAtUTC: -1, updatedAt: -1, createdAt: -1 })
+                .select('status expiresAtUTC')
+                .lean(),
+        ]);
         if (!user) {
             res.status(401).json({ message: 'Authentication required' });
             return;
         }
 
+        if (activeSubscription) {
+            next();
+            return;
+        }
+
         const gate = evaluateSubscriptionState(user as Record<string, any>);
+        const canonicalExpiryDate = latestSubscription?.expiresAtUTC ? new Date(latestSubscription.expiresAtUTC) : null;
+        const canonicalReason = latestSubscription
+            ? (String(latestSubscription.status || '') === 'active' ? 'expired' : 'inactive')
+            : gate.reason;
+        const finalReason = gate.reason === 'missing' && latestSubscription ? canonicalReason : gate.reason;
+        const finalExpiryDate = gate.expiryDate || canonicalExpiryDate;
         if (!gate.allowed) {
-            const expiryLabel = gate.expiryDate ? gate.expiryDate.toISOString() : null;
+            const expiryLabel = finalExpiryDate ? finalExpiryDate.toISOString() : null;
             res.status(403).json({
                 subscriptionRequired: true,
-                reason: gate.reason,
+                reason: finalReason,
                 expiryDate: expiryLabel,
-                message: gate.reason === 'expired'
+                message: finalReason === 'expired'
                     ? `Your subscription has expired${expiryLabel ? ` on ${expiryLabel}` : ''}.`
                     : 'Active subscription required to access exams.',
             });

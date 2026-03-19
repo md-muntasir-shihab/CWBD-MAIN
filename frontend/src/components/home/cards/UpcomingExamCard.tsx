@@ -1,111 +1,161 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { CalendarDays, Globe, Info } from 'lucide-react';
+import { CalendarDays, ExternalLink, Globe } from 'lucide-react';
 import { daysUntil, urgencyTone } from '../CountdownChip';
 import type { ApiUniversityCardPreview } from '../../../services/api';
+import {
+    formatUniversityDate,
+    parseUniversityDate,
+    pickText,
+} from '../../../lib/universityPresentation';
+import UniversityLogo from '../../university/UniversityLogo';
 
 interface UpcomingExamCardProps {
-  university: ApiUniversityCardPreview;
+    university: ApiUniversityCardPreview;
 }
 
 const accentTone: Record<string, string> = {
-  danger: 'border-l-red-500',
-  warning: 'border-l-amber-500',
-  success: 'border-l-teal-500',
-  muted: 'border-l-gray-400',
+    danger: 'border-red-500/45',
+    warning: 'border-amber-500/45',
+    success: 'border-emerald-500/35',
+    muted: 'border-slate-700/70',
 };
 
-const chipTone: Record<string, string> = {
-  danger: 'bg-red-500/10 text-red-600 dark:bg-red-500/20 dark:text-red-400',
-  warning: 'bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400',
-  success: 'bg-teal-500/10 text-teal-600 dark:bg-teal-500/20 dark:text-teal-400',
-  muted: 'bg-gray-200/60 text-gray-500 dark:bg-gray-700/60 dark:text-gray-400',
-};
+function pickNearestExam(uni: ApiUniversityCardPreview): string {
+    const rows = [
+        uni.examDateScience || uni.scienceExamDate,
+        uni.examDateArts || uni.artsExamDate,
+        uni.examDateBusiness || uni.businessExamDate,
+    ];
 
-function pickExamDate(uni: ApiUniversityCardPreview): string | undefined {
-  return uni.examDateScience || uni.examDateArts || uni.examDateBusiness
-    || uni.scienceExamDate || uni.artsExamDate || uni.businessExamDate;
+    const usable = rows
+        .map((value) => parseUniversityDate(value))
+        .filter((value): value is Date => Boolean(value))
+        .sort((left, right) => left.getTime() - right.getTime());
+
+    return usable[0]?.toISOString() || '';
 }
 
-function pickExamUnit(uni: ApiUniversityCardPreview): string | null {
-  if (uni.examDateScience || uni.scienceExamDate) return 'Science';
-  if (uni.examDateArts || uni.artsExamDate) return 'Arts';
-  if (uni.examDateBusiness || uni.businessExamDate) return 'Commerce';
-  return null;
+function ExamChip({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="rounded-xl border border-slate-700/80 bg-slate-950/55 px-3 py-2">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{label}</p>
+            <p className="mt-1 text-xs font-semibold text-slate-100">{formatUniversityDate(value, 'en-GB', { day: '2-digit', month: 'short' })}</p>
+        </div>
+    );
 }
 
 export default function UpcomingExamCard({ university: uni }: UpcomingExamCardProps) {
-  const examDate = pickExamDate(uni);
-  const days = daysUntil(examDate);
-  const tone = urgencyTone(days);
-  const unit = pickExamUnit(uni);
+    const nearestExam = pickNearestExam(uni);
+    const days = daysUntil(nearestExam);
+    const tone = urgencyTone(days);
+    const officialUrl = pickText(uni.website);
+    const applyUrl = pickText(uni.admissionWebsite);
+    const detailsUrl = `/universities/${uni.slug}`;
 
-  return (
-    <motion.div
-      whileHover={{ y: -3 }}
-      className={`snap-start shrink-0 w-[280px] sm:w-[300px] md:w-[320px] rounded-2xl border border-gray-200 dark:border-gray-700 border-l-4 ${accentTone[tone]} bg-white dark:bg-gray-900 shadow-card hover:shadow-card-hover transition-shadow flex flex-col overflow-hidden`}
-    >
-      {/* Header */}
-      <div className="p-4 pb-3 flex items-start gap-3">
-        <div className="w-11 h-11 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden shrink-0 border border-gray-200 dark:border-gray-700">
-          {uni.logoUrl ? (
-            <img src={uni.logoUrl} alt={uni.shortForm} className="w-full h-full object-contain p-1" />
-          ) : (
-            <span className="text-xs font-bold text-gray-500 dark:text-gray-400">{uni.shortForm?.slice(0, 3)}</span>
-          )}
-        </div>
-        <div className="flex-1 min-w-0">
-          <Link to={`/universities/${uni.slug}`} className="block">
-            <h3 className="font-semibold text-sm text-gray-900 dark:text-white leading-snug line-clamp-2 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
-              {uni.name}
-            </h3>
-          </Link>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
-            <span className="text-[11px] px-2 py-0.5 rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 font-medium">
-              {uni.category}
-            </span>
-            {unit && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 font-medium">
-                {unit} Unit
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Exam date info */}
-      <div className="px-4 pb-3 flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-400">
-          <CalendarDays className="w-3.5 h-3.5" />
-          {examDate
-            ? new Date(examDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-            : 'TBD'}
-        </div>
-        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${chipTone[tone]}`}>
-          <CalendarDays className="w-3 h-3" />
-          {days === 0 ? 'Today!' : days === 1 ? 'Tomorrow' : `in ${days} days`}
-        </span>
-      </div>
-
-      {/* Actions */}
-      <div className="mt-auto px-4 pb-4 flex items-center gap-2">
-        {(uni.admissionWebsite || uni.website) && (
-          <a
-            href={uni.admissionWebsite || uni.website}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-          >
-            <Globe className="w-3.5 h-3.5" /> Official
-          </a>
-        )}
-        <Link
-          to={`/universities/${uni.slug}`}
-          className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold transition-colors"
+    return (
+        <motion.article
+            whileHover={{ y: -3 }}
+            className={`flex w-[250px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border bg-slate-900/95 shadow-[0_14px_30px_rgba(4,12,24,0.26)] transition-shadow hover:shadow-[0_20px_40px_rgba(4,12,24,0.30)] sm:w-[270px] md:w-[290px] ${accentTone[tone]}`}
         >
-          <Info className="w-3.5 h-3.5" /> Details
-        </Link>
-      </div>
-    </motion.div>
-  );
+            <div className="flex items-start gap-3 p-4 pb-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-700 bg-slate-950">
+                    <UniversityLogo
+                        name={uni.name}
+                        shortForm={uni.shortForm}
+                        logoUrl={uni.logoUrl}
+                        alt={uni.shortForm || uni.name}
+                        containerClassName="h-full w-full"
+                        imageClassName="h-full w-full object-contain p-1"
+                        fallbackClassName="rounded-none"
+                    />
+                </div>
+                <div className="min-w-0 flex-1">
+                    <Link to={detailsUrl} className="block">
+                        <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-white transition-colors hover:text-cyan-200">
+                            {uni.name}
+                        </h3>
+                    </Link>
+                    <p className="mt-1 truncate text-[11px] font-bold uppercase tracking-[0.16em] text-cyan-300">
+                        {pickText(uni.shortForm, 'N/A')}
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-200">
+                            {uni.category}
+                        </span>
+                        {uni.clusterGroup && (
+                            <span className="rounded-full border border-purple-500/20 bg-purple-500/10 px-2 py-0.5 text-[11px] font-medium text-purple-200">
+                                {uni.clusterGroup}
+                            </span>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            <div className="space-y-3 px-4 pb-4">
+                <div className="flex items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-300">
+                        <CalendarDays className="h-3.5 w-3.5 text-cyan-300" />
+                        Next exam {formatUniversityDate(nearestExam, 'en-GB', { day: '2-digit', month: 'short' })}
+                    </span>
+                    <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-cyan-200">
+                        {days === null ? 'TBD' : days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : `In ${days} days`}
+                    </span>
+                </div>
+                <div className="rounded-2xl border border-slate-700/80 bg-slate-950/55 p-3">
+                    <div className="flex items-center justify-between gap-3 text-xs">
+                        <span className="text-slate-500">Application Window</span>
+                        <span className="text-right font-semibold text-slate-100">
+                            {formatUniversityDate(uni.applicationStartDate || uni.applicationStart, 'en-GB', { day: '2-digit', month: 'short' })} - {formatUniversityDate(uni.applicationEndDate || uni.applicationEnd, 'en-GB', { day: '2-digit', month: 'short' })}
+                        </span>
+                    </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                    <ExamChip label="Science" value={uni.examDateScience || uni.scienceExamDate || ''} />
+                    <ExamChip label="Arts" value={uni.examDateArts || uni.artsExamDate || ''} />
+                    <ExamChip label="Business" value={uni.examDateBusiness || uni.businessExamDate || ''} />
+                </div>
+            </div>
+
+            <div className="mt-auto grid grid-cols-3 gap-2 px-4 pb-4">
+                {applyUrl ? (
+                    <a
+                        href={applyUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-500 px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+                    >
+                        <ExternalLink className="h-3.5 w-3.5" /> Apply
+                    </a>
+                ) : (
+                    <Link
+                        to={detailsUrl}
+                        className="inline-flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-500 px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+                    >
+                        <ExternalLink className="h-3.5 w-3.5" /> Details
+                    </Link>
+                )}
+                {officialUrl ? (
+                    <a
+                        href={officialUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl border border-slate-700 px-3 py-2 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-800"
+                    >
+                        <Globe className="h-3.5 w-3.5" /> Official
+                    </a>
+                ) : (
+                    <span className="inline-flex min-h-[42px] items-center justify-center rounded-xl border border-slate-700 px-3 py-2 text-xs font-medium text-slate-500">
+                        Official N/A
+                    </span>
+                )}
+                <Link
+                    to={detailsUrl}
+                    className="inline-flex min-h-[42px] items-center justify-center rounded-xl border border-slate-700 px-3 py-2 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-800"
+                >
+                    Details
+                </Link>
+            </div>
+        </motion.article>
+    );
 }

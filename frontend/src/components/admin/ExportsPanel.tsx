@@ -8,43 +8,26 @@ import {
     adminExportUniversities,
     adminExportStudents,
 } from '../../services/api';
-
-function downloadBlob(data: unknown, filename: string) {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(url);
-}
-
-function downloadFile(blob: Blob, filename: string) {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(url);
-}
+import { downloadFile } from '../../utils/download';
 
 export default function ExportsPanel() {
     const [loading, setLoading] = useState('');
+    const [tableFormat, setTableFormat] = useState<'csv' | 'xlsx'>('xlsx');
     const [examHistoryFormat, setExamHistoryFormat] = useState<'csv' | 'xlsx'>('xlsx');
 
     const doExport = async (type: string) => {
         setLoading(type);
         try {
             if (type === 'news') {
-                downloadBlob((await adminExportNews()).data, 'news_export.json');
+                downloadFile(await adminExportNews(tableFormat), { filename: `news_export.${tableFormat}` });
             } else if (type === 'subscription-plans') {
-                downloadFile((await adminExportSubscriptionPlans('xlsx')).data as Blob, 'subscription_plans_export.xlsx');
+                downloadFile(await adminExportSubscriptionPlans(tableFormat), { filename: `subscription_plans_export.${tableFormat}` });
             } else if (type === 'universities') {
-                downloadBlob((await adminExportUniversities()).data, 'universities_export.json');
+                downloadFile(await adminExportUniversities({ format: tableFormat }), { filename: `universities_export.${tableFormat}` });
             } else if (type === 'students') {
-                downloadBlob((await adminExportStudents()).data, 'students_export.json');
+                downloadFile(await adminExportStudents({ format: tableFormat }), { filename: `students_export.${tableFormat}` });
             } else if (type === 'exam-history') {
-                downloadFile((await adminExportStudentExamHistory(examHistoryFormat)).data, `student_exam_history.${examHistoryFormat}`);
+                downloadFile(await adminExportStudentExamHistory(examHistoryFormat), { filename: `student_exam_history.${examHistoryFormat}` });
             }
             toast.success(`${type} exported`);
         } catch {
@@ -55,10 +38,10 @@ export default function ExportsPanel() {
     };
 
     const items = [
-        { key: 'universities', label: 'Universities', desc: 'Export all university data', icon: GraduationCap, color: 'from-indigo-500 to-blue-500', cta: 'Export JSON' },
-        { key: 'students', label: 'Students', desc: 'Export student accounts', icon: Users, color: 'from-green-500 to-emerald-500', cta: 'Export JSON' },
-        { key: 'news', label: 'News', desc: 'Export news articles', icon: Newspaper, color: 'from-orange-500 to-amber-500', cta: 'Export JSON' },
-        { key: 'subscription-plans', label: 'Subscription Plans', desc: 'Export subscription plan listings', icon: Briefcase, color: 'from-purple-500 to-pink-500', cta: 'Export XLSX' },
+        { key: 'universities', label: 'Universities', desc: 'Export all university data', icon: GraduationCap, color: 'from-indigo-500 to-blue-500', cta: `Export ${tableFormat.toUpperCase()}` },
+        { key: 'students', label: 'Students', desc: 'Export student accounts', icon: Users, color: 'from-green-500 to-emerald-500', cta: `Export ${tableFormat.toUpperCase()}` },
+        { key: 'news', label: 'News', desc: 'Export news articles', icon: Newspaper, color: 'from-orange-500 to-amber-500', cta: `Export ${tableFormat.toUpperCase()}` },
+        { key: 'subscription-plans', label: 'Subscription Plans', desc: 'Export subscription plan listings', icon: Briefcase, color: 'from-purple-500 to-pink-500', cta: `Export ${tableFormat.toUpperCase()}` },
         { key: 'exam-history', label: 'Exam History', desc: 'Export attempts, rank and submission timeline', icon: BarChart3, color: 'from-cyan-500 to-indigo-500', cta: examHistoryFormat === 'csv' ? 'Export CSV' : 'Export XLSX' },
     ];
 
@@ -66,7 +49,7 @@ export default function ExportsPanel() {
         <div className="space-y-4">
             <div>
                 <h2 className="text-lg font-bold text-white">Data Export</h2>
-                <p className="text-xs text-slate-500">Download JSON, CSV and Excel exports.</p>
+                <p className="text-xs text-slate-500">Download CSV and Excel exports.</p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
@@ -88,7 +71,16 @@ export default function ExportsPanel() {
                                 <option value="xlsx">XLSX</option>
                                 <option value="csv">CSV</option>
                             </select>
-                        ) : null}
+                        ) : (
+                            <select
+                                value={tableFormat}
+                                onChange={(e) => setTableFormat(e.target.value as 'csv' | 'xlsx')}
+                                className="w-full rounded-xl bg-slate-950/65 border border-indigo-500/15 px-3 py-2 text-xs text-white outline-none"
+                            >
+                                <option value="xlsx">XLSX</option>
+                                <option value="csv">CSV</option>
+                            </select>
+                        )}
                         <button
                             onClick={() => doExport(item.key)}
                             disabled={!!loading}

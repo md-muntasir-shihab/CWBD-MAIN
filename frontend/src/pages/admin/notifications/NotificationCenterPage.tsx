@@ -230,7 +230,7 @@ export default function NotificationCenterPage({ noShell }: { noShell?: boolean 
     { key: 'logs', label: 'Logs' },
   ];
 
-  const Wrapper = noShell ? ({ children }: { children: React.ReactNode }) => <div className="space-y-6">{children}</div> : ({ children }: { children: React.ReactNode }) => <AdminGuardShell title="Notification Center" description="Send, schedule, and track notifications">{children}</AdminGuardShell>;
+  const Wrapper = noShell ? ({ children }: { children: React.ReactNode }) => <div className="space-y-6">{children}</div> : ({ children }: { children: React.ReactNode }) => <AdminGuardShell title="Notification Center" description="Send, schedule, and track notifications" requiredModule="notifications">{children}</AdminGuardShell>;
 
   return (
     <Wrapper>

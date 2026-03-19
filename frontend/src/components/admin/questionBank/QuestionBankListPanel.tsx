@@ -12,6 +12,7 @@ import {
 } from '../../../hooks/useQuestionBankV2Queries';
 import { exportQuestions } from '../../../api/adminQuestionBankApi';
 import type { BankQuestionFilters, BankQuestion } from '../../../types/questionBank';
+import { downloadFile } from '../../../utils/download';
 
 interface Props {
     onEdit: (id: string) => void;
@@ -77,12 +78,7 @@ export default function QuestionBankListPanel({ onEdit, archiveMode }: Props) {
     async function handleExport() {
         try {
             const blob = await exportQuestions(filters, 'xlsx');
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'question_bank.xlsx';
-            a.click();
-            URL.revokeObjectURL(url);
+            downloadFile(blob, { filename: 'question_bank.xlsx' });
             toast.success('Export downloaded');
         } catch { toast.error('Export failed'); }
     }

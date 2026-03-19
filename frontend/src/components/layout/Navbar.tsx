@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ChevronDown, LogOut, Menu, Settings, User as UserIcon, X } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Bell, ChevronDown, LogOut, Menu, Settings, User as UserIcon, X } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useWebsiteSettings } from '../../hooks/useWebsiteSettings';
 import ThemeSwitchPro from '../ui/ThemeSwitchPro';
+import { getStudentMeNotifications } from '../../services/api';
 
 const BASE_LINKS = [
     { name: 'Home', path: '/' },
@@ -24,6 +26,7 @@ export default function Navbar() {
     const brandName = String(settings?.websiteName || 'CampusWay').trim() || 'CampusWay';
     const brandLogo = String(settings?.logoUrl || settings?.logo || '/logo.png').trim() || '/logo.png';
     const brandMotto = String(settings?.motto || settings?.metaDescription || '').trim();
+    const isStudentUser = user?.role === 'student';
     const isAdminUser = Boolean(user && user.role !== 'student' && user.role !== 'chairman');
     const dashboardPath = user?.role === 'student'
         ? '/dashboard'
@@ -32,6 +35,13 @@ export default function Navbar() {
             : isAdminUser
                 ? '/__cw_admin__/dashboard'
                 : null;
+    const studentNotificationsQuery = useQuery({
+        queryKey: ['student-hub', 'notifications', 'all'],
+        queryFn: async () => (await getStudentMeNotifications('all')).data,
+        enabled: isStudentUser,
+        staleTime: 30_000,
+    });
+    const unreadCount = Number(studentNotificationsQuery.data?.unreadCount || 0);
 
     const navLinks = useMemo(() => BASE_LINKS, []);
 
@@ -52,7 +62,7 @@ export default function Navbar() {
         <header className="sticky top-0 z-50 bg-surface/85 dark:bg-dark-surface/85 backdrop-blur-xl border-b border-card-border/70 dark:border-dark-border/70">
             <nav className="section-container h-16 flex items-center justify-between gap-3">
                 <Link to="/" className="flex items-center gap-2.5 min-w-0 flex-1 lg:flex-none">
-                    <div className="h-8 w-8 sm:h-9 sm:w-9 shrink-0 overflow-hidden rounded-lg border border-card-border/70 dark:border-dark-border/70 bg-surface dark:bg-dark-surface flex items-center justify-center">
+                    <div className="h-8 w-8 sm:h-9 sm:w-9 shrink-0 overflow-hidden rounded-lg flex items-center justify-center">
                         {!logoLoadFailed ? (
                             <img
                                 src={brandLogo}
@@ -99,6 +109,24 @@ export default function Navbar() {
                     <Link to="/subscription-plans" className="hidden sm:inline-flex btn-outline text-sm py-2 px-3 rounded-full">
                         Plans
                     </Link>
+                    {isStudentUser && (
+                        <Link
+                            to="/notifications"
+                            className={`relative inline-flex h-9 w-9 items-center justify-center rounded-full border transition-colors ${location.pathname === '/notifications' || location.pathname.startsWith('/notifications/')
+                                ? 'border-primary/60 bg-primary/10 text-primary'
+                                : 'border-card-border/70 dark:border-dark-border/70 text-text-muted dark:text-dark-text/70 hover:bg-primary/5 hover:text-primary'
+                                }`}
+                            aria-label="Open notifications"
+                            title="Notifications"
+                        >
+                            <Bell className="h-4 w-4" />
+                            {unreadCount > 0 && (
+                                <span className="absolute -right-1 -top-1 inline-flex min-w-[1.05rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold leading-4 text-white">
+                                    {unreadCount > 99 ? '99+' : unreadCount}
+                                </span>
+                            )}
+                        </Link>
+                    )}
 
                     {user ? (
                         <div className="relative group">

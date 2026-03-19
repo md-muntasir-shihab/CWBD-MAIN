@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { RefreshCw, TriangleAlert } from 'lucide-react';
 import UniversityGrid from './UniversityGrid';
@@ -11,9 +11,25 @@ import {
 } from '../../hooks/useUniversityQueries';
 import type { UniversityCardSort } from '../../services/api';
 import type { UniversityCategoryDetail } from '../../lib/apiClient';
+import type { UniversityCardVisualVariant } from './UniversityCard';
 
 function sortCategories(items: UniversityCategoryDetail[]): UniversityCategoryDetail[] {
     return [...items].sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+}
+
+const UNIVERSITY_SORT_OPTIONS: UniversityCardSort[] = [
+    'nearest_deadline',
+    'alphabetical',
+    'name_asc',
+    'name_desc',
+    'closing_soon',
+    'exam_soon',
+];
+
+function normalizeUniversitySort(value: string): UniversityCardSort {
+    return UNIVERSITY_SORT_OPTIONS.includes(value as UniversityCardSort)
+        ? (value as UniversityCardSort)
+        : 'closing_soon';
 }
 
 interface UniversityBrowseShellProps {
@@ -26,6 +42,7 @@ interface UniversityBrowseShellProps {
     subtitle?: string;
     /** Hide category chip tabs (e.g. on a category-specific page) */
     hideCategoryTabs?: boolean;
+    cardVariant?: UniversityCardVisualVariant;
 }
 
 export default function UniversityBrowseShell({
@@ -34,15 +51,19 @@ export default function UniversityBrowseShell({
     title = 'Universities',
     subtitle = 'Browse universities grouped by category. Tap a category to filter.',
     hideCategoryTabs = false,
+    cardVariant = 'modern',
 }: UniversityBrowseShellProps) {
     const [searchParams, setSearchParams] = useSearchParams();
     const categoryFromUrl = searchParams.get('category') || '';
+    const clusterFromUrl = searchParams.get('cluster') || '';
+    const searchFromUrl = searchParams.get('q') || '';
+    const sortFromUrl = normalizeUniversitySort(searchParams.get('sort') || 'closing_soon');
 
-    const [search, setSearch] = useState('');
-    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const [search, setSearch] = useState(searchFromUrl);
+    const [debouncedSearch, setDebouncedSearch] = useState(searchFromUrl);
     const [selectedCategory, setSelectedCategory] = useState(fixedCategory || categoryFromUrl || '');
-    const [selectedCluster, setSelectedCluster] = useState(fixedCluster || '');
-    const [sort, setSort] = useState<UniversityCardSort>('closing_soon');
+    const [selectedCluster, setSelectedCluster] = useState(fixedCluster || clusterFromUrl || '');
+    const [sort, setSort] = useState<UniversityCardSort>(sortFromUrl);
     const [filterOpen, setFilterOpen] = useState(false);
 
     const homeSettingsQuery = usePublicHomeSettings();
@@ -52,6 +73,37 @@ export default function UniversityBrowseShell({
     const defaultCategoryFromAdmin = String(homeSettingsQuery.data?.universityDashboard?.defaultCategory || '').trim();
     const showAllCategories = Boolean(homeSettingsQuery.data?.universityDashboard?.showAllCategories);
 
+    const syncUrlState = useCallback((next: {
+        category?: string;
+        cluster?: string;
+        q?: string;
+        sort?: string;
+    }) => {
+        const params = new URLSearchParams(searchParams);
+        const categoryValue = fixedCategory ? fixedCategory : (next.category ?? selectedCategory);
+        const clusterValue = fixedCluster ? fixedCluster : (next.cluster ?? selectedCluster);
+        const searchValue = next.q ?? search;
+        const sortValue = next.sort ?? sort;
+
+        if (!fixedCategory && categoryValue && categoryValue.toLowerCase() !== 'all') params.set('category', categoryValue);
+        else params.delete('category');
+
+        if (!fixedCluster && clusterValue) params.set('cluster', clusterValue);
+        else params.delete('cluster');
+
+        if (searchValue.trim()) params.set('q', searchValue.trim());
+        else params.delete('q');
+
+        if (sortValue && sortValue !== 'closing_soon') params.set('sort', sortValue);
+        else params.delete('sort');
+
+        const nextParams = params.toString();
+        const currentParams = searchParams.toString();
+        if (nextParams === currentParams) return;
+
+        setSearchParams(params, { replace: true });
+    }, [fixedCategory, fixedCluster, searchParams, selectedCategory, selectedCluster, search, sort, setSearchParams]);
+
     useEffect(() => {
         const timeout = window.setTimeout(() => {
             setDebouncedSearch(search);
@@ -59,39 +111,65 @@ export default function UniversityBrowseShell({
         return () => window.clearTimeout(timeout);
     }, [search]);
 
-    // Set initial category from fixed prop, URL, or admin default
-    const initializedRef = useRef(false);
     useEffect(() => {
-        if (!categories.length || initializedRef.current) return;
-        initializedRef.current = true;
-        // When fixedCluster is set, find its parent category
+        setSearch((current) => current === searchFromUrl ? current : searchFromUrl);
+    }, [searchFromUrl]);
+
+    useEffect(() => {
+        setSort((current) => current === sortFromUrl ? current : sortFromUrl);
+    }, [sortFromUrl]);
+
+    useEffect(() => {
+        if (fixedCluster) {
+            setSelectedCluster((current) => current === fixedCluster ? current : fixedCluster);
+            return;
+        }
+        setSelectedCluster((current) => current === clusterFromUrl ? current : clusterFromUrl);
+    }, [clusterFromUrl, fixedCluster]);
+
+    useEffect(() => {
+        if (!categories.length) return;
         if (fixedCluster) {
             const parent = categories.find((c) => c.clusterGroups.includes(fixedCluster));
-            if (parent) { setSelectedCategory(parent.categoryName); return; }
-            if (categories[0]) { setSelectedCategory(categories[0].categoryName); return; }
+            const nextCategory = parent?.categoryName || categories[0]?.categoryName || '';
+            if (nextCategory) {
+                setSelectedCategory((current) => current === nextCategory ? current : nextCategory);
+            }
+            return;
         }
-        if (fixedCategory) { setSelectedCategory(fixedCategory); return; }
+        if (fixedCategory) {
+            setSelectedCategory((current) => current === fixedCategory ? current : fixedCategory);
+            return;
+        }
         if (categoryFromUrl) {
             if (categoryFromUrl.trim().toLowerCase() === 'all' && showAllCategories) {
-                setSelectedCategory('all');
+                setSelectedCategory((current) => current === 'all' ? current : 'all');
                 return;
             }
             const match = categories.find((c) => c.categoryName === categoryFromUrl);
-            if (match) { setSelectedCategory(match.categoryName); return; }
+            if (match) {
+                setSelectedCategory((current) => current === match.categoryName ? current : match.categoryName);
+                return;
+            }
         }
         if (defaultCategoryFromAdmin && !showAllCategories) {
             const match = categories.find((c) => c.categoryName === defaultCategoryFromAdmin);
-            if (match) { setSelectedCategory(match.categoryName); return; }
+            if (match) {
+                setSelectedCategory((current) => current === match.categoryName ? current : match.categoryName);
+                return;
+            }
         }
-        if (categories[0]) setSelectedCategory(categories[0].categoryName);
+        if (categories[0]) {
+            setSelectedCategory((current) => current === categories[0].categoryName ? current : categories[0].categoryName);
+        }
     }, [categories, categoryFromUrl, defaultCategoryFromAdmin, showAllCategories, fixedCategory, fixedCluster]);
 
     const handleCategoryChange = useCallback((cat: string) => {
         if (fixedCategory) return;
         setSelectedCategory(cat);
         setSelectedCluster('');
-        setSearchParams({ category: cat }, { replace: true });
-    }, [setSearchParams, fixedCategory]);
+        syncUrlState({ category: cat, cluster: '' });
+    }, [syncUrlState, fixedCategory]);
 
     // Fallback if selected category doesn't exist
     useEffect(() => {
@@ -121,8 +199,14 @@ export default function UniversityBrowseShell({
 
     useEffect(() => {
         if (!selectedCluster) return;
+        if (fixedCluster) return;
+        if (!activeCategoryMeta) return;
         if (!clusters.includes(selectedCluster)) setSelectedCluster('');
-    }, [clusters, selectedCluster]);
+    }, [activeCategoryMeta, clusters, fixedCluster, selectedCluster]);
+
+    useEffect(() => {
+        syncUrlState({});
+    }, [search, selectedCluster, sort, selectedCategory, syncUrlState]);
 
     const universitiesQuery = useUniversities({
         category: activeCategory,
@@ -171,7 +255,12 @@ export default function UniversityBrowseShell({
                 setSelectedCluster={setSelectedCluster}
                 hasActiveFilters={hasActiveFilters}
                 onOpenMobileFilters={() => setFilterOpen(true)}
-                onClearFilters={() => { setSearch(''); setSelectedCluster(''); }}
+                onClearFilters={() => {
+                    setSearch('');
+                    setSelectedCluster('');
+                    setSort('closing_soon');
+                    syncUrlState({ cluster: '', q: '', sort: 'closing_soon' });
+                }}
                 hideCategoryTabs={hideCategoryTabs}
             />
 
@@ -200,6 +289,7 @@ export default function UniversityBrowseShell({
                     loading={universitiesQuery.isLoading && !universitiesQuery.isPlaceholderData}
                     emptyText="No universities in this category."
                     sort={sort}
+                    cardVariant={cardVariant}
                 />
             </div>
 

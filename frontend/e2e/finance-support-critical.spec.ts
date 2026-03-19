@@ -27,6 +27,7 @@ test.describe('Finance + Support Critical Flows', () => {
     let studentId = '';
     let studentEmail = '';
     let studentPassword = '';
+    let studentPhone = '';
     let planCode = '';
     let backupJobId = '';
     let modulesAvailable = true;
@@ -53,6 +54,7 @@ test.describe('Finance + Support Critical Flows', () => {
         planCode = `E2EPLAN${now}`;
         studentEmail = `e2e_finance_${now}@campusway.local`;
         studentPassword = `E2E_Stu#${String(now).slice(-6)}`;
+        studentPhone = `017${String(now).slice(-8)}`;
 
         const createPlan = await request.post('/api/campusway-secure-admin/subscription-plans', {
             headers: authHeader(adminToken),
@@ -72,7 +74,7 @@ test.describe('Finance + Support Critical Flows', () => {
                 username: `e2e_fin_stu_${String(now).slice(-6)}`,
                 email: studentEmail,
                 password: studentPassword,
-                phoneNumber: '01700000000',
+                phoneNumber: studentPhone,
                 status: 'active',
             },
         });

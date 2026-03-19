@@ -18,6 +18,7 @@ import {
 import {
   adminSetPassword, resendAccountInfo, toggleForceReset, revokeStudentSessions,
 } from '../../../api/adminStudentSecurityApi';
+import { adminGetSubscriptionPlans, type AdminSubscriptionPlan } from '../../../services/api';
 
 type Tab = 'overview' | 'profile' | 'guardian' | 'subscription' | 'payments' |
   'finance' | 'exams' | 'results' | 'weak-topics' | 'communication' |
@@ -121,6 +122,10 @@ export default function StudentManagementDetailPage() {
     queryKey: ['student-unified', id],
     queryFn: () => getStudentUnified(id!),
     enabled: !!id,
+  });
+  const { data: availablePlans } = useQuery({
+    queryKey: ['admin-subscription-plans-lite'],
+    queryFn: async () => (await adminGetSubscriptionPlans()).data.items ?? [],
   });
 
   const flash = (msg: string, ok = true) => { setToast({ msg, ok }); setTimeout(() => setToast(null), 3000); };
@@ -237,10 +242,17 @@ export default function StudentManagementDetailPage() {
       {/* Modals */}
       <Modal open={assignModal} onClose={() => setAssignModal(false)} title="Assign Subscription">
         <div className="space-y-3">
-          <input className={inputCls} placeholder="Plan ID" value={assignForm.planId} onChange={e => setAssignForm(p => ({ ...p, planId: e.target.value }))} />
+          <select className={inputCls} value={assignForm.planId} onChange={e => setAssignForm(p => ({ ...p, planId: e.target.value }))}>
+            <option value="">Select a plan</option>
+            {(availablePlans ?? []).map((plan: AdminSubscriptionPlan) => (
+              <option key={plan._id} value={plan._id}>
+                {plan.name || 'Unnamed plan'} {plan.code ? `(${plan.code})` : ''}
+              </option>
+            ))}
+          </select>
           <input className={inputCls} type="date" value={assignForm.startDate} onChange={e => setAssignForm(p => ({ ...p, startDate: e.target.value }))} />
           <textarea className={inputCls} rows={2} placeholder="Notes" value={assignForm.notes} onChange={e => setAssignForm(p => ({ ...p, notes: e.target.value }))} />
-          <button onClick={() => assignSubMut.mutate()} disabled={assignSubMut.isPending} className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+          <button onClick={() => assignSubMut.mutate()} disabled={!assignForm.planId || assignSubMut.isPending} className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
             {assignSubMut.isPending ? 'Assigning...' : 'Assign'}
           </button>
         </div>
@@ -617,6 +629,8 @@ function FinanceTab({ id, s, setAdjModal }: { id: string; s: S; setAdjModal: (b:
 }
 
 function ExamsTab({ s }: { s: S }) {
+  const identity = s.exams?.identity;
+  const syncHistory = s.exams?.syncHistory ?? [];
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2">
@@ -629,17 +643,46 @@ function ExamsTab({ s }: { s: S }) {
           <p className="mt-1 text-2xl font-bold text-blue-600">{s.exams?.upcomingCount ?? 0}</p>
         </div>
       </div>
+      <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+        <Card title="Exam Identity" icon={BookOpen}>
+          <InfoRow label="Serial ID" value={identity?.serialId} />
+          <InfoRow label="Roll Number" value={identity?.rollNumber} />
+          <InfoRow label="Registration Number" value={identity?.registrationNumber} />
+          <InfoRow label="Admit Card" value={identity?.admitCardNumber} />
+          <InfoRow label="Exam Center" value={identity?.examCenter} />
+          <InfoRow label="Last Sync" value={identity?.lastSyncAt ? new Date(identity.lastSyncAt).toLocaleString() : undefined} />
+          <InfoRow label="Latest Summary" value={identity?.latestResultSummary} />
+        </Card>
+        <Card title="Recent Sync History" icon={RefreshCcw}>
+          <div className="space-y-2">
+            {syncHistory.map((item: { _id: string; examTitle?: string; source: string; status: string; syncMode: string; changedFields: string[]; createdAt: string }) => (
+              <div key={item._id} className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{item.examTitle || 'Exam Sync'}</p>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${badge(item.status)}`}>{item.status}</span>
+                </div>
+                <p className="mt-1 text-xs text-slate-400">{item.source} · {item.syncMode}</p>
+                <p className="mt-1 text-xs text-slate-500">{item.changedFields?.join(', ') || 'No field changes listed'}</p>
+              </div>
+            ))}
+            {syncHistory.length === 0 && (
+              <p className="py-6 text-center text-sm text-slate-400">No sync history yet</p>
+            )}
+          </div>
+        </Card>
+      </div>
       <Card title="Recent Results" icon={BookOpen}>
         <div className="space-y-2">
-          {(s.exams?.recentResults ?? []).map((r: { _id: string; examTitle?: string; percentage: number; obtainedMarks: number; totalMarks: number; submittedAt: string; status: string }) => (
+          {(s.exams?.recentResults ?? []).map((r: { _id: string; examTitle?: string; percentage: number; obtainedMarks: number; totalMarks: number; submittedAt: string; status: string; source?: string; examCenter?: string; syncStatus?: string }) => (
             <div key={r._id} className="flex items-center justify-between rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
               <div>
                 <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{r.examTitle || 'Exam'}</p>
-                <p className="text-xs text-slate-400">{new Date(r.submittedAt).toLocaleDateString()}</p>
+                <p className="text-xs text-slate-400">{new Date(r.submittedAt).toLocaleDateString()} · {r.source || 'internal'}{r.examCenter ? ` · ${r.examCenter}` : ''}</p>
               </div>
               <div className="text-right">
                 <p className="text-sm font-bold text-slate-800 dark:text-white">{r.obtainedMarks}/{r.totalMarks}</p>
                 <p className={`text-xs font-medium ${r.percentage >= 60 ? 'text-green-600' : r.percentage >= 40 ? 'text-yellow-600' : 'text-red-600'}`}>{r.percentage.toFixed(1)}%</p>
+                {r.syncStatus ? <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-400">{r.syncStatus}</p> : null}
               </div>
             </div>
           ))}
@@ -663,12 +706,15 @@ function ResultsTab({ s }: { s: S }) {
               <th className="pb-2 pr-3">Exam</th>
               <th className="pb-2 pr-3">Marks</th>
               <th className="pb-2 pr-3">Percentage</th>
+              <th className="pb-2 pr-3">Source</th>
+              <th className="pb-2 pr-3">Center</th>
               <th className="pb-2 pr-3">Status</th>
+              <th className="pb-2 pr-3">Sync</th>
               <th className="pb-2">Date</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {results.map((r: { _id: string; examTitle?: string; obtainedMarks: number; totalMarks: number; percentage: number; status: string; submittedAt: string }) => (
+            {results.map((r: { _id: string; examTitle?: string; obtainedMarks: number; totalMarks: number; percentage: number; status: string; submittedAt: string; source?: string; examCenter?: string; syncStatus?: string }) => (
               <tr key={r._id} className="text-slate-700 dark:text-slate-300">
                 <td className="py-2 pr-3 font-medium">{r.examTitle || '—'}</td>
                 <td className="py-2 pr-3">{r.obtainedMarks}/{r.totalMarks}</td>
@@ -677,11 +723,14 @@ function ResultsTab({ s }: { s: S }) {
                     {r.percentage.toFixed(1)}%
                   </span>
                 </td>
+                <td className="py-2 pr-3 text-xs uppercase tracking-wide text-slate-500">{r.source || 'internal'}</td>
+                <td className="py-2 pr-3">{r.examCenter || 'â€”'}</td>
                 <td className="py-2 pr-3"><span className={`rounded-full px-2 py-0.5 text-xs font-medium ${badge(r.status)}`}>{r.status}</span></td>
+                <td className="py-2 pr-3 text-xs text-slate-500">{r.syncStatus || 'â€”'}</td>
                 <td className="py-2 text-xs text-slate-400">{new Date(r.submittedAt).toLocaleDateString()}</td>
               </tr>
             ))}
-            {results.length === 0 && <tr><td colSpan={5} className="py-6 text-center text-slate-400">No results</td></tr>}
+            {results.length === 0 && <tr><td colSpan={8} className="py-6 text-center text-slate-400">No results</td></tr>}
           </tbody>
         </table>
       </div>

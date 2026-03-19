@@ -6,8 +6,7 @@ import {
     Settings, PlayCircle, Eye, FileText, ChevronRight
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { getProfileDashboard, updateProfile } from '../services/api';
-import { normalizeExternalUrl } from '../utils/url';
+import { getProfileDashboard, startExam, updateProfile } from '../services/api';
 import dayjs from 'dayjs';
 import duration from 'dayjs/plugin/duration';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -25,6 +24,7 @@ export default function Profile() {
 
     const [formParams, setFormParams] = useState<any>({});
     const [saving, setSaving] = useState(false);
+    const [startingExternalExamId, setStartingExternalExamId] = useState('');
 
     useEffect(() => {
         fetchDashboard();
@@ -55,6 +55,22 @@ export default function Profile() {
             toast.error(err.response?.data?.message || 'Update failed');
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleExternalExamStart = async (examId: string) => {
+        try {
+            setStartingExternalExamId(examId);
+            const payload = (await startExam(examId)).data;
+            if (payload.redirect && payload.externalExamUrl) {
+                window.location.href = payload.externalExamUrl;
+                return;
+            }
+            toast.error('External exam link is not available right now');
+        } catch (err: any) {
+            toast.error(err.response?.data?.message || 'Failed to start exam');
+        } finally {
+            setStartingExternalExamId('');
         }
     };
 
@@ -304,15 +320,15 @@ export default function Profile() {
                     </span>
                 )}
                 {type === 'external' && (
-                    normalizeExternalUrl(exam.externalExamUrl) ? (
-                        <a
-                            href={normalizeExternalUrl(exam.externalExamUrl) || undefined}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="px-5 py-2 bg-purple-500 hover:bg-purple-600 rounded-xl text-white text-sm font-bold flex items-center gap-2 shadow-lg shadow-purple-500/20"
+                    exam.externalExamUrl ? (
+                        <button
+                            type="button"
+                            onClick={() => void handleExternalExamStart(String(exam._id))}
+                            disabled={startingExternalExamId === String(exam._id)}
+                            className="px-5 py-2 bg-purple-500 hover:bg-purple-600 rounded-xl text-white text-sm font-bold flex items-center gap-2 shadow-lg shadow-purple-500/20 disabled:cursor-not-allowed disabled:opacity-70"
                         >
-                            Go to Exam <ChevronRight className="w-4 h-4" />
-                        </a>
+                            {startingExternalExamId === String(exam._id) ? 'Opening...' : 'Go to Exam'} <ChevronRight className="w-4 h-4" />
+                        </button>
                     ) : (
                         <button
                             type="button"

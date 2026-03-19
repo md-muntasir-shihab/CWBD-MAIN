@@ -2,7 +2,9 @@ import { useMemo, useState, useEffect } from 'react';
 import { motion, type Variants, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import UniversityCard, { DEFAULT_UNIVERSITY_CARD_CONFIG, UniversityCardSkeleton } from './UniversityCard';
+import type { UniversityCardVisualVariant } from './UniversityCard';
 import type { HomeAnimationLevel, HomeUniversityCardConfig, UniversityCardSort } from '../../services/api';
+import { parseUniversityDate, pickNearestUniversityExamDate } from '../../lib/universityPresentation';
 
 type UniversityItem = Record<string, unknown>;
 
@@ -16,30 +18,7 @@ interface UniversityGridProps {
     className?: string;
     itemsPerPage?: number;
     sort?: UniversityCardSort;
-}
-
-function parseDate(value: unknown): Date | null {
-    if (!value) return null;
-    if (typeof value === 'number' && Number.isFinite(value)) {
-        const dateFromNumber = new Date(value > 1e12 ? value : value * 1000);
-        const year = dateFromNumber.getUTCFullYear();
-        if (!Number.isNaN(dateFromNumber.getTime()) && year >= 1900 && year <= 2100) return dateFromNumber;
-    }
-    const raw = String(value).trim();
-    if (/^\d+$/.test(raw)) {
-        let numeric = Number(raw);
-        if (Number.isFinite(numeric)) {
-            while (numeric > 1e13) numeric = Math.floor(numeric / 10);
-            const dateFromEpoch = new Date(numeric < 1e11 ? numeric * 1000 : numeric);
-            const year = dateFromEpoch.getUTCFullYear();
-            if (!Number.isNaN(dateFromEpoch.getTime()) && year >= 1900 && year <= 2100) return dateFromEpoch;
-        }
-        return null;
-    }
-    const date = new Date(raw);
-    const year = date.getUTCFullYear();
-    if (Number.isNaN(date.getTime()) || year < 1900 || year > 2100) return null;
-    return date;
+    cardVariant?: UniversityCardVisualVariant;
 }
 
 function sortUniversities(items: UniversityItem[], mode: UniversityCardSort): UniversityItem[] {
@@ -54,25 +33,17 @@ function sortUniversities(items: UniversityItem[], mode: UniversityCardSort): Un
     }
     if (mode === 'exam_soon') {
         sorted.sort((a, b) => {
-            const getMinExam = (item: UniversityItem): number => {
-                const dates = [
-                    parseDate(item.scienceExamDate || item.examDateScience),
-                    parseDate(item.artsExamDate || item.examDateArts),
-                    parseDate(item.businessExamDate || item.examDateBusiness),
-                ].filter((d): d is Date => d !== null).map((d) => d.getTime());
-                return dates.length > 0 ? Math.min(...dates) : Number.POSITIVE_INFINITY;
-            };
-            const left = getMinExam(a);
-            const right = getMinExam(b);
+            const left = parseUniversityDate(pickNearestUniversityExamDate(a))?.getTime() ?? Number.POSITIVE_INFINITY;
+            const right = parseUniversityDate(pickNearestUniversityExamDate(b))?.getTime() ?? Number.POSITIVE_INFINITY;
             if (left !== right) return left - right;
             return String(a.name || '').localeCompare(String(b.name || ''));
         });
         return sorted;
     }
-    // nearest_deadline, closing_soon, or any other value → sort by applicationEnd ascending
+
     sorted.sort((a, b) => {
-        const leftDate = parseDate(a.applicationEnd || a.applicationEndDate)?.getTime() ?? Number.POSITIVE_INFINITY;
-        const rightDate = parseDate(b.applicationEnd || b.applicationEndDate)?.getTime() ?? Number.POSITIVE_INFINITY;
+        const leftDate = parseUniversityDate(a.applicationEnd || a.applicationEndDate)?.getTime() ?? Number.POSITIVE_INFINITY;
+        const rightDate = parseUniversityDate(b.applicationEnd || b.applicationEndDate)?.getTime() ?? Number.POSITIVE_INFINITY;
         if (leftDate !== rightDate) return leftDate - rightDate;
         return String(a.name || '').localeCompare(String(b.name || ''));
     });
@@ -107,6 +78,7 @@ export default function UniversityGrid({
     className = '',
     itemsPerPage = 25,
     sort,
+    cardVariant = 'modern',
 }: UniversityGridProps) {
     const [currentPage, setCurrentPage] = useState(1);
     const mergedConfig: HomeUniversityCardConfig = { ...DEFAULT_UNIVERSITY_CARD_CONFIG, ...(config || {}) };
@@ -137,7 +109,6 @@ export default function UniversityGrid({
         return sortedItems.slice(start, start + itemsPerPage);
     }, [sortedItems, currentPage, itemsPerPage]);
 
-    // Reset page when items change
     useEffect(() => {
         setCurrentPage(1);
     }, [items]);
@@ -153,7 +124,7 @@ export default function UniversityGrid({
 
     if (loading) {
         return (
-            <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ${className}`}>
+            <div className={`grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 ${className}`}>
                 {Array.from({ length: skeletonCount }).map((_, index) => <UniversityCardSkeleton key={index} />)}
             </div>
         );
@@ -161,7 +132,7 @@ export default function UniversityGrid({
 
     if (!sortedItems.length) {
         return (
-            <div className="flex flex-col items-center justify-center py-12 text-center card-flat bg-white/50 dark:bg-slate-900/50">
+            <div className="card-flat flex flex-col items-center justify-center bg-white/50 py-12 text-center dark:bg-slate-900/50">
                 <p className="text-lg font-medium text-slate-900 dark:text-white">{emptyText}</p>
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Try adjusting your filters or search terms.</p>
             </div>
@@ -175,7 +146,7 @@ export default function UniversityGrid({
                 variants={getContainerVariants(animationLevel)}
                 initial="hidden"
                 animate="show"
-                className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ${className}`}
+                className={`grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 ${className}`}
                 data-testid="university-placeholder-grid"
                 data-grid="university-card-grid"
             >
@@ -186,6 +157,7 @@ export default function UniversityGrid({
                             university={item}
                             config={mergedConfig}
                             animationLevel={animationLevel}
+                            cardVariant={cardVariant}
                         />
                     ))}
                 </AnimatePresence>
@@ -220,8 +192,8 @@ export default function UniversityGrid({
                                         key={pageNum}
                                         onClick={() => handlePageChange(pageNum)}
                                         className={`flex h-10 w-10 items-center justify-center rounded-xl text-sm font-bold transition-all ${currentPage === pageNum
-                                                ? 'bg-primary text-white shadow-lg shadow-primary/20 scale-110'
-                                                : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
+                                            ? 'scale-110 bg-primary text-white shadow-lg shadow-primary/20'
+                                            : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
                                             }`}
                                     >
                                         {pageNum}

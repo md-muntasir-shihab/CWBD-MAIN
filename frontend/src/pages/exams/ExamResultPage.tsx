@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Award, CheckCircle2, Clock3, Download, SkipForward, Trophy, XCircle } from "lucide-react";
-import { examPdfUrls } from "../../api/examApi";
+import { downloadPdfEndpoint, examPdfUrls } from "../../api/examApi";
 import { useExamResult, useExamSolutions, usePdfAvailability } from "../../hooks/useExamQueries";
 
 const lastSessionKey = (examId: string) => `cw_exam_last_session_${examId}`;
@@ -236,22 +236,49 @@ export const ExamResultPage = () => {
                             View Solutions
                         </Link>
                         {questionsPdfQuery.data ? (
-                            <a href={examPdfUrls.questions(examId)} className="btn-secondary">
+                            <button
+                                type="button"
+                                className="btn-secondary"
+                                onClick={() => {
+                                    void downloadPdfEndpoint(
+                                        examPdfUrls.questions(examId),
+                                        `exam-${examId}-questions.pdf`,
+                                    );
+                                }}
+                            >
                                 <Download className="mr-1.5 h-4 w-4" />
                                 Questions PDF
-                            </a>
+                            </button>
                         ) : null}
                         {solutionsPdfQuery.data ? (
-                            <a href={examPdfUrls.solutions(examId)} className="btn-secondary">
+                            <button
+                                type="button"
+                                className="btn-secondary"
+                                onClick={() => {
+                                    void downloadPdfEndpoint(
+                                        examPdfUrls.solutions(examId),
+                                        `exam-${examId}-solutions.pdf`,
+                                    );
+                                }}
+                            >
                                 <Download className="mr-1.5 h-4 w-4" />
                                 Solutions PDF
-                            </a>
+                            </button>
                         ) : null}
                         {answersPdfQuery.data ? (
-                            <a href={examPdfUrls.answers(examId, sessionId)} className="btn-secondary">
+                            <button
+                                type="button"
+                                className="btn-secondary"
+                                onClick={() => {
+                                    void downloadPdfEndpoint(
+                                        examPdfUrls.answers(examId, sessionId),
+                                        `exam-${examId}-answers.pdf`,
+                                    );
+                                }}
+                            >
                                 <Download className="mr-1.5 h-4 w-4" />
                                 My Answers PDF
-                            </a>
+                            </button>
                         ) : null}
                     </div>
                     {!solutionsReady ? (

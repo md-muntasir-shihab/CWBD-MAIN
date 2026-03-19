@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { ArrowRight, type LucideIcon } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 interface SectionHeaderProps {
   title: string;
@@ -17,31 +18,41 @@ export default function SectionHeader({
   icon: Icon,
 }: SectionHeaderProps) {
   return (
-    <div className="flex items-end justify-between gap-4 mb-5 md:mb-6">
+    <div className="flex items-end justify-between gap-4 mb-6 md:mb-8">
       <div className="min-w-0">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-3">
           {Icon && (
-            <div className="p-1.5 rounded-lg bg-primary-50 dark:bg-primary-900/30">
-              <Icon className="w-4.5 h-4.5 text-primary-600 dark:text-primary-400" />
-            </div>
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              whileInView={{ scale: 1, opacity: 1 }}
+              viewport={{ once: true }}
+              className="relative p-2.5 rounded-xl bg-gradient-to-br from-[var(--primary)]/15 to-purple-500/10 dark:from-[var(--primary)]/25 dark:to-purple-500/15 ring-1 ring-[var(--primary)]/10 dark:ring-[var(--primary)]/20"
+            >
+              <Icon className="w-5 h-5 text-[var(--primary)] dark:text-[var(--primary)]" />
+              <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-[var(--primary)]/5 to-transparent blur-sm" />
+            </motion.div>
           )}
-          <h2 className="text-lg sm:text-xl md:text-2xl font-bold font-heading text-gray-900 dark:text-white leading-tight tracking-tight">
-            {title}
-          </h2>
+          <div>
+            <h2 className="text-lg sm:text-xl md:text-2xl font-bold font-heading text-gray-900 dark:text-white leading-tight tracking-tight">
+              {title}
+            </h2>
+            {subtitle && (
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                {subtitle}
+              </p>
+            )}
+          </div>
         </div>
-        {subtitle && (
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 ml-0 md:ml-0">
-            {subtitle}
-          </p>
-        )}
+        {/* Accent gradient line */}
+        <div className="mt-3 h-[2px] w-16 rounded-full bg-gradient-to-r from-[var(--primary)] via-purple-500 to-transparent opacity-60" />
       </div>
       {viewAllHref && (
         <Link
           to={viewAllHref}
-          className="shrink-0 inline-flex items-center gap-1 text-sm font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors group"
+          className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-[var(--primary)] dark:text-[var(--primary)] bg-[var(--primary)]/5 dark:bg-[var(--primary)]/10 hover:bg-[var(--primary)]/10 dark:hover:bg-[var(--primary)]/20 border border-[var(--primary)]/10 dark:border-[var(--primary)]/20 transition-all duration-300 group hover:shadow-sm"
         >
           {viewAllLabel}
-          <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+          <ArrowRight className="w-3.5 h-3.5 transition-transform duration-300 group-hover:translate-x-1" />
         </Link>
       )}
     </div>

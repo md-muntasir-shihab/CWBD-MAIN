@@ -4,6 +4,7 @@ import { Upload, RefreshCw, CheckCircle, AlertCircle, Download } from 'lucide-re
 import { useImportPreview, useImportCommit } from '../../../hooks/useQuestionBankV2Queries';
 import { downloadImportTemplate } from '../../../api/adminQuestionBankApi';
 import type { ImportPreviewResponse } from '../../../types/questionBank';
+import { downloadFile } from '../../../utils/download';
 
 export default function QuestionBankImportPanel() {
     const fileRef = useRef<HTMLInputElement>(null);
@@ -48,12 +49,7 @@ export default function QuestionBankImportPanel() {
                     onClick={async () => {
                         try {
                             const blob = await downloadImportTemplate();
-                            const url = URL.createObjectURL(blob as Blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = 'question_import_template.xlsx';
-                            a.click();
-                            URL.revokeObjectURL(url);
+                            downloadFile(blob as Blob, { filename: 'question_import_template.xlsx' });
                             toast.success('Template downloaded');
                         } catch { toast.error('Download failed'); }
                     }}

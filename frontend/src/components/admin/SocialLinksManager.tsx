@@ -275,8 +275,8 @@ export default function SocialLinksManager() {
             </div>
 
             <div className="mt-5 space-y-2">
-                {(listQuery.data || []).map((item: PublicSocialLinkItem) => (
-                    <article key={item.id} className="rounded-xl border border-indigo-500/10 bg-slate-950/50 p-3">
+                {(listQuery.data || []).map((item: PublicSocialLinkItem, index) => (
+                    <article key={item.id || `${item.platformName}-${item.targetUrl}-${index}`} className="rounded-xl border border-indigo-500/10 bg-slate-950/50 p-3">
                         <div className="flex flex-wrap items-start justify-between gap-2">
                             <div className="min-w-0">
                                 <div className="flex items-center gap-2">

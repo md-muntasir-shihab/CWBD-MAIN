@@ -19,6 +19,7 @@ import {
     adminUpdateUserRole,
     getAdminUsersStreamUrl,
 } from '../../services/api';
+import { downloadFile } from '../../utils/download';
 
 type Scope = 'all' | 'students' | 'admins';
 type PermissionState = {
@@ -282,7 +283,7 @@ export default function UsersPanel() {
                     <label className="px-3 py-2 bg-white/5 rounded-xl text-white text-sm flex items-center gap-1 cursor-pointer"><Upload className="w-4 h-4" /> Import
                         <input type="file" className="hidden" accept=".csv,.xlsx,.xls" onChange={(e) => { const f = e.target.files?.[0]; if (f) void importFile(f); e.target.value = ''; }} />
                     </label>
-                    <button onClick={async () => { const res = await adminExportStudents(); exportCsv('students.csv', res.data || []); }} className="px-3 py-2 bg-white/5 rounded-xl text-white text-sm flex items-center gap-1"><Download className="w-4 h-4" /> Export</button>
+                    <button onClick={async () => { const res = await adminExportStudents({ format: 'csv' }); downloadFile(res, { filename: 'students.csv' }); }} className="px-3 py-2 bg-white/5 rounded-xl text-white text-sm flex items-center gap-1"><Download className="w-4 h-4" /> Export</button>
                     <button onClick={() => void fetchUsers()} className="px-3 py-2 bg-white/5 rounded-xl text-white text-sm"><RefreshCw className="w-4 h-4" /></button>
                 </div>
             </div>

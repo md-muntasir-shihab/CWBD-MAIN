@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Eye, GripVertical, ImageUp, RefreshCw, RotateCcw, Save } from 'lucide-react';
+import { AlertTriangle, Eye, GripVertical, ImageUp, RefreshCw, RotateCcw, Save } from 'lucide-react';
 import {
     adminGetHomeSettings,
     adminGetHomeSettingsDefaults,
+    adminGetUniversityClusters,
     adminGetSubscriptionPlans,
     adminGetUniversities,
     adminGetUniversityCategories,
+    adminUpdateUniversityCluster,
     adminUploadNewsMedia,
     adminGetHomeConfig,
     adminResetHomeSettingsSection,
@@ -15,6 +17,7 @@ import {
     adminUpdateHomeSettings,
     getHome,
     type HomeConfigSection,
+    type AdminUniversityCluster,
     type AdminSubscriptionPlan,
     type HomeApiResponse,
     type HomeSettingsConfig,
@@ -22,6 +25,7 @@ import {
 import { invalidateQueryGroup, invalidationGroups, queryKeys } from '../../lib/queryKeys';
 
 type SectionKey = keyof HomeSettingsConfig;
+type QuickClusterState = Pick<AdminUniversityCluster, '_id' | 'name' | 'homeVisible' | 'homeOrder'> & { memberCount: number };
 
 const sectionHelp: Record<SectionKey, string> = {
     sectionVisibility: 'Show or hide each Home section in strict order.',
@@ -52,7 +56,7 @@ const visibilityToggles: Array<{ key: keyof HomeSettingsConfig['sectionVisibilit
     { key: 'hero', label: 'Hero' },
     { key: 'subscriptionBanner', label: 'Subscription Banner' },
     { key: 'stats', label: 'Stats Strip' },
-    { key: 'timeline', label: 'What’s Happening Now' },
+    { key: 'timeline', label: "What's Happening Now" },
     { key: 'universityDashboard', label: 'University Dashboard' },
     { key: 'closingExamWidget', label: 'Closing + Week Widget' },
     { key: 'examsWidget', label: 'Live/Upcoming Exams' },
@@ -226,7 +230,7 @@ const FALLBACK_HOME_SETTINGS: HomeSettingsConfig = {
 };
 
 function Tooltip({ text }: { text: string }) {
-    return <span className="text-[11px] text-slate-500 dark:text-slate-400" title={text}>ⓘ</span>;
+    return <span className="text-[11px] text-slate-500 dark:text-slate-400" title={text}>(i)</span>;
 }
 
 function SectionHeader({
@@ -547,6 +551,8 @@ export default function HomeSettingsPanel() {
     const [resettingSection, setResettingSection] = useState<string>('');
     const [categoryToAdd, setCategoryToAdd] = useState('');
     const [featuredUniversityToAdd, setFeaturedUniversityToAdd] = useState('');
+    const [quickClusters, setQuickClusters] = useState<QuickClusterState[]>([]);
+    const [savingQuickClusters, setSavingQuickClusters] = useState(false);
 
     const defaultsQuery = useQuery<HomeSettingsConfig>({
         queryKey: ['home-settings-defaults'],
@@ -583,6 +589,19 @@ export default function HomeSettingsPanel() {
         queryKey: ['home-settings-university-options'],
         queryFn: async () => (await adminGetUniversities({ page: 1, limit: 1000, status: 'all', sortBy: 'name', sortOrder: 'asc' })).data.universities || [],
     });
+    const homeConfigQuery = useQuery({
+        queryKey: ['home-settings-featured-config'],
+        queryFn: async () => (await adminGetHomeConfig()).data,
+    });
+    const clusterQuickQuery = useQuery({
+        queryKey: ['home-settings-featured-clusters'],
+        queryFn: async () => (await adminGetUniversityClusters({ status: 'active' })).data.clusters || [],
+    });
+    const homeDiagnosticsQuery = useQuery<HomeApiResponse>({
+        queryKey: ['home-settings-diagnostics'],
+        queryFn: async () => (await getHome()).data,
+        staleTime: 15_000,
+    });
     const subscriptionPlansQuery = useQuery({
         queryKey: ['home-settings-subscription-plans'],
         queryFn: async () => (await adminGetSubscriptionPlans()).data.items || [],
@@ -595,6 +614,26 @@ export default function HomeSettingsPanel() {
         staleTime: 0,
         refetchOnWindowFocus: false,
     });
+
+    useEffect(() => {
+        const source = Array.isArray(clusterQuickQuery.data) ? clusterQuickQuery.data : [];
+        setQuickClusters(
+            source
+                .map((item) => ({
+                    _id: String(item._id || ''),
+                    name: String(item.name || '').trim(),
+                    homeVisible: Boolean(item.homeVisible),
+                    homeOrder: Number(item.homeOrder || 0),
+                    memberCount: Number(item.memberCount || 0),
+                }))
+                .filter((item) => item._id && item.name)
+                .sort((a, b) => {
+                    if (a.homeVisible !== b.homeVisible) return a.homeVisible ? -1 : 1;
+                    if (a.homeOrder !== b.homeOrder) return a.homeOrder - b.homeOrder;
+                    return a.name.localeCompare(b.name);
+                }),
+        );
+    }, [clusterQuickQuery.data]);
 
     const saveMutation = useMutation({
         mutationFn: async (payload: HomeSettingsConfig) => (await adminUpdateHomeSettings(payload)).data,
@@ -685,10 +724,115 @@ export default function HomeSettingsPanel() {
         return plans
             .map((plan: AdminSubscriptionPlan) => ({
                 id: String(plan._id || ''),
-                label: `${plan.name} (${plan.type === 'free' ? 'Free' : `৳${Number(plan.priceBDT ?? plan.price ?? 0)}`})`,
+                label: `${plan.name} (${plan.type === 'free' ? 'Free' : `BDT ${Number(plan.priceBDT ?? plan.price ?? 0)}`})`,
             }))
             .filter((item) => Boolean(item.id));
     }, [subscriptionPlansQuery.data]);
+
+    const featuredSectionEnabled = useMemo(() => {
+        const sections = homeConfigQuery.data?.sections || [];
+        const featured = sections.find((item) => String(item.id || '').toLowerCase() === 'featured');
+        return featured?.isActive !== false;
+    }, [homeConfigQuery.data?.sections]);
+
+    const defaultCategory = useMemo(() => {
+        return String(
+            homeDiagnosticsQuery.data?.uniSettings?.defaultCategory
+            || homeDiagnosticsQuery.data?.universityDashboardData?.filtersMeta?.defaultCategory
+            || draft?.universityDashboard?.defaultCategory
+            || '',
+        ).trim();
+    }, [homeDiagnosticsQuery.data?.uniSettings?.defaultCategory, homeDiagnosticsQuery.data?.universityDashboardData?.filtersMeta?.defaultCategory, draft?.universityDashboard?.defaultCategory]);
+
+    const visibleHomeClusters = useMemo(
+        () => quickClusters.filter((cluster) => cluster.homeVisible && cluster.memberCount > 0),
+        [quickClusters],
+    );
+
+    const hiddenByDefaultCategoryClusters = useMemo(() => {
+        if (!defaultCategory || defaultCategory.toLowerCase() === 'all') return [];
+        const categories = homeDiagnosticsQuery.data?.universityCategories || [];
+        const defaultCategoryMeta = categories.find(
+            (item) => String(item.categoryName || '').trim().toLowerCase() === defaultCategory.toLowerCase(),
+        );
+        const allowedClusterSet = new Set((defaultCategoryMeta?.clusterGroups || []).map((name) => String(name || '').trim().toLowerCase()));
+        if (allowedClusterSet.size === 0) return visibleHomeClusters.map((cluster) => cluster.name);
+        return visibleHomeClusters
+            .map((cluster) => cluster.name)
+            .filter((name) => !allowedClusterSet.has(name.toLowerCase()));
+    }, [defaultCategory, homeDiagnosticsQuery.data?.universityCategories, visibleHomeClusters]);
+
+    const homeDiagnostics = useMemo(() => {
+        const messages: string[] = [];
+        if (!featuredSectionEnabled) {
+            messages.push('Featured section is OFF in Home Section Order. Turn ON "Featured Universities" to show cards on Home.');
+        }
+        if (featuredSectionEnabled && visibleHomeClusters.length === 0) {
+            messages.push('No Featured Cluster card can render now. Ensure at least one active cluster has Home Visible ON and has members.');
+        }
+        if (featuredSectionEnabled && hiddenByDefaultCategoryClusters.length > 0 && defaultCategory && defaultCategory.toLowerCase() !== 'all') {
+            messages.push(`Default category "${defaultCategory}" currently hides ${hiddenByDefaultCategoryClusters.length} home-visible cluster(s): ${hiddenByDefaultCategoryClusters.join(', ')}`);
+        }
+        return messages;
+    }, [defaultCategory, featuredSectionEnabled, hiddenByDefaultCategoryClusters, visibleHomeClusters.length]);
+
+    const hasQuickClusterChanges = useMemo(() => {
+        const source = Array.isArray(clusterQuickQuery.data) ? clusterQuickQuery.data : [];
+        const sourceMap = new Map(source.map((item) => [String(item._id || ''), item]));
+        return quickClusters.some((cluster) => {
+            const original = sourceMap.get(cluster._id);
+            if (!original) return false;
+            return Boolean(original.homeVisible) !== cluster.homeVisible
+                || Number(original.homeOrder || 0) !== Number(cluster.homeOrder || 0);
+        });
+    }, [clusterQuickQuery.data, quickClusters]);
+
+    const updateQuickCluster = (clusterId: string, patch: Partial<QuickClusterState>) => {
+        setQuickClusters((prev) => prev.map((cluster) => (
+            cluster._id === clusterId
+                ? {
+                    ...cluster,
+                    ...patch,
+                    homeOrder: Number(patch.homeOrder ?? cluster.homeOrder ?? 0),
+                }
+                : cluster
+        )));
+    };
+
+    const saveQuickClusters = async () => {
+        if (!hasQuickClusterChanges) {
+            toast.success('No cluster changes to save');
+            return;
+        }
+        setSavingQuickClusters(true);
+        try {
+            const source = Array.isArray(clusterQuickQuery.data) ? clusterQuickQuery.data : [];
+            const sourceMap = new Map(source.map((item) => [String(item._id || ''), item]));
+            const updates = quickClusters.filter((cluster) => {
+                const original = sourceMap.get(cluster._id);
+                if (!original) return false;
+                return Boolean(original.homeVisible) !== cluster.homeVisible
+                    || Number(original.homeOrder || 0) !== Number(cluster.homeOrder || 0);
+            });
+            await Promise.all(
+                updates.map((cluster) => adminUpdateUniversityCluster(cluster._id, {
+                    homeVisible: cluster.homeVisible,
+                    homeOrder: Number(cluster.homeOrder || 0),
+                })),
+            );
+            await Promise.all([
+                clusterQuickQuery.refetch(),
+                homeDiagnosticsQuery.refetch(),
+                previewQuery.refetch(),
+                queryClient.invalidateQueries({ queryKey: ['home'] }),
+            ]);
+            toast.success('Featured cluster switches saved');
+        } catch {
+            toast.error('Failed to save featured cluster switches');
+        } finally {
+            setSavingQuickClusters(false);
+        }
+    };
 
     const addHighlightedCategory = () => {
         const next = categoryToAdd.trim();
@@ -811,6 +955,70 @@ export default function HomeSettingsPanel() {
                 </div>
 
                 <SectionReorderPanel />
+
+                <section className="bg-slate-900/60 rounded-2xl border border-indigo-500/10 p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <h3 className="text-sm font-bold text-white">Featured Clusters Quick Switch</h3>
+                            <p className="text-xs text-slate-400 mt-1">Single Featured section toggle stays in Home Section Order. Use this list to quickly show/hide clusters on Home and set order.</p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => void saveQuickClusters()}
+                            disabled={savingQuickClusters || !hasQuickClusterChanges}
+                            className="rounded-xl border border-cyan-500/30 px-3 py-2 text-sm text-cyan-200 hover:bg-cyan-500/10 disabled:opacity-50"
+                        >
+                            {savingQuickClusters ? <span className="inline-flex items-center gap-2"><RefreshCw className="w-4 h-4 animate-spin" />Saving...</span> : 'Save Cluster Switches'}
+                        </button>
+                    </div>
+
+                    {homeDiagnostics.length > 0 && (
+                        <div className="mt-4 space-y-2 rounded-xl border border-amber-500/25 bg-amber-500/10 p-3">
+                            {homeDiagnostics.map((message, index) => (
+                                <div key={`${message}-${index}`} className="flex items-start gap-2 text-xs text-amber-100">
+                                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+                                    <span>{message}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    <div className="mt-4 space-y-2">
+                        {clusterQuickQuery.isLoading && (
+                            <div className="flex justify-center py-5">
+                                <RefreshCw className="w-4 h-4 text-indigo-400 animate-spin" />
+                            </div>
+                        )}
+                        {!clusterQuickQuery.isLoading && quickClusters.length === 0 && (
+                            <p className="text-xs text-slate-500">No active clusters found.</p>
+                        )}
+                        {quickClusters.map((cluster) => (
+                            <div key={cluster._id} className="rounded-xl border border-indigo-500/15 bg-slate-950/55 p-3">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <p className="text-sm font-medium text-white">{cluster.name}</p>
+                                    <span className="rounded-full border border-indigo-500/25 px-2 py-0.5 text-[10px] text-indigo-200">
+                                        {cluster.memberCount} members
+                                    </span>
+                                    <span className={`rounded-full border px-2 py-0.5 text-[10px] ${cluster.homeVisible ? 'border-emerald-500/30 text-emerald-200' : 'border-slate-600 text-slate-400'}`}>
+                                        {cluster.homeVisible ? 'Visible on Home' : 'Hidden on Home'}
+                                    </span>
+                                </div>
+                                <div className="mt-3 grid grid-cols-1 md:grid-cols-[auto,140px] gap-3">
+                                    <Toggle
+                                        label="Home Visible"
+                                        value={cluster.homeVisible}
+                                        onChange={(value) => updateQuickCluster(cluster._id, { homeVisible: value })}
+                                    />
+                                    <NumberInput
+                                        label="Home Order"
+                                        value={cluster.homeOrder}
+                                        onChange={(value) => updateQuickCluster(cluster._id, { homeOrder: value })}
+                                    />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </section>
 
                 <section className="bg-slate-900/60 rounded-2xl border border-indigo-500/10 p-5">
                     <SectionHeader title="Section Visibility" section="sectionVisibility" onReset={resetSection} resetting={resettingSection === 'sectionVisibility'} />

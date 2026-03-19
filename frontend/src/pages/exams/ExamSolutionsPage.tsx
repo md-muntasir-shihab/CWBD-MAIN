@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { CheckCircle2, Clock3, Download, Flag, SkipForward, XCircle } from "lucide-react";
-import { examPdfUrls } from "../../api/examApi";
+import { downloadPdfEndpoint, examPdfUrls } from "../../api/examApi";
 import { useExamSolutions, usePdfAvailability } from "../../hooks/useExamQueries";
 import type { OptionKey, RunnerCache } from "../../types/exam";
 
@@ -197,10 +197,19 @@ export const ExamSolutionsPage = () => {
                     </button>
                 ))}
                 {solutionsPdfQuery.data ? (
-                    <a href={examPdfUrls.solutions(examId)} className="btn-secondary ml-auto">
+                    <button
+                        type="button"
+                        className="btn-secondary ml-auto"
+                        onClick={() => {
+                            void downloadPdfEndpoint(
+                                examPdfUrls.solutions(examId),
+                                `exam-${examId}-solutions.pdf`,
+                            );
+                        }}
+                    >
                         <Download className="mr-1.5 h-4 w-4" />
                         Solutions PDF
-                    </a>
+                    </button>
                 ) : null}
             </div>
 

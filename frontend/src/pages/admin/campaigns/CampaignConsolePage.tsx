@@ -1,6 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import AdminGuardShell from '../../../components/admin/AdminGuardShell';
+import { ADMIN_PATHS } from '../../../routes/adminPaths';
 import {
   listCampaigns, getCampaign, previewCampaign, sendCampaign, retryCampaign,
   getDeliveryLogs, listTemplates, createTemplate, updateTemplate,
@@ -12,8 +14,26 @@ import { getStudentGroups } from '../../../api/adminStudentApi';
 
 type Tab = 'dashboard' | 'campaigns' | 'new' | 'templates' | 'logs' | 'settings';
 
+const CAMPAIGN_TAB_TO_PATH: Record<Tab, string> = {
+  dashboard: ADMIN_PATHS.campaignsDashboard,
+  campaigns: ADMIN_PATHS.campaignsList,
+  new: ADMIN_PATHS.campaignsNew,
+  templates: ADMIN_PATHS.campaignsTemplates,
+  logs: ADMIN_PATHS.campaignsLogs,
+  settings: ADMIN_PATHS.campaignsSettings,
+};
+
+function getTabFromPath(pathname: string): Tab {
+  const normalized = String(pathname || '').trim();
+  const match = (Object.entries(CAMPAIGN_TAB_TO_PATH) as Array<[Tab, string]>)
+    .find(([, path]) => normalized === path);
+  return match?.[0] ?? 'dashboard';
+}
+
 export default function CampaignConsolePage() {
-  const [tab, setTab] = useState<Tab>('dashboard');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const tab = getTabFromPath(location.pathname);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' }>({ show: false, message: '', type: 'success' });
   const qc = useQueryClient();
@@ -32,8 +52,20 @@ export default function CampaignConsolePage() {
     { key: 'settings', label: 'Settings' },
   ];
 
+  const navigateToTab = (nextTab: Tab) => {
+    if (nextTab !== 'campaigns') setSelectedCampaignId(null);
+    const nextPath = CAMPAIGN_TAB_TO_PATH[nextTab];
+    if (location.pathname !== nextPath) {
+      navigate(nextPath);
+    }
+  };
+
   return (
-    <AdminGuardShell title="Campaign Platform" description="Send targeted SMS & email campaigns, manage templates, view delivery logs.">
+    <AdminGuardShell
+      title="Campaign Platform"
+      description="Send targeted SMS & email campaigns, manage templates, view delivery logs."
+      requiredModule="notifications"
+    >
       {toast.show && (
         <div className={`fixed top-4 right-4 z-50 rounded-xl px-4 py-3 text-sm font-medium text-white shadow-lg ${toast.type === 'success' ? 'bg-emerald-600' : 'bg-red-600'}`}>
           {toast.message}
@@ -43,16 +75,16 @@ export default function CampaignConsolePage() {
         {TABS.map(t => (
           <button
             key={t.key}
-            onClick={() => { setTab(t.key); if (t.key !== 'campaigns') setSelectedCampaignId(null); }}
+            onClick={() => navigateToTab(t.key)}
             className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${tab === t.key ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`}
           >
             {t.label}
           </button>
         ))}
       </div>
-      {tab === 'dashboard' && <DashboardPanel onNavigate={setTab} />}
+      {tab === 'dashboard' && <DashboardPanel onNavigate={navigateToTab} />}
       {tab === 'campaigns' && <CampaignsListPanel onView={id => { setSelectedCampaignId(id); }} onRetry={id => retryCampaign(id).then(() => { showToast('Retry initiated'); qc.invalidateQueries({ queryKey: ['campaigns'] }); }).catch(() => showToast('Retry failed', 'error'))} />}
-      {tab === 'new' && <NewCampaignPanel showToast={showToast} onSent={() => { setTab('campaigns'); qc.invalidateQueries({ queryKey: ['campaigns'] }); }} />}
+      {tab === 'new' && <NewCampaignPanel showToast={showToast} onSent={() => { navigateToTab('campaigns'); qc.invalidateQueries({ queryKey: ['campaigns'] }); }} />}
       {tab === 'templates' && <TemplatesPanel showToast={showToast} />}
       {tab === 'logs' && <LogsPanel />}
       {tab === 'settings' && <SettingsPanel showToast={showToast} />}

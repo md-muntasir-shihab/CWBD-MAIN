@@ -4,6 +4,7 @@ import ExamSession from '../models/ExamSession';
 import ExamResult from '../models/ExamResult';
 import Question from '../models/Question';
 import StudentProfile from '../models/StudentProfile';
+import { syncExamResultToStudentProfile } from './examProfileSyncEngine';
 
 type NormalizedIncomingAnswer = {
     questionId: string;
@@ -561,6 +562,14 @@ export async function finalizeExamSession(input: FinalizeExamSessionInput): Prom
 
     await updateExamAnalytics(examId);
     await updateStudentPoints(studentId);
+    await syncExamResultToStudentProfile({
+        exam: exam.toObject() as unknown as Record<string, unknown>,
+        result: resultDoc.toObject() as unknown as Record<string, unknown>,
+        studentId,
+        source: 'internal_result',
+        syncMode: 'overwrite_mapped_fields',
+        notifyStudent: true,
+    });
 
     return {
         ok: true,

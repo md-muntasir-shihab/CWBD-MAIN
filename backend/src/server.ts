@@ -10,6 +10,7 @@ import path from 'path';
 import mongoose from 'mongoose';
 import mongoSanitize from 'express-mongo-sanitize';
 import { connectDB } from './config/db';
+import { authenticate, requirePermission } from './middlewares/auth';
 import publicRoutes from './routes/publicRoutes';
 import adminRoutes from './routes/adminRoutes';
 import studentRoutes from './routes/studentRoutes';
@@ -27,11 +28,20 @@ import { startSubscriptionExpiryCron } from './cron/subscriptionExpiryCron';
 import adminStudentMgmtRoutes from './routes/adminStudentMgmtRoutes';
 import adminNotificationRoutes from './routes/adminNotificationRoutes';
 import adminStudentSecurityRoutes from './routes/adminStudentSecurityRoutes';
-import { enforceSiteAccess } from './middlewares/securityGuards';
+import {
+    enforceAdminPanelPolicy,
+    enforceAdminReadOnlyMode,
+    enforceSiteAccess,
+} from './middlewares/securityGuards';
 import { sanitizeRequestPayload } from './middlewares/requestSanitizer';
 import { adminRateLimiter } from './middlewares/securityRateLimit';
 import { requestIdMiddleware } from './middlewares/requestId';
 import { logger } from './utils/logger';
+import { runCommunicationCenterMigration } from './scripts/migrate-communication-center-v1';
+import {
+    type PermissionAction,
+    type PermissionModule,
+} from './security/permissionsMatrix';
 
 dotenv.config();
 
@@ -113,6 +123,94 @@ function isLoopbackOrigin(origin: string): boolean {
         return false;
     }
 }
+
+function inferStandaloneAdminModule(pathname: string): PermissionModule | null {
+    const clean = String(pathname || '').trim().toLowerCase();
+    if (!clean || clean === '/health' || clean.startsWith('/openapi')) return null;
+    if (
+        clean.endsWith('/security') ||
+        clean.includes('/set-password') ||
+        clean.includes('/force-reset') ||
+        clean.includes('/revoke-sessions') ||
+        clean.includes('/resend-account-info')
+    ) {
+        return 'security_logs';
+    }
+    if (
+        clean.startsWith('/students-v2') ||
+        clean.startsWith('/students/create-with-password') ||
+        clean.startsWith('/students/') ||
+        clean.startsWith('/student-groups') ||
+        clean.startsWith('/student-contact-timeline') ||
+        clean.startsWith('/student-settings') ||
+        clean.startsWith('/audience-segments') ||
+        clean.startsWith('/import-export-logs')
+    ) {
+        return 'students_groups';
+    }
+    if (clean.startsWith('/subscriptions-v2') || clean.startsWith('/subscription-plans') || clean.startsWith('/subscriptions')) {
+        return 'subscription_plans';
+    }
+    if (
+        clean.startsWith('/payments') ||
+        clean.startsWith('/finance') ||
+        clean.startsWith('/expenses') ||
+        clean.startsWith('/staff-payouts') ||
+        clean.startsWith('/dues') ||
+        clean.includes('/payments') ||
+        clean.includes('/finance')
+    ) {
+        return 'payments';
+    }
+    if (clean.startsWith('/support-tickets') || clean.startsWith('/contact-messages') || clean.startsWith('/notices')) {
+        return 'support_center';
+    }
+    if (
+        clean.startsWith('/notifications') ||
+        clean.startsWith('/notifications-v2') ||
+        clean.startsWith('/notification-providers') ||
+        clean.startsWith('/notification-templates') ||
+        clean.startsWith('/data-hub')
+    ) {
+        return 'notifications';
+    }
+    return null;
+}
+
+function inferStandaloneAdminAction(method: string, pathname: string): PermissionAction {
+    const cleanPath = String(pathname || '').toLowerCase();
+    const upperMethod = String(method || '').toUpperCase();
+    if (cleanPath.includes('bulk')) return 'bulk';
+    if (cleanPath.includes('/export')) return 'export';
+    if (cleanPath.includes('publish')) return 'publish';
+    if (cleanPath.includes('approve') || cleanPath.includes('reject')) return 'approve';
+    if (upperMethod === 'GET' || upperMethod === 'HEAD' || upperMethod === 'OPTIONS') return 'view';
+    if (upperMethod === 'POST') return 'create';
+    if (upperMethod === 'DELETE') return 'delete';
+    return 'edit';
+}
+
+const enforceStandaloneAdminModulePermissions = (
+    req: express.Request,
+    res: express.Response,
+    next: express.NextFunction,
+) => {
+    const moduleName = inferStandaloneAdminModule(req.path);
+    if (!moduleName) {
+        next();
+        return;
+    }
+
+    const action = inferStandaloneAdminAction(req.method, req.path);
+    return requirePermission(moduleName, action)(req as any, res, next);
+};
+
+const standaloneAdminApiHardening = [
+    authenticate,
+    enforceAdminPanelPolicy,
+    enforceAdminReadOnlyMode,
+    enforceStandaloneAdminModulePermissions,
+];
 
 // =============
 // Middleware
@@ -206,9 +304,9 @@ app.use('/api', publicRoutes);
 app.use(`/api/${ADMIN_SECRET_PATH}`, adminRateLimiter);
 app.use(`/api/${ADMIN_SECRET_PATH}`, adminRoutes);
 app.use('/api/admin', adminRateLimiter);
-app.use('/api/admin', adminStudentMgmtRoutes);
-app.use('/api/admin', adminNotificationRoutes);
-app.use('/api/admin', adminStudentSecurityRoutes);
+app.use('/api/admin', standaloneAdminApiHardening, adminStudentMgmtRoutes);
+app.use('/api/admin', standaloneAdminApiHardening, adminNotificationRoutes);
+app.use('/api/admin', standaloneAdminApiHardening, adminStudentSecurityRoutes);
 app.use('/api/admin', adminRoutes);
 
 // Student API
@@ -277,6 +375,8 @@ app.use((err: Error & { status?: number }, req: express.Request, res: express.Re
 async function start() {
     validateRequiredEnv();
     await connectDB();
+    const communicationMigrationResult = await runCommunicationCenterMigration();
+    console.log('[startup] communication migration completed', communicationMigrationResult);
 
     // First-boot setup (controlled by ALLOW_DEFAULT_SETUP env)
     await runDefaultSetup();
@@ -293,10 +393,22 @@ async function start() {
     // Seed default Chart-of-Account entries (idempotent)
     await seedDefaultChartOfAccounts();
 
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
         console.log(`🚀 CampusWay Backend running on port ${PORT}`);
         console.log(`📡 Public API: http://localhost:${PORT}/api`);
         console.log(`🔒 Admin API:  http://localhost:${PORT}/api/${ADMIN_SECRET_PATH}`);
+    });
+
+    server.on('error', (err: any) => {
+        if (err.code === 'EADDRINUSE') {
+            console.error(`❌ Port ${PORT} is already in use. Please:`);
+            console.error(`   1. Stop the other process using port ${PORT}, or`);
+            console.error(`   2. Set a different PORT in your .env file`);
+            process.exit(1);
+        } else {
+            console.error('❌ Server error:', err);
+            process.exit(1);
+        }
     });
 }
 

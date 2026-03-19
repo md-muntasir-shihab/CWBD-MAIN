@@ -4,6 +4,10 @@ export interface IExamResult extends Document {
     exam: mongoose.Types.ObjectId;
     student: mongoose.Types.ObjectId;
     attemptNo: number;
+    sourceType?: 'internal_submission' | 'external_import';
+    importJobId?: mongoose.Types.ObjectId | null;
+    syncStatus?: 'pending' | 'synced' | 'failed';
+    profileSyncLogId?: mongoose.Types.ObjectId | null;
     answers: {
         question: mongoose.Types.ObjectId;
         questionType: 'mcq' | 'written';
@@ -19,6 +23,17 @@ export interface IExamResult extends Document {
     unansweredCount: number;
     percentage: number;
     rank?: number;
+    serialId?: string;
+    rollNumber?: string;
+    registrationNumber?: string;
+    admitCardNumber?: string;
+    attendanceStatus?: string;
+    passFail?: string;
+    resultNote?: string;
+    profileUpdateNote?: string;
+    examCenterName?: string;
+    examCenterCode?: string;
+    subjectMarks?: Array<Record<string, unknown>>;
     pointsEarned: number;
     timeTaken: number; // seconds
     deviceInfo: string;
@@ -37,6 +52,10 @@ const ExamResultSchema = new Schema<IExamResult>({
     exam: { type: Schema.Types.ObjectId, ref: 'Exam', required: true },
     student: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     attemptNo: { type: Number, default: 1 },
+    sourceType: { type: String, enum: ['internal_submission', 'external_import'], default: 'internal_submission' },
+    importJobId: { type: Schema.Types.ObjectId, ref: 'ExamImportJob', default: null },
+    syncStatus: { type: String, enum: ['pending', 'synced', 'failed'], default: 'pending' },
+    profileSyncLogId: { type: Schema.Types.ObjectId, ref: 'ExamProfileSyncLog', default: null },
     answers: [{
         question: { type: Schema.Types.ObjectId, ref: 'Question' },
         questionType: { type: String, enum: ['mcq', 'written'], required: true, default: 'mcq' },
@@ -52,6 +71,17 @@ const ExamResultSchema = new Schema<IExamResult>({
     unansweredCount: { type: Number, default: 0 },
     percentage: { type: Number, default: 0 },
     rank: Number,
+    serialId: { type: String, default: '' },
+    rollNumber: { type: String, default: '' },
+    registrationNumber: { type: String, default: '' },
+    admitCardNumber: { type: String, default: '' },
+    attendanceStatus: { type: String, default: '' },
+    passFail: { type: String, default: '' },
+    resultNote: { type: String, default: '' },
+    profileUpdateNote: { type: String, default: '' },
+    examCenterName: { type: String, default: '' },
+    examCenterCode: { type: String, default: '' },
+    subjectMarks: { type: [Schema.Types.Mixed], default: [] } as any,
     pointsEarned: { type: Number, default: 0 },
     timeTaken: { type: Number, default: 0 },
     deviceInfo: String,
@@ -70,5 +100,6 @@ const ExamResultSchema = new Schema<IExamResult>({
 
 ExamResultSchema.index({ exam: 1, student: 1, attemptNo: 1 }, { unique: true });
 ExamResultSchema.index({ exam: 1, obtainedMarks: -1 });
+ExamResultSchema.index({ student: 1, submittedAt: -1 });
 
 export default mongoose.model<IExamResult>('ExamResult', ExamResultSchema);

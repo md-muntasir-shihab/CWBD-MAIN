@@ -34,6 +34,7 @@ import {
     type AdminQBankQuestion,
     type QBankSimilarityMatch,
 } from '../../services/api';
+import { downloadFile } from '../../utils/download';
 
 type LanguageMode = 'EN' | 'BN' | 'BOTH';
 
@@ -636,13 +637,7 @@ export default function QuestionBankPanel() {
                     status: filters.status,
                 },
             });
-            const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-            const url = URL.createObjectURL(blob);
-            const anchor = document.createElement('a');
-            anchor.href = url;
-            anchor.download = `qbank-export-${Date.now()}.xlsx`;
-            anchor.click();
-            URL.revokeObjectURL(url);
+            downloadFile(response, { filename: `qbank-export-${Date.now()}.xlsx` });
             toast.success('এক্সপোর্ট সম্পন্ন');
         } catch (error) {
             console.error(error);

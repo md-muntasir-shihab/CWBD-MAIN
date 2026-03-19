@@ -1,7 +1,7 @@
 /**
  * Mock data for the Universities module.
  * Activated when VITE_USE_MOCK_API=true.
- * Contains 4+ categories and 20 universities with a mix of N/A fields.
+ * Contains 4+ categories and 23 universities with a mix of N/A fields.
  */
 
 import type { UniversityCategorySummary } from '../services/api';
@@ -9,7 +9,7 @@ import type { UniversityCategorySummary } from '../services/api';
 /* ── Category summaries ── */
 export const mockUniversityCategories: UniversityCategorySummary[] = [
   { categoryName: 'Individual Admission', order: 1, count: 5, clusterGroups: [] },
-  { categoryName: 'Science & Technology', order: 2, count: 5, clusterGroups: ['Cluster A', 'Cluster B'] },
+  { categoryName: 'Science & Technology', order: 2, count: 8, clusterGroups: [] },
   { categoryName: 'GST (General/Public)', order: 3, count: 5, clusterGroups: [] },
   { categoryName: 'Medical College', order: 4, count: 5, clusterGroups: ['Government Medical', 'Private Medical'] },
 ];
@@ -139,26 +139,69 @@ export const mockUniversities: MockUniversity[] = [
   u(4, 'Individual Admission', 'Chittagong University', 'CU', { businessExamDate: '', examDateBusiness: '', seatsBusiness: 'N/A', businessSeats: 'N/A' }),
   u(5, 'Individual Admission', 'Khulna University', 'KhU', { applicationEnd: '', applicationEndDate: '' }),
 
-  // Science & Technology (5)
-  u(6, 'Science & Technology', 'BUET', 'BUET', { clusterGroup: 'Cluster A', establishedYear: 1962, established: 1962 }),
-  u(7, 'Science & Technology', 'CUET', 'CUET', { clusterGroup: 'Cluster A', artsExamDate: '', examDateArts: '', artsSeats: 'N/A', seatsArtsHum: 'N/A' }),
-  u(8, 'Science & Technology', 'RUET', 'RUET', { clusterGroup: 'Cluster B' }),
-  u(9, 'Science & Technology', 'KUET', 'KUET', { clusterGroup: 'Cluster B', contactNumber: null }),
-  u(10, 'Science & Technology', 'DUET', 'DUET', { clusterGroup: 'Cluster A', websiteUrl: null, website: '' }),
+  // Science & Technology (8)
+  u(6, 'Science & Technology', 'Bangladesh University of Engineering and Technology', 'BUET', {
+    establishedYear: 1962,
+    established: 1962,
+    address: 'Palashi, Dhaka',
+  }),
+  u(7, 'Science & Technology', 'Rajshahi University of Engineering & Technology', 'RUET', {
+    establishedYear: 1964,
+    established: 1964,
+    address: 'Kazla, Rajshahi',
+  }),
+  u(8, 'Science & Technology', 'Khulna University of Engineering & Technology', 'KUET', {
+    establishedYear: 1974,
+    established: 1974,
+    address: 'Fulbarigate, Khulna',
+    contactNumber: null,
+  }),
+  u(9, 'Science & Technology', 'Chittagong University of Engineering & Technology', 'CUET', {
+    establishedYear: 1968,
+    established: 1968,
+    address: 'Raozan, Chattogram',
+    artsExamDate: '',
+    examDateArts: '',
+    artsSeats: 'N/A',
+    seatsArtsHum: 'N/A',
+  }),
+  u(10, 'Science & Technology', 'Shahjalal University of Science and Technology', 'SUST', {
+    establishedYear: 1986,
+    established: 1986,
+    address: 'Kumargaon, Sylhet',
+  }),
+  u(11, 'Science & Technology', 'Dhaka University of Engineering & Technology', 'DUET', {
+    establishedYear: 1980,
+    established: 1980,
+    address: 'Gazipur',
+    websiteUrl: null,
+    website: '',
+  }),
+  u(12, 'Science & Technology', 'Islamic University of Technology', 'IUT', {
+    establishedYear: 1981,
+    established: 1981,
+    address: 'Board Bazar, Gazipur',
+  }),
+  u(13, 'Science & Technology', 'Hajee Mohammad Danesh Science & Technology University', 'HSTU', {
+    establishedYear: 1999,
+    established: 1999,
+    address: 'Dinajpur',
+    email: null,
+  }),
 
   // GST (General/Public) (5)
-  u(11, 'GST (General/Public)', 'National University', 'NU'),
-  u(12, 'GST (General/Public)', 'Bangladesh Open University', 'BOU', { shortDescription: '' }),
-  u(13, 'GST (General/Public)', 'Comilla University', 'CoU'),
-  u(14, 'GST (General/Public)', 'Jagannath University', 'JnU', { establishedYear: null, established: null }),
-  u(15, 'GST (General/Public)', 'Begum Rokeya University', 'BRUR'),
+  u(14, 'GST (General/Public)', 'National University', 'NU'),
+  u(15, 'GST (General/Public)', 'Bangladesh Open University', 'BOU', { shortDescription: '' }),
+  u(16, 'GST (General/Public)', 'Comilla University', 'CoU'),
+  u(17, 'GST (General/Public)', 'Jagannath University', 'JnU', { establishedYear: null, established: null }),
+  u(18, 'GST (General/Public)', 'Begum Rokeya University', 'BRUR'),
 
   // Medical College (5)
-  u(16, 'Medical College', 'Dhaka Medical College', 'DMC', { clusterGroup: 'Government Medical' }),
-  u(17, 'Medical College', 'Sir Salimullah Medical College', 'SSMC', { clusterGroup: 'Government Medical', examCenters: [] }),
-  u(18, 'Medical College', 'Chittagong Medical College', 'CMC', { clusterGroup: 'Government Medical' }),
-  u(19, 'Medical College', 'Ibne Sina Medical College', 'ISMC', { clusterGroup: 'Private Medical', admissionUrl: null, admissionWebsite: '' }),
-  u(20, 'Medical College', 'Popular Medical College', 'PMC', { clusterGroup: 'Private Medical', totalSeats: 'N/A', scienceSeats: 'N/A', seatsScienceEng: 'N/A' }),
+  u(19, 'Medical College', 'Dhaka Medical College', 'DMC', { clusterGroup: 'Government Medical' }),
+  u(20, 'Medical College', 'Sir Salimullah Medical College', 'SSMC', { clusterGroup: 'Government Medical', examCenters: [] }),
+  u(21, 'Medical College', 'Chittagong Medical College', 'CMC', { clusterGroup: 'Government Medical' }),
+  u(22, 'Medical College', 'Ibne Sina Medical College', 'ISMC', { clusterGroup: 'Private Medical', admissionUrl: null, admissionWebsite: '' }),
+  u(23, 'Medical College', 'Popular Medical College', 'PMC', { clusterGroup: 'Private Medical', totalSeats: 'N/A', scienceSeats: 'N/A', seatsScienceEng: 'N/A' }),
 ];
 
 /* ── Mock service functions (used when VITE_USE_MOCK_API=true) ── */

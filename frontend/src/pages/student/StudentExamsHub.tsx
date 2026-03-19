@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { CalendarDays, Clock3, Lock, PlayCircle, ShieldCheck } from 'lucide-react';
-import { getStudentMeExams, getStudentUpcomingExams, StudentUpcomingExam } from '../../services/api';
+import toast from 'react-hot-toast';
+import { getStudentMeExams, getStudentUpcomingExams, startExam, StudentUpcomingExam } from '../../services/api';
 
 type TabKey = 'live' | 'upcoming' | 'completed' | 'missed';
 
@@ -28,6 +29,7 @@ function statusBadgeLabel(exam: StudentUpcomingExam): string {
 
 export default function StudentExamsHub() {
     const [activeTab, setActiveTab] = useState<TabKey>('live');
+    const [startingExamId, setStartingExamId] = useState('');
     const examsQuery = useQuery({
         queryKey: ['student-hub', 'exams'],
         queryFn: async () => {
@@ -56,6 +58,22 @@ export default function StudentExamsHub() {
         if (activeTab === 'missed') return data.missed;
         return [];
     }, [activeTab, examsQuery.data]);
+
+    const handleExternalExamStart = async (examId: string) => {
+        try {
+            setStartingExamId(examId);
+            const payload = (await startExam(examId)).data;
+            if (payload.redirect && payload.externalExamUrl) {
+                window.location.href = payload.externalExamUrl;
+                return;
+            }
+            toast.error('External exam link is not available right now.');
+        } catch (error: any) {
+            toast.error(error?.response?.data?.message || 'Failed to start exam.');
+        } finally {
+            setStartingExamId('');
+        }
+    };
 
     return (
         <div className="space-y-5">
@@ -160,14 +178,14 @@ export default function StudentExamsHub() {
                                         View details
                                     </Link>
                                     {exam.canTakeExam && exam.externalExamUrl ? (
-                                        <a
-                                            href={exam.externalExamUrl}
-                                            target="_blank"
-                                            rel="noreferrer"
+                                        <button
+                                            type="button"
+                                            onClick={() => void handleExternalExamStart(exam._id)}
+                                            disabled={startingExamId === exam._id}
                                             className="flex-1 rounded-lg px-3 py-2 text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 inline-flex items-center justify-center gap-1"
                                         >
-                                            <PlayCircle className="w-3.5 h-3.5" /> Take Exam
-                                        </a>
+                                            <PlayCircle className="w-3.5 h-3.5" /> {startingExamId === exam._id ? 'Opening...' : 'Take Exam'}
+                                        </button>
                                     ) : exam.canTakeExam ? (
                                         <Link
                                             to={`/exam/take/${exam._id}`}

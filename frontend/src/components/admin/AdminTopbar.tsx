@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     Search, Bell, Menu, RefreshCw, ChevronDown,
     User, Lock, Settings, LogOut, Clock,
 } from 'lucide-react';
 import ThemeSwitchPro from '../ui/ThemeSwitchPro';
 import { adminRouteFromTab } from '../../lib/appRoutes';
+import { adminGetActionableAlerts, adminMarkActionableAlertsRead } from '../../services/api';
 
 interface AdminTopbarProps {
     activeTab: string;
@@ -17,9 +19,19 @@ interface AdminTopbarProps {
     onTabChange: (tab: string) => void;
 }
 
+const ACTIONABLE_ALERT_ROLES = new Set([
+    'superadmin',
+    'admin',
+    'moderator',
+    'viewer',
+    'support_agent',
+    'finance_agent',
+]);
+
 export default function AdminTopbar({
     activeTab, onMenuClick, onRefresh, loading, user, onLogout, onTabChange
 }: AdminTopbarProps) {
+    const queryClient = useQueryClient();
     const navigate = useNavigate();
     const location = useLocation();
     const [searchQuery, setSearchQuery] = useState('');
@@ -27,6 +39,7 @@ export default function AdminTopbar({
     const [notifOpen, setNotifOpen] = useState(false);
     const profileRef = useRef<HTMLDivElement>(null);
     const notifRef = useRef<HTMLDivElement>(null);
+    const canReadActionableAlerts = ACTIONABLE_ALERT_ROLES.has(String(user?.role || '').toLowerCase());
 
     useEffect(() => {
         const handler = (e: MouseEvent) => {
@@ -65,12 +78,23 @@ export default function AdminTopbar({
         { label: 'News Console', to: '/__cw_admin__/news/dashboard' },
     ];
 
-    const notifications = [
-        { id: 1, text: 'New student registered', time: '2 min ago', read: false },
-        { id: 2, text: 'Exam results published', time: '1 hour ago', read: false },
-        { id: 3, text: 'System backup completed', time: '3 hours ago', read: true },
-    ];
-    const unreadCount = notifications.filter(n => !n.read).length;
+    const alertsQuery = useQuery({
+        queryKey: ['admin', 'actionable-alerts', 'topbar'],
+        queryFn: async () => (await adminGetActionableAlerts({ page: 1, limit: 8 })).data,
+        staleTime: 30_000,
+        enabled: canReadActionableAlerts,
+    });
+    const markReadMutation = useMutation({
+        mutationFn: async (ids?: string[]) => (await adminMarkActionableAlertsRead(ids)).data,
+        onSuccess: async () => {
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['admin', 'actionable-alerts'] }),
+                queryClient.invalidateQueries({ queryKey: ['admin', 'actionable-alerts', 'topbar'] }),
+            ]);
+        },
+    });
+    const notifications = canReadActionableAlerts ? (alertsQuery.data?.items || []) : [];
+    const unreadCount = canReadActionableAlerts ? Number(alertsQuery.data?.unreadCount || 0) : 0;
 
     const navigateByTab = (tab: string) => {
         onTabChange(tab);
@@ -78,6 +102,17 @@ export default function AdminTopbar({
         if (target && location.pathname !== target) {
             navigate(target);
         }
+    };
+
+    const openNotification = async (id: string, linkUrl?: string) => {
+        if (!canReadActionableAlerts) return;
+        await markReadMutation.mutateAsync([id]);
+        setNotifOpen(false);
+        if (linkUrl) {
+            navigate(linkUrl);
+            return;
+        }
+        navigate('/__cw_admin__/notification-center');
     };
 
     return (
@@ -120,38 +155,46 @@ export default function AdminTopbar({
                             <RefreshCw className={`h-4 w-4 text-slate-500 dark:text-slate-300 ${loading ? 'animate-spin' : ''}`} />
                         </button>
 
-                        <div ref={notifRef} className="relative">
-                            <button
-                                onClick={() => { setNotifOpen(!notifOpen); setProfileOpen(false); }}
-                                className="relative rounded-xl p-2 transition-colors hover:bg-slate-100 dark:hover:bg-white/5"
-                            >
-                                <Bell className="h-4 w-4 text-slate-500 dark:text-slate-300" />
-                                {unreadCount > 0 && (
-                                    <span className="absolute right-1 top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                                        {unreadCount}
-                                    </span>
+                        {canReadActionableAlerts && (
+                            <div ref={notifRef} className="relative">
+                                <button
+                                    onClick={() => { setNotifOpen(!notifOpen); setProfileOpen(false); }}
+                                    className="relative rounded-xl p-2 transition-colors hover:bg-slate-100 dark:hover:bg-white/5"
+                                >
+                                    <Bell className="h-4 w-4 text-slate-500 dark:text-slate-300" />
+                                    {unreadCount > 0 && (
+                                        <span className="absolute right-1 top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                                            {unreadCount}
+                                        </span>
+                                    )}
+                                </button>
+                                {notifOpen && (
+                                    <div className="animate-in slide-in-from-top-2 absolute right-0 top-12 w-[min(20rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-indigo-500/20 dark:bg-slate-900/95">
+                                        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-indigo-500/10">
+                                            <h3 className="text-sm font-bold text-text dark:text-white">Notifications</h3>
+                                            <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] text-indigo-500 dark:text-indigo-300">{unreadCount} new</span>
+                                        </div>
+                                        <div className="max-h-64 overflow-y-auto">
+                                            {notifications.length === 0 ? (
+                                                <div className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">
+                                                    No admin alerts right now.
+                                                </div>
+                                            ) : notifications.map(n => (
+                                                <button
+                                                    key={n._id}
+                                                    onClick={() => void openNotification(n._id, n.linkUrl)}
+                                                    className={`block w-full border-b border-slate-200 px-4 py-3 text-left transition-colors last:border-0 hover:bg-slate-100/70 dark:border-indigo-500/10 dark:hover:bg-white/5 ${!n.isRead ? 'bg-indigo-500/5 dark:bg-indigo-500/10' : ''}`}
+                                                >
+                                                    <p className="text-sm text-text dark:text-white">{n.title}</p>
+                                                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{n.message}</p>
+                                                    <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">{new Date(n.publishAt).toLocaleString()}</p>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
                                 )}
-                            </button>
-                            {notifOpen && (
-                                <div className="animate-in slide-in-from-top-2 absolute right-0 top-12 w-[min(20rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-indigo-500/20 dark:bg-slate-900/95">
-                                    <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-indigo-500/10">
-                                        <h3 className="text-sm font-bold text-text dark:text-white">Notifications</h3>
-                                        <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-[10px] text-indigo-500 dark:text-indigo-300">{unreadCount} new</span>
-                                    </div>
-                                    <div className="max-h-64 overflow-y-auto">
-                                        {notifications.map(n => (
-                                            <div
-                                                key={n.id}
-                                                className={`border-b border-slate-200 px-4 py-3 transition-colors last:border-0 hover:bg-slate-100/70 dark:border-indigo-500/10 dark:hover:bg-white/5 ${!n.read ? 'bg-indigo-500/5 dark:bg-indigo-500/10' : ''}`}
-                                            >
-                                                <p className="text-sm text-text dark:text-white">{n.text}</p>
-                                                <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">{n.time}</p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
+                            </div>
+                        )}
 
                         <div className="hidden items-center gap-2 rounded-xl border border-slate-200 bg-slate-100/70 px-3 py-1.5 dark:border-indigo-500/15 dark:bg-white/5 lg:flex">
                             <Clock className="h-3.5 w-3.5 text-slate-500 dark:text-indigo-300/60" />

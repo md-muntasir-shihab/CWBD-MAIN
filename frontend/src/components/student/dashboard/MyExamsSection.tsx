@@ -119,7 +119,7 @@ function ExamRow({ exam, variant }: { exam: StudentUpcomingExam; variant: 'live'
                         <XCircle className="w-3 h-3" /> Missed
                     </span>
                 ) : variant === 'live' && !isLocked ? (
-                    <Link to={`/exams/${exam._id}/start`} className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-500/15 px-2.5 py-1 rounded-lg hover:bg-emerald-200 dark:hover:bg-emerald-500/25 transition">
+                    <Link to={`/exam/${exam._id}`} className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-500/15 px-2.5 py-1 rounded-lg hover:bg-emerald-200 dark:hover:bg-emerald-500/25 transition">
                         <Play className="w-3 h-3" /> Start
                     </Link>
                 ) : isLocked ? (

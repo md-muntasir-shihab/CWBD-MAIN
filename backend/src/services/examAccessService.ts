@@ -1,6 +1,7 @@
+import mongoose from 'mongoose';
 import { ExamSessionModel } from "../models/examSession.model";
 import { PaymentModel } from "../models/payment.model";
-import { SubscriptionModel } from "../models/subscription.model";
+import UserSubscription from '../models/UserSubscription';
 import { UserModel } from "../models/user.model";
 import StudentProfile from "../models/StudentProfile";
 
@@ -30,7 +31,13 @@ export const buildAccessPayload = async (exam: any, userId?: string) => {
   }
 
   if (userId && (exam.subscriptionRequired || exam.requiresActiveSubscription)) {
-    const active = await SubscriptionModel.findOne({ userId, status: "active", expiresAtUTC: { $gt: now } });
+    const active = mongoose.Types.ObjectId.isValid(userId)
+      ? await UserSubscription.findOne({
+          userId: new mongoose.Types.ObjectId(userId),
+          status: 'active',
+          expiresAtUTC: { $gt: now },
+        }).lean()
+      : null;
     if (!active) blockReasons.push("SUBSCRIPTION_REQUIRED");
   }
 

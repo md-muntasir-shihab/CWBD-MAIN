@@ -41,7 +41,6 @@ const HelpArticleSchema = new Schema<IHelpArticle>(
     { timestamps: true, collection: 'help_articles' },
 );
 
-HelpArticleSchema.index({ slug: 1 }, { unique: true });
 HelpArticleSchema.index({ categoryId: 1, isPublished: 1 });
 HelpArticleSchema.index({ isPublished: 1, isFeatured: -1, createdAt: -1 });
 HelpArticleSchema.index({ tags: 1 });

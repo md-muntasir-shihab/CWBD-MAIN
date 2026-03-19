@@ -1,11 +1,10 @@
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import AdminGuardShell from '../components/admin/AdminGuardShell';
 import DashboardHome from '../components/admin/DashboardHome';
 import UniversitiesPanel from '../components/admin/UniversitiesPanel';
 import NewsPanel from '../components/admin/NewsPanel';
 
 import QuestionBankConsole from '../components/admin/questionBank/QuestionBankConsole';
-import StudentManagementPanel from '../components/admin/StudentManagementPanel';
 import FinancePanel from '../components/admin/FinancePanel';
 import FinanceCenterConsole from '../components/admin/finance/FinanceCenterConsole';
 import ResourcesPanel from '../components/admin/ResourcesPanel';
@@ -49,7 +48,7 @@ export function AdminDashboardPage() {
 
 export function AdminUniversitiesPage() {
     return (
-        <AdminGuardShell title="Universities" description="Manage university records, mapping, and category assignments.">
+        <AdminGuardShell title="Universities" description="Manage university records, mapping, and category assignments." requiredModule="universities">
             <UniversitiesPanel />
         </AdminGuardShell>
     );
@@ -57,7 +56,7 @@ export function AdminUniversitiesPage() {
 
 export function AdminNewsPage() {
     return (
-        <AdminGuardShell title="News" description="Create, review, and publish campus news content.">
+        <AdminGuardShell title="News" description="Create, review, and publish campus news content." requiredModule="news">
             <NewsPanel />
         </AdminGuardShell>
     );
@@ -65,7 +64,7 @@ export function AdminNewsPage() {
 
 export function AdminExamsPage() {
     return (
-        <AdminGuardShell title="Exams" description="Create and manage exams, questions, results, and payments.">
+        <AdminGuardShell title="Exams" description="Create and manage exams, questions, results, and payments." requiredModule="exams">
             <StandaloneExamsPage />
         </AdminGuardShell>
     );
@@ -73,31 +72,23 @@ export function AdminExamsPage() {
 
 export function AdminQuestionBankPage() {
     return (
-        <AdminGuardShell title="Question Bank" description="Manage questions, bilingual content, and import tools.">
+        <AdminGuardShell title="Question Bank" description="Manage questions, bilingual content, and import tools." requiredModule="question_bank">
             <QuestionBankConsole />
         </AdminGuardShell>
     );
 }
 
 export function AdminStudentsPage() {
-    return (
-        <AdminGuardShell title="Students" description="Manage students, imports, and profile state in one place.">
-            <StudentManagementPanel initialTab="students" />
-        </AdminGuardShell>
-    );
+    return <Navigate to="/__cw_admin__/student-management/list" replace />;
 }
 
 export function AdminStudentGroupsPage() {
-    return (
-        <AdminGuardShell title="Student Groups" description="Create, edit, and assign student groups.">
-            <StudentManagementPanel initialTab="groups" />
-        </AdminGuardShell>
-    );
+    return <Navigate to="/__cw_admin__/student-management/groups" replace />;
 }
 
 export function AdminPaymentsPage() {
     return (
-        <AdminGuardShell title="Payments" description="Review manual payments, approve transactions, and export logs.">
+        <AdminGuardShell title="Payments" description="Review manual payments, approve transactions, and export logs." requiredModule="payments">
             <FinancePanel />
         </AdminGuardShell>
     );
@@ -105,7 +96,7 @@ export function AdminPaymentsPage() {
 
 export function AdminResourcesPage() {
     return (
-        <AdminGuardShell title="Resources" description="Manage downloadable resources and visibility controls.">
+        <AdminGuardShell title="Resources" description="Manage downloadable resources and visibility controls." requiredModule="resources">
             <ResourcesPanel />
         </AdminGuardShell>
     );
@@ -113,7 +104,7 @@ export function AdminResourcesPage() {
 
 export function AdminSupportCenterPage() {
     return (
-        <AdminGuardShell title="Support Center" description="Handle student tickets, replies, and resolution workflow.">
+        <AdminGuardShell title="Support Center" description="Handle student tickets, replies, and resolution workflow." requiredModule="support_center">
             <SupportTicketsPanel />
         </AdminGuardShell>
     );
@@ -183,7 +174,7 @@ export function AdminStudentSettingsEmbeddedPage() {
 
 export function AdminFinanceCenterPage() {
     return (
-        <AdminGuardShell title="Finance Center" description="Unified financial management — income, expenses, invoices, budgets, and reports.">
+        <AdminGuardShell title="Finance Center" description="Unified financial management — income, expenses, invoices, budgets, and reports." requiredModule="finance_center">
             <FinanceCenterConsole />
         </AdminGuardShell>
     );
@@ -191,7 +182,7 @@ export function AdminFinanceCenterPage() {
 
 export function AdminContactPage() {
     return (
-        <AdminGuardShell title="Contact Messages" description="View and manage contact form submissions.">
+        <AdminGuardShell title="Contact Messages" description="View and manage contact form submissions." requiredModule="support_center">
             <ContactPanel />
         </AdminGuardShell>
     );
@@ -199,7 +190,7 @@ export function AdminContactPage() {
 
 export function AdminSubscriptionsV2Page() {
     return (
-        <AdminGuardShell title="Subscriptions" description="View and manage student subscriptions, renewals, and plan assignments.">
+        <AdminGuardShell title="Subscriptions" description="View and manage student subscriptions, renewals, and plan assignments." requiredModule="subscription_plans">
             <SubscriptionsV2Page />
         </AdminGuardShell>
     );

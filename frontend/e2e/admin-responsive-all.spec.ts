@@ -41,8 +41,8 @@ test.describe('Admin Responsive Matrix', () => {
 
     for (const viewport of viewports) {
         test(`routes are responsive at ${viewport.width}x${viewport.height}`, async ({ page }) => {
-            const tracker = attachHealthTracker(page);
             await page.setViewportSize(viewport);
+            const context = page.context();
 
             let editorId = '';
             try {
@@ -63,26 +63,35 @@ test.describe('Admin Responsive Matrix', () => {
                 '/__cw_admin__/news/editor/000000000000000000000000',
             ];
 
-            for (const route of routes) {
-                await page.goto(route);
-                await expect(page.locator('body')).toBeVisible();
-                await expect(page.locator('main').first()).toBeVisible();
+            let currentPage = page;
 
-                const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+            for (let index = 0; index < routes.length; index += 1) {
+                const route = routes[index];
+                if (index > 0) {
+                    await currentPage.close();
+                    currentPage = await context.newPage();
+                    await currentPage.setViewportSize(viewport);
+                }
+
+                const tracker = attachHealthTracker(currentPage);
+                await currentPage.goto(route);
+                await expect(currentPage.locator('main').first(), `main shell missing on ${route}`).toBeVisible();
+
+                const overflow = await currentPage.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
                 expect.soft(overflow, `horizontal overflow on ${route}`).toBeLessThanOrEqual(1);
 
                 if (viewport.width <= 420) {
-                    const menuVisible = await page
+                    const menuVisible = await currentPage
                         .locator('button[aria-label*="menu" i], button:has-text("Menu"), button:has-text("Open admin menu")')
                         .first()
                         .isVisible()
                         .catch(() => false);
                     expect.soft(menuVisible, `mobile menu trigger missing on ${route}`).toBeTruthy();
                 }
-            }
 
-            await expectPageHealthy(page, tracker);
-            tracker.detach();
+                await expectPageHealthy(currentPage, tracker);
+                tracker.detach();
+            }
         });
     }
 });

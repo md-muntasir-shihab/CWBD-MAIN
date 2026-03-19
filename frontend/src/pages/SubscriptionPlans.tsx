@@ -1,338 +1,195 @@
 import { useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Copy, ExternalLink, RefreshCw, Search, X } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { motion } from 'framer-motion';
+import { Crown, RefreshCw, Search, Sparkles, TriangleAlert } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import PlanCard from '../components/subscription/PlanCard';
 import {
-    useMySubscriptionQuery,
+    useMySubscription,
     useSubscriptionPlansQuery,
-} from '../hooks/useSubscriptionQueries';
-import type { SubscriptionPlanItem } from '../services/subscriptionApi';
+} from '../hooks/useSubscriptionPlans';
+import type { SubscriptionPlanPublic } from '../services/api';
+import PlanCard from '../components/subscription/PlanCard';
+import PlanDetailsDrawer from '../components/subscription/PlanDetailsDrawer';
+import SubscriptionComparisonTable from '../components/subscription/SubscriptionComparisonTable';
+import SubscriptionFaqBlock from '../components/subscription/SubscriptionFaqBlock';
 
-type PlanTypeFilter = 'all' | 'free' | 'paid';
+type PlanFilter = 'all' | 'free' | 'paid';
 
-function formatDate(value?: string | null): string {
-    if (!value) return 'N/A';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return 'N/A';
-    return date.toLocaleDateString('en-BD', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
-function ContactFlowModal({
-    open,
-    plan,
-    onClose,
-}: {
-    open: boolean;
-    plan: SubscriptionPlanItem | null;
-    onClose: () => void;
-}) {
-    if (!open || !plan) return null;
-
-    const template = `I want to subscribe to: ${plan.name}. My phone: ____`;
-
-    const handleCopy = async () => {
-        try {
-            await navigator.clipboard.writeText(template);
-            toast.success('Template copied');
-        } catch {
-            toast.error('Copy failed');
-        }
-    };
-
-    const openContact = () => {
-        window.open(plan.contactCtaUrl, '_blank', 'noopener,noreferrer');
-    };
-
-    return (
-        <AnimatePresence>
-            <motion.div
-                className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={onClose}
-            >
-                <motion.div
-                    className="w-full max-w-lg rounded-t-2xl border border-card-border bg-card p-5 shadow-xl dark:border-dark-border dark:bg-dark-surface sm:rounded-2xl"
-                    initial={{ y: 30, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    exit={{ y: 20, opacity: 0 }}
-                    onClick={(event) => event.stopPropagation()}
-                >
-                    <div className="mb-3 flex items-center justify-between">
-                        <h3 className="text-lg font-heading font-bold text-text dark:text-dark-text">Activate {plan.name}</h3>
-                        <button type="button" onClick={onClose} className="rounded-lg p-1 hover:bg-background dark:hover:bg-dark-bg">
-                            <X className="h-4 w-4" />
-                        </button>
-                    </div>
-                    <p className="text-sm text-text-muted dark:text-dark-text/70">
-                        To activate subscription, contact admin. You will get username/password after approval.
-                    </p>
-
-                    <div className="mt-4 rounded-xl border border-card-border/70 bg-background p-3 dark:border-dark-border/70 dark:bg-dark-bg">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-text-muted dark:text-dark-text/60">Copyable template</p>
-                        <p className="mt-2 text-sm text-text dark:text-dark-text">{template}</p>
-                    </div>
-
-                    <div className="mt-4 flex flex-wrap items-center gap-2">
-                        <button type="button" onClick={handleCopy} className="btn-outline text-sm">
-                            <Copy className="h-4 w-4" />
-                            Copy text
-                        </button>
-                        <button type="button" onClick={openContact} className="btn-primary text-sm">
-                            {plan.contactCtaLabel}
-                            <ExternalLink className="h-4 w-4" />
-                        </button>
-                    </div>
-                </motion.div>
-            </motion.div>
-        </AnimatePresence>
-    );
-}
-
-function HowToSubscribeModal({
-    open,
-    plan,
-    onClose,
-}: {
-    open: boolean;
-    plan: SubscriptionPlanItem | null;
-    onClose: () => void;
-}) {
-    if (!open || !plan) return null;
-
-    return (
-        <AnimatePresence>
-            <motion.div
-                className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={onClose}
-            >
-                <motion.div
-                    className="w-full max-w-lg rounded-t-2xl border border-card-border bg-card p-5 shadow-xl dark:border-dark-border dark:bg-dark-surface sm:rounded-2xl"
-                    initial={{ y: 30, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    exit={{ y: 20, opacity: 0 }}
-                    onClick={(event) => event.stopPropagation()}
-                >
-                    <div className="mb-3 flex items-center justify-between">
-                        <h3 className="text-lg font-heading font-bold text-text dark:text-dark-text">How to subscribe</h3>
-                        <button type="button" onClick={onClose} className="rounded-lg p-1 hover:bg-background dark:hover:bg-dark-bg">
-                            <X className="h-4 w-4" />
-                        </button>
-                    </div>
-                    <ol className="list-decimal space-y-2 pl-5 text-sm text-text-muted dark:text-dark-text/70">
-                        <li>Choose your preferred plan: {plan.name}.</li>
-                        <li>Click contact button and message admin with your details.</li>
-                        <li>Complete payment (if required) and send proof/reference.</li>
-                        <li>Admin approves and activates your subscription.</li>
-                    </ol>
-                </motion.div>
-            </motion.div>
-        </AnimatePresence>
-    );
+function getCheckoutPath(plan: SubscriptionPlanPublic): string {
+    return `/subscription-plans/checkout/${plan.slug || plan.code || plan._id}`;
 }
 
 export default function SubscriptionPlansPage() {
+    const navigate = useNavigate();
     const { user } = useAuth();
     const plansQuery = useSubscriptionPlansQuery();
-    const mySubscriptionQuery = useMySubscriptionQuery(Boolean(user));
+    const mySubscriptionQuery = useMySubscription(Boolean(user));
 
-    const [typeFilter, setTypeFilter] = useState<PlanTypeFilter>('all');
+    const [filter, setFilter] = useState<PlanFilter>('all');
     const [search, setSearch] = useState('');
-    const [showUnavailable] = useState(false);
-    const [activePlan, setActivePlan] = useState<SubscriptionPlanItem | null>(null);
-    const [showContactFlow, setShowContactFlow] = useState(false);
-    const [showHowToSubscribe, setShowHowToSubscribe] = useState(false);
+    const [activePlan, setActivePlan] = useState<SubscriptionPlanPublic | null>(null);
 
+    const plans = plansQuery.data?.items || [];
     const settings = plansQuery.data?.settings;
-    const currency = settings?.currencyLabel || 'BDT';
-    const title = settings?.pageTitle || 'Subscription Plans';
-    const subtitle = settings?.pageSubtitle || 'Choose your plan and unlock premium features.';
-    const headerBanner = settings?.headerBannerUrl || null;
-    const defaultBanner = settings?.defaultPlanBannerUrl || null;
+    const currentPlanId = mySubscriptionQuery.data?.planId || undefined;
 
-    const filteredItems = useMemo(() => {
-        const q = search.trim().toLowerCase();
-        const rows = plansQuery.data?.items || [];
-        const visible = rows.filter((plan) => (showUnavailable ? true : plan.enabled));
-        const typed = visible.filter((plan) => (typeFilter === 'all' ? true : plan.type === typeFilter));
-        const searched = typed.filter((plan) => {
-            if (!q) return true;
-            return plan.name.toLowerCase().includes(q) || (plan.shortDescription || '').toLowerCase().includes(q);
+    const filteredPlans = useMemo(() => {
+        const term = search.trim().toLowerCase();
+        return plans.filter((plan) => {
+            if (filter !== 'all' && plan.type !== filter) return false;
+            if (!term) return true;
+            return [
+                plan.name,
+                plan.shortDescription,
+                plan.tagline,
+                ...(plan.visibleFeatures || []),
+            ].filter(Boolean).some((value) => String(value).toLowerCase().includes(term));
         });
-        const featuredFirst = settings?.showFeaturedFirst !== false;
-        const sorted = [...searched].sort((a, b) => {
-            if (featuredFirst && a.isFeatured !== b.isFeatured) return a.isFeatured ? -1 : 1;
-            return a.displayOrder - b.displayOrder;
-        });
-        return sorted;
-    }, [plansQuery.data?.items, search, settings?.showFeaturedFirst, showUnavailable, typeFilter]);
+    }, [filter, plans, search]);
 
-    const featured = useMemo(() => filteredItems.filter((item) => item.isFeatured), [filteredItems]);
-
-    const showFaq = true;
-
-    const openContact = (plan: SubscriptionPlanItem) => {
-        setActivePlan(plan);
-        setShowContactFlow(true);
+    const handlePrimaryAction = (plan: SubscriptionPlanPublic) => {
+        navigate(getCheckoutPath(plan));
     };
 
-    const openHowTo = (plan: SubscriptionPlanItem) => {
-        setActivePlan(plan);
-        setShowHowToSubscribe(true);
-    };
+    const hasHardLoadError = plansQuery.isError && plans.length === 0;
 
     return (
-        <div className="section-container overflow-x-hidden py-6 sm:py-8">
-            <div className="space-y-6">
-                <section className="overflow-hidden rounded-2xl border border-card-border/70 bg-card shadow-sm dark:border-dark-border/70 dark:bg-dark-surface">
-                    <div className="relative p-5 sm:p-7">
-                        {headerBanner ? (
-                            <img src={headerBanner} alt="Subscription banner" className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
-                        ) : null}
-                        <div className="absolute inset-0 bg-gradient-to-r from-primary/95 via-primary/80 to-accent/70" />
-                        <div className="relative z-10">
-                            <h1 className="text-2xl font-heading font-bold text-white sm:text-3xl">{title}</h1>
-                            <p className="mt-2 max-w-2xl text-sm text-white/85">{subtitle}</p>
+        <div className="bg-[radial-gradient(circle_at_top,_rgba(236,72,153,0.12),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(14,165,233,0.16),_transparent_34%)] py-8 sm:py-10">
+            <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 sm:px-6 lg:px-8">
+                <section className="relative overflow-hidden rounded-[2.4rem] border border-slate-200/80 bg-white/92 px-6 py-8 shadow-[0_26px_70px_rgba(15,23,42,0.10)] dark:border-slate-800 dark:bg-slate-950/86 sm:px-8 sm:py-10">
+                    <div className="absolute inset-y-0 right-0 hidden w-1/3 bg-[radial-gradient(circle_at_center,_rgba(6,182,212,0.18),_transparent_58%)] lg:block" />
+                    <div className="relative z-10 grid gap-6 lg:grid-cols-[1.4fr,0.8fr] lg:items-end">
+                        <div className="space-y-4">
+                            <div className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-white dark:bg-white dark:text-slate-950">
+                                <Sparkles className="h-3.5 w-3.5" />
+                                {settings?.heroEyebrow || 'CampusWay Memberships'}
+                            </div>
+                            <div className="max-w-3xl space-y-3">
+                                <h1 className="text-4xl font-black tracking-tight text-slate-950 dark:text-white sm:text-5xl">
+                                    {settings?.pageTitle || 'Subscription Plans'}
+                                </h1>
+                                <p className="max-w-2xl text-base leading-8 text-slate-600 dark:text-slate-300">
+                                    {settings?.pageSubtitle || 'Choose the right plan for your CampusWay journey.'}
+                                </p>
+                                {settings?.heroNote ? (
+                                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{settings.heroNote}</p>
+                                ) : null}
+                            </div>
+                        </div>
+
+                        <div className="rounded-[2rem] border border-slate-200/80 bg-slate-50/90 p-5 dark:border-slate-800 dark:bg-slate-900/80">
+                            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">Your Status</p>
+                            <div className="mt-4 flex items-center gap-3">
+                                <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/12 text-emerald-600 dark:text-emerald-300">
+                                    <Crown className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-semibold text-slate-950 dark:text-white">
+                                        {mySubscriptionQuery.data?.planName || 'No active plan'}
+                                    </p>
+                                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                                        {mySubscriptionQuery.data?.isActive
+                                            ? `${mySubscriptionQuery.data.daysLeft ?? 0} day${mySubscriptionQuery.data?.daysLeft === 1 ? '' : 's'} left`
+                                            : 'Explore plans and choose your best fit'}
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </section>
 
-                {user && (
-                    <section className="rounded-2xl border border-card-border/70 bg-card p-4 dark:border-dark-border/70 dark:bg-dark-surface">
-                        <h2 className="text-sm font-semibold uppercase tracking-wide text-text-muted dark:text-dark-text/60">My Subscription</h2>
-                        {mySubscriptionQuery.isLoading ? (
-                            <div className="mt-2 h-14 animate-pulse rounded-xl bg-background dark:bg-dark-bg" />
-                        ) : mySubscriptionQuery.data?.status === 'active' ? (
-                            <p className="mt-2 text-sm text-text dark:text-dark-text">
-                                {mySubscriptionQuery.data.planName || 'Active Plan'} • Expires {formatDate(mySubscriptionQuery.data.expiresAtUTC)} • {mySubscriptionQuery.data.daysLeft ?? 'N/A'} days left
-                            </p>
-                        ) : (
-                            <p className="mt-2 text-sm text-text-muted dark:text-dark-text/70">
-                                No active subscription yet. Contact admin to activate one.
-                            </p>
-                        )}
-                    </section>
-                )}
-
-                <section className="rounded-2xl border border-card-border/70 bg-card p-4 dark:border-dark-border/70 dark:bg-dark-surface">
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-[auto,auto,1fr]">
-                        <div className="flex items-center gap-2">
-                            <button type="button" onClick={() => setTypeFilter('all')} className={`tab-pill ${typeFilter === 'all' ? 'tab-pill-active' : 'tab-pill-inactive'}`}>All</button>
-                            <button type="button" onClick={() => setTypeFilter('free')} className={`tab-pill ${typeFilter === 'free' ? 'tab-pill-active' : 'tab-pill-inactive'}`}>Free</button>
-                            <button type="button" onClick={() => setTypeFilter('paid')} className={`tab-pill ${typeFilter === 'paid' ? 'tab-pill-active' : 'tab-pill-inactive'}`}>Paid</button>
+                <section className="rounded-[2rem] border border-slate-200/80 bg-white/92 p-4 shadow-[0_18px_50px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:bg-slate-950/86">
+                    <div className="grid gap-3 lg:grid-cols-[auto,1fr]">
+                        <div className="flex flex-wrap gap-2">
+                            {(['all', 'free', 'paid'] as PlanFilter[]).map((option) => (
+                                <button
+                                    key={option}
+                                    type="button"
+                                    onClick={() => setFilter(option)}
+                                    className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                                        filter === option
+                                            ? 'bg-slate-950 text-white dark:bg-white dark:text-slate-950'
+                                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+                                    }`}
+                                >
+                                    {option === 'all' ? 'All Plans' : option === 'free' ? 'Free Plans' : 'Paid Plans'}
+                                </button>
+                            ))}
                         </div>
-                        <div className="relative md:col-span-2">
-                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
+                        <div className="relative">
+                            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                             <input
                                 value={search}
                                 onChange={(event) => setSearch(event.target.value)}
-                                placeholder="Search plans..."
-                                className="input-field h-10 pl-10"
+                                placeholder="Search plan names, features, and highlights"
+                                className="w-full rounded-full border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-sm text-slate-900 outline-none ring-0 transition focus:border-slate-400 dark:border-slate-800 dark:bg-slate-900 dark:text-white"
                             />
                         </div>
                     </div>
                 </section>
 
-                {featured.length > 0 && (
-                    <section>
-                        <h2 className="mb-3 text-lg font-heading font-bold text-text dark:text-dark-text">Featured Plans</h2>
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                            {featured.map((plan) => (
-                                <PlanCard
-                                    key={`featured-${plan.id}`}
-                                    plan={plan}
-                                    defaultPlanBannerUrl={defaultBanner}
-                                    currencyLabel={currency}
-                                    onPrimaryCta={openContact}
-                                    onHowToSubscribe={openHowTo}
-                                />
-                            ))}
-                        </div>
-                    </section>
-                )}
-
-                <section>
-                    {plansQuery.isLoading ? (
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                            {Array.from({ length: 6 }).map((_, idx) => (
-                                <div key={idx} className="h-[430px] animate-pulse rounded-2xl border border-card-border/70 bg-card/60 dark:border-dark-border/70 dark:bg-dark-surface/60" />
-                            ))}
-                        </div>
-                    ) : plansQuery.isError ? (
-                        <div className="rounded-2xl border border-danger/30 bg-danger/5 p-5 text-sm text-danger">
-                            <p>Could not load subscription plans right now.</p>
-                            <button type="button" className="btn-secondary mt-3 text-sm" onClick={() => plansQuery.refetch()}>
-                                <RefreshCw className="h-4 w-4" />
-                                Retry
-                            </button>
-                        </div>
-                    ) : filteredItems.length === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-card-border/70 bg-card/50 p-8 text-center text-sm text-text-muted dark:border-dark-border/70 dark:bg-dark-surface/40 dark:text-dark-text/70">
-                            <p>No plans found.</p>
-                            <button
-                                type="button"
-                                className="mt-3 text-sm font-medium text-primary hover:text-accent"
-                                onClick={() => {
-                                    setTypeFilter('all');
-                                    setSearch('');
-                                }}
-                            >
-                                Reset filters
-                            </button>
-                        </div>
-                    ) : (
-                        <motion.div
-                            initial="hidden"
-                            animate="show"
-                            variants={{
-                                hidden: { opacity: 0 },
-                                show: { opacity: 1, transition: { staggerChildren: 0.06 } },
-                            }}
-                            className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+                {plansQuery.isError ? (
+                    <section className="rounded-[2rem] border border-amber-200 bg-amber-50/90 p-5 text-sm text-amber-900 shadow-[0_18px_40px_rgba(120,53,15,0.10)] dark:border-amber-900/60 dark:bg-amber-950/35 dark:text-amber-100">
+                        <p className="inline-flex items-center gap-2 font-semibold">
+                            <TriangleAlert className="h-4 w-4" />
+                            Subscription plans could not be loaded from the API.
+                        </p>
+                        <p className="mt-2 text-sm text-amber-800 dark:text-amber-200">
+                            Pricing data is not trustworthy right now, so this page is showing an explicit load failure instead of an empty-state fallback.
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => plansQuery.refetch()}
+                            className="mt-4 inline-flex items-center gap-2 rounded-full border border-amber-300 bg-white px-4 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:bg-slate-950 dark:text-amber-100 dark:hover:bg-amber-900/20"
                         >
-                            {filteredItems.map((plan) => (
-                                <PlanCard
-                                    key={plan.id}
-                                    plan={plan}
-                                    defaultPlanBannerUrl={defaultBanner}
-                                    currencyLabel={currency}
-                                    onPrimaryCta={openContact}
-                                    onHowToSubscribe={openHowTo}
-                                />
-                            ))}
-                        </motion.div>
-                    )}
-                </section>
-
-                {showFaq && (
-                    <section className="rounded-2xl border border-card-border/70 bg-card p-5 dark:border-dark-border/70 dark:bg-dark-surface">
-                        <h2 className="mb-3 text-lg font-heading font-bold text-text dark:text-dark-text">FAQ</h2>
-                        <div className="space-y-2 text-sm">
-                            <details className="rounded-xl border border-card-border/70 p-3 dark:border-dark-border/70">
-                                <summary className="cursor-pointer font-medium">How do I activate a paid plan?</summary>
-                                <p className="mt-2 text-text-muted dark:text-dark-text/70">Use the contact button, send your info and payment details, then wait for admin approval.</p>
-                            </details>
-                            <details className="rounded-xl border border-card-border/70 p-3 dark:border-dark-border/70">
-                                <summary className="cursor-pointer font-medium">When does validity start?</summary>
-                                <p className="mt-2 text-text-muted dark:text-dark-text/70">Validity starts from admin activation time and lasts for the selected duration.</p>
-                            </details>
-                            <details className="rounded-xl border border-card-border/70 p-3 dark:border-dark-border/70">
-                                <summary className="cursor-pointer font-medium">Can I switch plans later?</summary>
-                                <p className="mt-2 text-text-muted dark:text-dark-text/70">Yes. Contact admin anytime to upgrade, renew, or change your plan.</p>
-                            </details>
-                        </div>
+                            <RefreshCw className={`h-3.5 w-3.5 ${plansQuery.isFetching ? 'animate-spin' : ''}`} />
+                            Retry pricing sync
+                        </button>
                     </section>
+                ) : null}
+
+                {plansQuery.isLoading ? (
+                    <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                        {Array.from({ length: 3 }).map((_, index) => (
+                            <div key={index} className="h-[640px] animate-pulse rounded-[2rem] bg-slate-200/70 dark:bg-slate-800/70" />
+                        ))}
+                    </section>
+                ) : hasHardLoadError ? null : (
+                    <motion.section
+                        initial="hidden"
+                        animate="show"
+                        variants={{ hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } }}
+                        className="grid gap-5 md:grid-cols-2 xl:grid-cols-3"
+                    >
+                        {filteredPlans.map((plan) => (
+                            <PlanCard
+                                key={plan.id || plan._id}
+                                plan={plan}
+                                currencyLabel={settings?.currencyLabel || plan.currency || 'BDT'}
+                                onPrimaryAction={handlePrimaryAction}
+                                onViewDetails={setActivePlan}
+                                isCurrentPlan={Boolean(currentPlanId && currentPlanId === plan.id)}
+                            />
+                        ))}
+                    </motion.section>
                 )}
+
+                {!plansQuery.isLoading && !plansQuery.isError && !filteredPlans.length ? (
+                    <section className="rounded-[2rem] border border-dashed border-slate-300 bg-white/80 px-6 py-12 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-950/80 dark:text-slate-400">
+                        No plans matched your current filters.
+                    </section>
+                ) : null}
+
+                {!hasHardLoadError ? <SubscriptionComparisonTable plans={plans} settings={settings} /> : null}
+                {!hasHardLoadError ? <SubscriptionFaqBlock settings={settings} /> : null}
             </div>
 
-            <ContactFlowModal open={showContactFlow} plan={activePlan} onClose={() => setShowContactFlow(false)} />
-            <HowToSubscribeModal open={showHowToSubscribe} plan={activePlan} onClose={() => setShowHowToSubscribe(false)} />
+            <PlanDetailsDrawer
+                open={Boolean(activePlan)}
+                plan={activePlan}
+                onClose={() => setActivePlan(null)}
+                onPrimaryAction={handlePrimaryAction}
+            />
         </div>
     );
 }

@@ -1,7 +1,10 @@
-import { Link } from 'react-router-dom';
-import { Crown, AlertTriangle, CheckCircle } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowRight, Crown, Eye, ShieldCheck } from 'lucide-react';
 import DashboardSection from './DashboardSection';
 import type { StudentDashboardFullResponse } from '../../../services/api';
+import { useSubscriptionPlanById } from '../../../hooks/useSubscriptionPlans';
+import PlanDetailsDrawer from '../../subscription/PlanDetailsDrawer';
 
 interface Props {
     subscription: StudentDashboardFullResponse['subscription'];
@@ -10,57 +13,94 @@ interface Props {
 }
 
 export default function SubscriptionCard({ subscription, renewalCtaText, renewalCtaUrl }: Props) {
-    const isActive = subscription.isActive;
-    const expiryDate = subscription.expiryDate ? new Date(subscription.expiryDate) : null;
-    const daysLeft = expiryDate ? Math.ceil((expiryDate.getTime() - Date.now()) / 86400000) : null;
-    const isExpiring = daysLeft !== null && daysLeft <= 7 && daysLeft > 0;
-    const isExpired = daysLeft !== null && daysLeft <= 0;
+    const navigate = useNavigate();
+    const [open, setOpen] = useState(false);
+
+    const lookupId = subscription.planSlug || subscription.planId || subscription.planCode || '';
+    const planQuery = useSubscriptionPlanById(lookupId);
+    const plan = planQuery.data;
+
+    const expiryLabel = useMemo(() => {
+        if (!subscription.expiryDate) return 'No expiry set';
+        const expiryDate = new Date(subscription.expiryDate);
+        if (Number.isNaN(expiryDate.getTime())) return 'Expiry unavailable';
+        const daysLeft = subscription.daysLeft ?? Math.ceil((expiryDate.getTime() - Date.now()) / 86400000);
+        if (daysLeft <= 0) return 'Expired';
+        if (daysLeft <= 7) return `${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
+        return `Expires ${expiryDate.toLocaleDateString()}`;
+    }, [subscription.daysLeft, subscription.expiryDate]);
+
+    const actionUrl = renewalCtaUrl || `/subscription-plans${subscription.planSlug ? `/checkout/${subscription.planSlug}` : ''}`;
 
     return (
         <DashboardSection delay={0.12}>
-            <div className={`rounded-2xl border p-4 ${
-                isExpired
-                    ? 'border-rose-300 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/5'
-                    : isExpiring
-                        ? 'border-amber-300 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/5'
-                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
-            }`}>
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isActive ? 'bg-amber-100 dark:bg-amber-500/15' : 'bg-slate-100 dark:bg-slate-800'}`}>
-                            <Crown className={`w-4 h-4 ${isActive ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'}`} />
+            <div className="overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:bg-slate-900">
+                <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-700 px-5 py-5 text-white">
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-3">
+                            <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-white/14">
+                                <Crown className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/70">My Subscription</p>
+                                <h3 className="mt-2 text-2xl font-black tracking-tight">{subscription.planName || 'No Active Plan'}</h3>
+                                <p className="mt-2 text-sm text-white/78">{expiryLabel}</p>
+                            </div>
                         </div>
-                        <div>
-                            <p className="text-sm font-semibold text-slate-900 dark:text-white">{subscription.planName || 'Free Plan'}</p>
-                            {expiryDate && (
-                                <p className={`text-[10px] ${
-                                    isExpired ? 'text-rose-600 dark:text-rose-400 font-bold' :
-                                    isExpiring ? 'text-amber-600 dark:text-amber-400 font-bold' :
-                                    'text-slate-500 dark:text-slate-400'
-                                }`}>
-                                    {isExpired ? 'Expired' : isExpiring ? `${daysLeft}d left` : `Exp: ${expiryDate.toLocaleDateString()}`}
-                                </p>
-                            )}
+                        <div className={`rounded-full px-3 py-1 text-xs font-semibold ${subscription.isActive ? 'bg-emerald-400/18 text-emerald-100' : 'bg-rose-400/18 text-rose-100'}`}>
+                            {subscription.isActive ? 'Active' : 'Renewal Needed'}
                         </div>
-                    </div>
-                    <div>
-                        {isActive && !isExpired ? (
-                            <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
-                                <CheckCircle className="w-3 h-3" /> Active
-                            </span>
-                        ) : (
-                            <span className="flex items-center gap-1 text-[10px] text-rose-600 dark:text-rose-400 font-bold">
-                                <AlertTriangle className="w-3 h-3" /> {isExpired ? 'Expired' : 'Inactive'}
-                            </span>
-                        )}
                     </div>
                 </div>
-                {(isExpired || isExpiring || !isActive) && renewalCtaUrl && (
-                    <Link to={renewalCtaUrl} className="mt-3 block w-full text-center rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold py-2 transition">
-                        {renewalCtaText || 'Renew Subscription'}
-                    </Link>
-                )}
+
+                <div className="space-y-4 px-5 py-5">
+                    <div className="rounded-[1.4rem] bg-slate-100 p-4 dark:bg-slate-950">
+                        <div className="flex items-start gap-3">
+                            <div className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-cyan-500/12 text-cyan-700 dark:text-cyan-200">
+                                <ShieldCheck className="h-4 w-4" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold text-slate-950 dark:text-white">
+                                    {plan?.highlightText || plan?.tagline || 'Open your plan details to review benefits, renewal notes, and support access.'}
+                                </p>
+                                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                                    {plan?.shortDescription || 'Your plan information is synced from the same subscription plan record used on the pricing page.'}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        <button
+                            type="button"
+                            onClick={() => setOpen(true)}
+                            disabled={!plan && planQuery.isLoading}
+                            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-950"
+                        >
+                            <Eye className="h-4 w-4" />
+                            View Details
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => navigate(actionUrl)}
+                            className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100"
+                        >
+                            {renewalCtaText || (subscription.isActive ? 'Upgrade / Renew' : 'Choose a Plan')}
+                            <ArrowRight className="h-4 w-4" />
+                        </button>
+                    </div>
+                </div>
             </div>
+
+            <PlanDetailsDrawer
+                open={open && Boolean(plan)}
+                plan={plan || null}
+                onClose={() => setOpen(false)}
+                onPrimaryAction={(item) => {
+                    setOpen(false);
+                    navigate(`/subscription-plans/checkout/${item.slug || item.code || item._id}`);
+                }}
+            />
         </DashboardSection>
     );
 }

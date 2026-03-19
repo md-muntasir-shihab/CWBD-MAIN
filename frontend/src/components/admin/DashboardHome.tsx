@@ -10,6 +10,7 @@ import {
     RefreshCw,
     Server,
     ShieldCheck,
+    TriangleAlert,
     UserSquare2,
     Users,
 } from 'lucide-react';
@@ -86,6 +87,7 @@ export default function DashboardHome({ universities, exams, users, onTabChange 
     };
 
     const summary = summaryQuery.data || fallbackSummary;
+    const usingFallbackSummary = summaryQuery.isError && !summaryQuery.data;
 
     const cards = useMemo<SummaryCard[]>(() => {
         return [
@@ -177,13 +179,13 @@ export default function DashboardHome({ universities, exams, users, onTabChange 
         <div className="space-y-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                    <h2 className="text-lg font-bold text-white">Admin Summary</h2>
-                    <p className="text-xs text-slate-400">Live snapshot of core modules with quick navigation links.</p>
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-white">Admin Summary</h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Live snapshot of core modules with quick navigation links.</p>
                 </div>
                 <button
                     type="button"
                     onClick={() => summaryQuery.refetch()}
-                    className="inline-flex items-center gap-2 rounded-xl border border-indigo-500/30 px-3 py-2 text-xs text-indigo-200 hover:bg-indigo-500/20"
+                    className="inline-flex items-center gap-2 rounded-xl border border-indigo-500/30 px-3 py-2 text-xs text-indigo-600 hover:bg-indigo-500/10 dark:text-indigo-200 dark:hover:bg-indigo-500/20"
                 >
                     <RefreshCw className={`h-3.5 w-3.5 ${summaryQuery.isFetching ? 'animate-spin' : ''}`} />
                     Refresh Summary
@@ -192,21 +194,21 @@ export default function DashboardHome({ universities, exams, users, onTabChange 
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                 {cards.map((card) => (
-                    <article key={card.key} className="rounded-2xl border border-indigo-500/15 bg-slate-900/60 p-4 shadow-sm">
+                    <article key={card.key} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-indigo-500/15 dark:bg-slate-900/60">
                         <div className="flex items-start justify-between gap-3">
                             <div>
-                                <p className="text-xs uppercase tracking-wider text-slate-400">{card.title}</p>
-                                <p className="mt-1 text-2xl font-bold text-white">{card.value}</p>
+                                <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">{card.title}</p>
+                                <p className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">{card.value}</p>
                             </div>
-                            <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-indigo-500/30 bg-indigo-500/15 text-indigo-200">
+                            <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-200">
                                 <card.icon className="h-5 w-5" />
                             </span>
                         </div>
-                        <p className="mt-2 min-h-[2.2rem] text-xs text-slate-400">{card.description}</p>
+                        <p className="mt-2 min-h-[2.2rem] text-xs text-slate-500 dark:text-slate-400">{card.description}</p>
                         <button
                             type="button"
                             onClick={() => onTabChange(card.actionTab)}
-                            className="mt-3 inline-flex items-center gap-2 rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs text-slate-200 hover:border-indigo-400 hover:text-indigo-200"
+                            className="mt-3 inline-flex items-center gap-2 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs text-slate-700 hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-200 dark:hover:text-indigo-200"
                         >
                             {card.actionLabel}
                         </button>
@@ -214,10 +216,22 @@ export default function DashboardHome({ universities, exams, users, onTabChange 
                 ))}
             </div>
 
-            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-xs text-emerald-100">
+            {usingFallbackSummary ? (
+                <div className="rounded-2xl border border-amber-300/60 bg-amber-50 p-4 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+                    <p className="inline-flex items-center gap-2 font-semibold"><TriangleAlert className="h-4 w-4" /> Live summary unavailable</p>
+                    <p className="mt-1">
+                        The dashboard summary API failed, so these cards are showing local fallback values from the current page payload instead of trusted live counts.
+                    </p>
+                </div>
+            ) : null}
+
+            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-50 p-4 text-xs text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-100">
                 <p className="inline-flex items-center gap-2 font-semibold"><ShieldCheck className="h-4 w-4" /> System check</p>
                 <p className="mt-1">
                     DB: <span className="font-semibold">{summary.systemStatus.db}</span> - Last check: {new Date(summary.systemStatus.timeUTC).toLocaleString()}
+                </p>
+                <p className="mt-1">
+                    Source: <span className="font-semibold">{usingFallbackSummary ? 'fallback snapshot' : 'live summary'}</span>
                 </p>
             </div>
         </div>

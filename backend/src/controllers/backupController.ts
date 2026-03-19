@@ -33,6 +33,19 @@ function safeBaseName(input: string): string {
     return input.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
 }
 
+function toCompactTimestamp(value: unknown): string {
+    const date = value ? new Date(value as string) : new Date();
+    if (Number.isNaN(date.getTime())) return String(Date.now());
+    return date.toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
+}
+
+function buildBackupDownloadName(item: { type?: string; createdAt?: unknown }, filePath: string): string {
+    const ext = path.extname(filePath) || '.json';
+    const type = safeBaseName(String(item.type || 'full').toLowerCase());
+    const timestamp = toCompactTimestamp(item.createdAt);
+    return safeBaseName(`campusway-backup-${type}-${timestamp}${ext}`);
+}
+
 async function createAudit(req: AuthRequest, action: string, details?: Record<string, unknown>): Promise<void> {
     if (!req.user || !mongoose.Types.ObjectId.isValid(req.user._id)) return;
     await AuditLog.create({
@@ -216,7 +229,11 @@ export async function adminDownloadBackup(req: AuthRequest, res: Response): Prom
             return;
         }
 
-        res.download(filePath, safeBaseName(path.basename(filePath)));
+        const downloadName = buildBackupDownloadName(
+            { type: item.type as string, createdAt: item.createdAt as unknown },
+            filePath,
+        );
+        res.download(filePath, downloadName);
     } catch (error) {
         console.error('adminDownloadBackup error:', error);
         res.status(500).json({ message: 'Failed to download backup file' });

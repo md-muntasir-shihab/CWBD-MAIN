@@ -8,6 +8,7 @@ import { getStudentDashboardHeader } from '../services/studentDashboardService';
 import { broadcastStudentDashboardEvent } from '../realtime/studentDashboardStream';
 import StudentDashboardConfig from '../models/StudentDashboardConfig';
 import ExamResult from '../models/ExamResult';
+import ExamProfileSyncLog from '../models/ExamProfileSyncLog';
 import { createAdminAlert } from '../services/adminAlertService';
 import { computeStudentProfileScore } from '../services/studentProfileScoreService';
 
@@ -161,6 +162,14 @@ export const getStudentProfile = async (req: AuthRequest, res: ExpressResponse) 
         const dashboardHeader = await getStudentDashboardHeader(req.user._id);
         const celebration = await resolveCelebration(req.user._id);
         const pendingRequest = await ProfileUpdateRequest.exists({ student_id: req.user._id, status: 'pending' });
+        const recentSyncLogs = await ExamProfileSyncLog.find({ studentId: req.user._id })
+            .sort({ createdAt: -1 })
+            .limit(8)
+            .populate('examId', 'title deliveryMode')
+            .lean();
+        const examHistory = Array.isArray((profile as unknown as Record<string, unknown>).examHistory)
+            ? ((profile as unknown as Record<string, unknown>).examHistory as Array<Record<string, unknown>>)
+            : [];
         res.json({
             ...profile.toObject(),
             date_of_birth: profile.dob,
@@ -181,6 +190,26 @@ export const getStudentProfile = async (req: AuthRequest, res: ExpressResponse) 
             profile_eligible_for_exam: dashboardHeader.isProfileEligible,
             pendingRequest: Boolean(pendingRequest),
             celebration,
+            exam_data: {
+                identity: (profile as unknown as Record<string, unknown>).examIdentity || {},
+                latestResultSummary: (profile as unknown as Record<string, unknown>).latestExamResultSummary || '',
+                lastSyncAt: (profile as unknown as Record<string, unknown>).examDataLastSyncAt || null,
+                lastSyncSource: (profile as unknown as Record<string, unknown>).examDataLastSyncSource || '',
+                history: examHistory.slice(0, 12),
+                syncLogs: recentSyncLogs.map((item) => {
+                    const examDoc = item.examId as unknown as Record<string, unknown> | null;
+                    return {
+                        _id: String(item._id),
+                        examId: examDoc?._id ? String(examDoc._id) : String(item.examId || ''),
+                        examTitle: String(examDoc?.title || ''),
+                        source: item.source,
+                        status: item.status,
+                        syncMode: item.syncMode,
+                        changedFields: item.changedFields || [],
+                        createdAt: item.createdAt,
+                    };
+                }),
+            },
         });
     } catch (err: any) {
         res.status(500).json({ message: 'Failed to get profile', error: err.message });
@@ -335,10 +364,20 @@ export const updateStudentProfile = async (req: AuthRequest, res: ExpressRespons
             await createAdminAlert({
                 title: 'Profile approval required',
                 message: `A student submitted ${Object.keys(requestedUpdates).length} profile change${Object.keys(requestedUpdates).length > 1 ? 's' : ''} for review.`,
+                type: 'profile_update_request',
+                messagePreview: Object.keys(requestedUpdates).join(', '),
                 linkUrl: `/__cw_admin__/student-management/profile-requests?requestId=${String(request._id)}`,
                 category: 'update',
+                sourceType: 'profile_update_request',
+                sourceId: String(request._id),
+                targetRoute: '/__cw_admin__/student-management/profile-requests',
+                targetEntityId: String(request._id),
+                priority: 'normal',
+                actorUserId: req.user._id,
+                actorNameSnapshot: String(req.user.fullName || req.user.username || req.user.email || 'Student').trim(),
                 targetRole: 'admin',
                 createdBy: req.user._id,
+                dedupeKey: `profile_update_request:${String(request._id)}`,
             });
             requestMsg = ' Some changes require admin approval and have been sent for review.';
         }

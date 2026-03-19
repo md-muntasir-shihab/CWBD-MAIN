@@ -14,6 +14,7 @@ import ExamEvent from '../models/ExamEvent';
 import User from '../models/User';
 import StudentGroup from '../models/StudentGroup';
 import StudentProfile from '../models/StudentProfile';
+import ExternalExamJoinLog from '../models/ExternalExamJoinLog';
 import AnnouncementNotice from '../models/AnnouncementNotice';
 import Notification from '../models/Notification';
 import { broadcastStudentDashboardEvent } from '../realtime/studentDashboardStream';
@@ -22,6 +23,10 @@ import { broadcastExamAttemptEventByMeta } from '../realtime/examAttemptStream';
 import { addAdminLiveStreamClient, broadcastAdminLiveEvent } from '../realtime/adminLiveStream';
 import { getSignedUploadForBanner } from '../services/uploadProvider';
 import { getExamCardMetrics } from '../services/examCardMetricsService';
+import { computeStudentProfileScore } from '../services/studentProfileScoreService';
+import { markExternalExamAttemptImported } from '../services/externalExamAttemptService';
+import { syncExamResultToStudentProfile } from '../services/examProfileSyncEngine';
+import { getCanonicalSubscriptionSnapshot } from '../services/subscriptionAccessService';
 
 interface PopulatedStudent { username: string; fullName: string; email: string; }
 function asStudent(s: unknown): PopulatedStudent { return s as PopulatedStudent; }
@@ -89,6 +94,9 @@ function normalizeDeliveryMode(payload: Record<string, unknown>): void {
 
 function normalizeExamPayload(body: Record<string, unknown>): Record<string, unknown> {
     const payload: Record<string, unknown> = { ...body };
+    const scheduleStartOverride = String(payload.examWindowStartUTC || payload.scheduleStart || '').trim();
+    const scheduleEndOverride = String(payload.examWindowEndUTC || payload.scheduleEnd || '').trim();
+    const resultPublishOverride = String(payload.resultPublishAtUTC || '').trim();
     if (payload.marksPerQuestion !== undefined && payload.defaultMarksPerQuestion === undefined) {
         payload.defaultMarksPerQuestion = Number(payload.marksPerQuestion || 1);
     }
@@ -98,24 +106,24 @@ function normalizeExamPayload(body: Record<string, unknown>): Record<string, unk
     if (payload.maxAnswerChangeLimit !== undefined && payload.answerEditLimitPerQuestion === undefined) {
         payload.answerEditLimitPerQuestion = Number(payload.maxAnswerChangeLimit || 0);
     }
-    if (payload.scheduleStart && !payload.startDate) {
+    if (scheduleStartOverride) {
+        payload.startDate = scheduleStartOverride;
+    } else if (payload.scheduleStart && !payload.startDate) {
         payload.startDate = payload.scheduleStart;
     }
-    if (payload.scheduleEnd && !payload.endDate) {
+    if (scheduleEndOverride) {
+        payload.endDate = scheduleEndOverride;
+    } else if (payload.scheduleEnd && !payload.endDate) {
         payload.endDate = payload.scheduleEnd;
     }
 
     /* ── New admin panel field-name mappings ── */
-    if (payload.examWindowStartUTC && !payload.startDate) {
-        payload.startDate = payload.examWindowStartUTC;
-    }
-    if (payload.examWindowEndUTC && !payload.endDate) {
-        payload.endDate = payload.examWindowEndUTC;
-    }
     if (payload.durationMinutes !== undefined && payload.duration === undefined) {
         payload.duration = Number(payload.durationMinutes || 30);
     }
-    if (payload.resultPublishAtUTC && !payload.resultPublishDate) {
+    if (resultPublishOverride) {
+        payload.resultPublishDate = resultPublishOverride;
+    } else if (payload.resultPublishAtUTC && !payload.resultPublishDate) {
         payload.resultPublishDate = payload.resultPublishAtUTC;
     }
     if (payload.examCategory && !payload.group_category) {
@@ -252,6 +260,277 @@ function readImportRowsFromBuffer(buffer: Buffer, filename: string): Array<Recor
     const firstSheet = wb.SheetNames[0];
     if (!firstSheet) return [];
     return XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[firstSheet], { defval: '' });
+}
+
+function hasAnyIntersection(left: string[], right: string[]): boolean {
+    if (left.length === 0 || right.length === 0) return false;
+    const rightSet = new Set(right);
+    return left.some((value) => rightSet.has(value));
+}
+
+function computeProfileCompletion(profile: Record<string, unknown>, user?: Record<string, unknown>): number {
+    return computeStudentProfileScore(profile, user).score;
+}
+
+async function updateStudentPoints(studentId: string): Promise<void> {
+    const results = await ExamResult.find({ student: studentId }).lean();
+    const totalPoints = results.reduce((sum, item) => {
+        const rankBonus = item.rank ? Math.max(0, 100 - Number(item.rank)) : 0;
+        return sum + Number(item.percentage || 0) + rankBonus;
+    }, 0);
+
+    const allStudents = await StudentProfile.find({}).sort({ points: -1 }).select('user_id points').lean();
+    const myIndex = allStudents.findIndex((row) => String(row.user_id) === studentId);
+
+    await StudentProfile.findOneAndUpdate(
+        { user_id: studentId },
+        {
+            points: Math.round(totalPoints),
+            rank: myIndex !== -1 ? myIndex + 1 : undefined,
+        },
+        { upsert: true }
+    );
+}
+
+type ExternalImportSyncMode = 'none' | 'fill_missing_only' | 'overwrite_mapped_fields';
+
+const EXTERNAL_IMPORT_FIELD_ALIASES: Record<string, string[]> = {
+    attempt_ref: ['attempt_ref', 'cw_ref', 'reference', 'ref'],
+    registration_id: ['registration_id', 'registration_number', 'registration', 'reg_id', 'reg_no'],
+    user_unique_id: ['user_unique_id', 'student_id', 'student_unique_id'],
+    username: ['username', 'user_name'],
+    email: ['email', 'email_address'],
+    phone_number: ['phone_number', 'phone', 'mobile', 'mobile_number'],
+    full_name: ['full_name', 'name', 'student_name'],
+    obtained_marks: ['obtained_marks', 'obtained_mark', 'marks_obtained', 'score', 'marks'],
+    total_marks: ['total_marks', 'full_marks', 'total', 'exam_total'],
+    percentage: ['percentage', 'percent', 'result_percentage'],
+    time_taken_sec: ['time_taken_sec', 'time_taken_seconds', 'duration_sec', 'spent_seconds'],
+    submitted_at: ['submitted_at', 'submitted_at_utc', 'completed_at', 'finished_at', 'submitted_time'],
+    attempt_no: ['attempt_no', 'attempt_number', 'attempt'],
+    correct_count: ['correct_count', 'correct'],
+    wrong_count: ['wrong_count', 'wrong'],
+    unanswered_count: ['unanswered_count', 'unanswered', 'unattempted_count', 'skipped_count'],
+    exam_name: ['exam_name', 'exam_title', 'title'],
+    subject: ['subject', 'subject_name'],
+    institution_name: ['institution_name', 'institution', 'college_name'],
+    roll_number: ['roll_number', 'roll', 'roll_no'],
+    department: ['department', 'dept'],
+    ssc_batch: ['ssc_batch'],
+    hsc_batch: ['hsc_batch', 'batch'],
+    guardian_name: ['guardian_name'],
+    guardian_phone: ['guardian_phone', 'guardian_mobile'],
+};
+
+function normalizeImportMapping(input: unknown): Record<string, string> {
+    if (!input) return {};
+    if (typeof input === 'string') {
+        try {
+            return normalizeImportMapping(JSON.parse(input));
+        } catch {
+            return {};
+        }
+    }
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+    return Object.entries(input as Record<string, unknown>).reduce<Record<string, string>>((acc, [key, value]) => {
+        const normalizedKey = normalizeImportKey(key);
+        if (!normalizedKey || !EXTERNAL_IMPORT_FIELD_ALIASES[normalizedKey]) return acc;
+        const normalizedValue = normalizeImportKey(value);
+        if (normalizedValue) acc[normalizedKey] = normalizedValue;
+        return acc;
+    }, {});
+}
+
+function readExternalImportValue(
+    row: Record<string, unknown>,
+    mapping: Record<string, string>,
+    targetField: string,
+): unknown {
+    const mappedColumn = mapping[targetField];
+    if (mappedColumn && row[mappedColumn] !== undefined && row[mappedColumn] !== null && row[mappedColumn] !== '') {
+        return row[mappedColumn];
+    }
+    if (row[targetField] !== undefined && row[targetField] !== null && row[targetField] !== '') {
+        return row[targetField];
+    }
+    const aliases = EXTERNAL_IMPORT_FIELD_ALIASES[targetField] || [];
+    for (const alias of aliases) {
+        const normalizedAlias = normalizeImportKey(alias);
+        if (row[normalizedAlias] !== undefined && row[normalizedAlias] !== null && row[normalizedAlias] !== '') {
+            return row[normalizedAlias];
+        }
+    }
+    return '';
+}
+
+function buildCanonicalExternalImportRow(
+    row: Record<string, unknown>,
+    mapping: Record<string, string>,
+): Record<string, unknown> {
+    const canonical: Record<string, unknown> = {};
+    for (const field of Object.keys(EXTERNAL_IMPORT_FIELD_ALIASES)) {
+        canonical[field] = readExternalImportValue(row, mapping, field);
+    }
+    return canonical;
+}
+
+function normalizeExternalImportSyncMode(value: unknown): ExternalImportSyncMode {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (normalized === 'none' || normalized === 'overwrite_mapped_fields') return normalized;
+    return 'fill_missing_only';
+}
+
+function normalizeLookupValue(value: unknown): string {
+    return String(value || '').trim().toLowerCase();
+}
+
+function normalizeExternalImportRegistrationId(value: unknown): string {
+    return String(value || '').trim().toLowerCase();
+}
+
+function shouldApplyImportedValue(currentValue: unknown, nextValue: unknown, mode: ExternalImportSyncMode): boolean {
+    if (nextValue === null || nextValue === undefined || nextValue === '') return false;
+    if (mode === 'overwrite_mapped_fields') return true;
+    return String(currentValue || '').trim() === '';
+}
+
+async function syncImportedStudentProfile(input: {
+    user: Record<string, unknown>;
+    profile: Record<string, unknown> | null;
+    row: Record<string, unknown>;
+    mode: ExternalImportSyncMode;
+}): Promise<boolean> {
+    if (input.mode === 'none') return false;
+
+    const userId = String(input.user._id || '');
+    if (!mongoose.Types.ObjectId.isValid(userId)) return false;
+
+    const userUpdates: Record<string, unknown> = {};
+    const profileUpdates: Record<string, unknown> = {};
+    const profileSource = input.profile || {};
+
+    const fullName = String(input.row.full_name || '').trim();
+    const email = String(input.row.email || '').trim().toLowerCase();
+    const phoneNumber = String(input.row.phone_number || '').trim();
+    const registrationId = String(input.row.registration_id || '').trim();
+    const institutionName = String(input.row.institution_name || '').trim();
+    const rollNumber = String(input.row.roll_number || '').trim();
+    const department = String(input.row.department || '').trim().toLowerCase();
+    const sscBatch = String(input.row.ssc_batch || '').trim();
+    const hscBatch = String(input.row.hsc_batch || '').trim();
+    const guardianName = String(input.row.guardian_name || '').trim();
+    const guardianPhone = String(input.row.guardian_phone || '').trim();
+
+    if (shouldApplyImportedValue(input.user.full_name, fullName, input.mode)) {
+        userUpdates.full_name = fullName;
+    }
+    if (shouldApplyImportedValue(input.user.email, email, input.mode)) {
+        userUpdates.email = email;
+    }
+    if (shouldApplyImportedValue(input.user.phone_number, phoneNumber, input.mode)) {
+        userUpdates.phone_number = phoneNumber;
+    }
+
+    if (shouldApplyImportedValue(profileSource.full_name, fullName, input.mode)) profileUpdates.full_name = fullName;
+    if (shouldApplyImportedValue(profileSource.email, email, input.mode)) profileUpdates.email = email;
+    if (shouldApplyImportedValue(profileSource.phone_number, phoneNumber, input.mode)) profileUpdates.phone_number = phoneNumber;
+    if (shouldApplyImportedValue(profileSource.phone, phoneNumber, input.mode)) profileUpdates.phone = phoneNumber;
+    if (shouldApplyImportedValue(profileSource.registration_id, registrationId, input.mode)) profileUpdates.registration_id = registrationId;
+    if (shouldApplyImportedValue(profileSource.institution_name, institutionName, input.mode)) profileUpdates.institution_name = institutionName;
+    if (shouldApplyImportedValue(profileSource.roll_number, rollNumber, input.mode)) profileUpdates.roll_number = rollNumber;
+    if (shouldApplyImportedValue(profileSource.ssc_batch, sscBatch, input.mode)) profileUpdates.ssc_batch = sscBatch;
+    if (shouldApplyImportedValue(profileSource.hsc_batch, hscBatch, input.mode)) profileUpdates.hsc_batch = hscBatch;
+    if (shouldApplyImportedValue(profileSource.guardian_name, guardianName, input.mode)) profileUpdates.guardian_name = guardianName;
+    if (shouldApplyImportedValue(profileSource.guardian_phone, guardianPhone, input.mode)) profileUpdates.guardian_phone = guardianPhone;
+    if (['science', 'arts', 'commerce'].includes(department) && shouldApplyImportedValue(profileSource.department, department, input.mode)) {
+        profileUpdates.department = department;
+    }
+
+    let userDoc = input.user;
+    if (Object.keys(userUpdates).length > 0) {
+        userDoc = await User.findByIdAndUpdate(userId, { $set: userUpdates }, { new: true, lean: true }) as unknown as Record<string, unknown>;
+    }
+
+    const nextProfile = {
+        ...profileSource,
+        ...profileUpdates,
+        user_id: new mongoose.Types.ObjectId(userId),
+        full_name: String(profileUpdates.full_name || profileSource.full_name || userDoc.full_name || ''),
+        email: String(profileUpdates.email || profileSource.email || userDoc.email || ''),
+        phone_number: String(profileUpdates.phone_number || profileSource.phone_number || userDoc.phone_number || ''),
+        phone: String(profileUpdates.phone || profileSource.phone || userDoc.phone_number || ''),
+    };
+    const nextCompletion = computeProfileCompletion(nextProfile, userDoc);
+
+    await StudentProfile.findOneAndUpdate(
+        { user_id: new mongoose.Types.ObjectId(userId) },
+        {
+            $set: {
+                ...profileUpdates,
+                full_name: nextProfile.full_name,
+                email: nextProfile.email,
+                phone_number: nextProfile.phone_number,
+                phone: nextProfile.phone,
+                profile_completion_percentage: nextCompletion,
+            },
+            $setOnInsert: {
+                user_id: new mongoose.Types.ObjectId(userId),
+                groupIds: Array.isArray((profileSource as { groupIds?: unknown[] }).groupIds) ? (profileSource as { groupIds?: unknown[] }).groupIds : [],
+            },
+        },
+        { upsert: true }
+    );
+
+    return Object.keys(userUpdates).length > 0 || Object.keys(profileUpdates).length > 0;
+}
+
+async function isStudentEligibleForExamImport(
+    exam: Record<string, unknown>,
+    user: Record<string, unknown>,
+    profile: Record<string, unknown> | null,
+): Promise<{ allowed: boolean; reason?: string }> {
+    const studentId = String(user._id || '');
+    const accessControl = (exam.accessControl && typeof exam.accessControl === 'object')
+        ? (exam.accessControl as Record<string, unknown>)
+        : {};
+    const requiredUserIds = normalizeObjectIdArray(accessControl.allowedUserIds);
+    const requiredGroupIds = normalizeObjectIdArray(accessControl.allowedGroupIds);
+    const requiredPlanCodes = asStringArray(accessControl.allowedPlanCodes).map((item) => item.toLowerCase());
+    const studentGroupIds = normalizeObjectIdArray((profile as { groupIds?: unknown[] } | null)?.groupIds || []);
+    const subscriptionSnapshot = await getCanonicalSubscriptionSnapshot(
+        studentId,
+        (user.subscription as Record<string, unknown> | undefined),
+    );
+    const studentPlanCode = subscriptionSnapshot.planCode;
+    const subscriptionActive = subscriptionSnapshot.isActive && subscriptionSnapshot.allowsExams !== false;
+
+    if (String(exam.accessMode || 'all') === 'specific') {
+        const allowedUsers = Array.isArray(exam.allowedUsers) ? (exam.allowedUsers as unknown[]).map((item) => String(item)) : [];
+        if (!allowedUsers.includes(studentId)) {
+            return { allowed: false, reason: 'student_not_assigned_to_exam' };
+        }
+    }
+    if (requiredUserIds.length > 0 && !requiredUserIds.includes(studentId)) {
+        return { allowed: false, reason: 'student_not_in_allowed_users' };
+    }
+    if (requiredGroupIds.length > 0 && !hasAnyIntersection(requiredGroupIds, studentGroupIds)) {
+        return { allowed: false, reason: 'student_not_in_allowed_groups' };
+    }
+
+    const visibilityMode = String(exam.visibilityMode || 'all_students');
+    if (visibilityMode === 'group_only' || visibilityMode === 'custom') {
+        const targetGroupIds = normalizeObjectIdArray(exam.targetGroupIds || []);
+        if (targetGroupIds.length > 0 && !hasAnyIntersection(targetGroupIds, studentGroupIds)) {
+            return { allowed: false, reason: 'student_not_in_target_groups' };
+        }
+    }
+    if ((visibilityMode === 'subscription_only' || Boolean(exam.requiresActiveSubscription)) && !subscriptionActive) {
+        return { allowed: false, reason: 'student_subscription_inactive' };
+    }
+    if (requiredPlanCodes.length > 0 && !requiredPlanCodes.includes(studentPlanCode)) {
+        return { allowed: false, reason: 'student_plan_mismatch' };
+    }
+    return { allowed: true };
 }
 
 async function recomputeGlobalExamRanks(examId: string): Promise<void> {
@@ -578,11 +857,16 @@ export async function adminDeleteExam(req: AuthRequest, res: Response): Promise<
 
 export async function adminPublishExam(req: AuthRequest, res: Response): Promise<void> {
     try {
-        // Support both legacy and canonical question linkage fields.
-        const questionCount = await Question.countDocuments({
-            $or: [{ exam: req.params.id }, { examId: req.params.id }],
-        });
-        if (questionCount === 0) {
+        const examDoc = await Exam.findById(req.params.id);
+        if (!examDoc) { res.status(404).json({ message: 'Exam not found' }); return; }
+
+        const deliveryMode = String(examDoc.deliveryMode || 'internal').trim().toLowerCase();
+        const questionCount = deliveryMode === 'external_link'
+            ? 0
+            : await Question.countDocuments({
+                $or: [{ exam: req.params.id }, { examId: req.params.id }],
+            });
+        if (deliveryMode !== 'external_link' && questionCount === 0) {
             res.status(400).json({ message: 'Cannot publish an exam with no questions. Add at least one question first.' });
             return;
         }
@@ -1306,24 +1590,46 @@ async function buildExamReportRows(examId: string, groupIdFilter = ''): Promise<
 export async function adminDownloadExamResultsImportTemplate(req: AuthRequest, res: Response): Promise<void> {
     try {
         const format = String(req.query.format || 'xlsx').trim().toLowerCase() === 'csv' ? 'csv' : 'xlsx';
-        const rows = [
-            {
-                registration_id: 'REG-1001',
-                obtained_marks: 78,
-                submitted_at: new Date().toISOString(),
-                time_taken_sec: 3200,
-                remarks: 'manual import',
-            },
-        ];
+        const mode = String(req.query.mode || '').trim().toLowerCase() === 'external' ? 'external' : 'internal';
+        const rows = mode === 'external'
+            ? [
+                {
+                    cw_ref: 'cwref_67f0a0example',
+                    username: 'student_username',
+                    email: 'student@example.com',
+                    registration_id: 'REG-1001',
+                    obtained_marks: 78,
+                    total_marks: 100,
+                    percentage: 78,
+                    time_taken_sec: 3200,
+                    submitted_at: new Date().toISOString(),
+                    attempt_no: 1,
+                    full_name: 'Student Name',
+                    institution_name: 'College Name',
+                    roll_number: '12345',
+                    department: 'science',
+                    guardian_phone: '01700000000',
+                    remarks: 'external provider import',
+                },
+            ]
+            : [
+                {
+                    registration_id: 'REG-1001',
+                    obtained_marks: 78,
+                    submitted_at: new Date().toISOString(),
+                    time_taken_sec: 3200,
+                    remarks: 'manual import',
+                },
+            ];
 
         if (format === 'csv') {
-            const headers = ['registration_id', 'obtained_marks', 'submitted_at', 'time_taken_sec', 'remarks'];
+            const headers = Object.keys(rows[0] || {});
             const csv = [
                 headers.join(','),
                 ...rows.map((row) => headers.map((key) => escapeCsvCell((row as Record<string, unknown>)[key])).join(',')),
             ].join('\n');
             res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-            res.setHeader('Content-Disposition', 'attachment; filename="exam_results_import_template.csv"');
+            res.setHeader('Content-Disposition', `attachment; filename="exam_results_import_template_${mode}.csv"`);
             res.send(csv);
             return;
         }
@@ -1333,7 +1639,7 @@ export async function adminDownloadExamResultsImportTemplate(req: AuthRequest, r
         XLSX.utils.book_append_sheet(workbook, worksheet, 'template');
         const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', 'attachment; filename="exam_results_import_template.xlsx"');
+        res.setHeader('Content-Disposition', `attachment; filename="exam_results_import_template_${mode}.xlsx"`);
         res.send(buffer);
     } catch (err) {
         console.error('[adminDownloadExamResultsImportTemplate]', err);
@@ -1473,6 +1779,10 @@ export async function adminImportExamResults(req: AuthRequest, res: Response): P
 
         const bulkResult = await ExamResult.bulkWrite(ops, { ordered: false });
         await recomputeGlobalExamRanks(examId);
+        const impactedStudentIds = Array.from(new Set(ops
+            .map((op) => String(op.updateOne?.filter?.student || ''))
+            .filter((id) => mongoose.Types.ObjectId.isValid(id))));
+        await Promise.all(impactedStudentIds.map((studentId) => updateStudentPoints(studentId)));
 
         res.json({
             message: 'Exam results imported successfully.',
@@ -1487,6 +1797,437 @@ export async function adminImportExamResults(req: AuthRequest, res: Response): P
     } catch (err) {
         console.error('[adminImportExamResults]', err);
         res.status(500).json({ message: 'Server error during import.' });
+    }
+}
+
+export async function adminImportExternalExamResults(req: AuthRequest, res: Response): Promise<void> {
+    try {
+        const examId = String(req.params.id || req.params.examId || '').trim();
+        if (!mongoose.Types.ObjectId.isValid(examId)) {
+            res.status(400).json({ message: 'Invalid exam id.' });
+            return;
+        }
+        if (!req.file?.buffer || !req.file?.originalname) {
+            res.status(400).json({ message: 'No file uploaded.' });
+            return;
+        }
+
+        const exam = await Exam.findById(examId)
+            .select('title totalMarks deliveryMode accessMode allowedUsers accessControl visibilityMode targetGroupIds requiresActiveSubscription subscriptionRequired')
+            .lean();
+        if (!exam) {
+            res.status(404).json({ message: 'Exam not found.' });
+            return;
+        }
+        if (String((exam as Record<string, unknown>).deliveryMode || 'internal') !== 'external_link') {
+            res.status(400).json({ message: 'This exam is not configured as an external-link exam.' });
+            return;
+        }
+
+        const rawRows = readImportRowsFromBuffer(req.file.buffer, req.file.originalname);
+        if (!rawRows.length) {
+            res.status(400).json({ message: 'No data rows found in the uploaded file.' });
+            return;
+        }
+
+        const mapping = normalizeImportMapping(req.body.mapping);
+        const syncProfileMode = normalizeExternalImportSyncMode(req.body.syncProfileMode);
+        const normalizedRows = rawRows.map((row, idx) => {
+            const next: Record<string, unknown> = {};
+            Object.entries(row || {}).forEach(([key, value]) => {
+                next[normalizeImportKey(key)] = value;
+            });
+            return {
+                rowNo: idx + 2,
+                raw: next,
+                data: buildCanonicalExternalImportRow(next, mapping),
+            };
+        });
+
+        const attemptRefs = Array.from(new Set(
+            normalizedRows
+                .map((row) => normalizeLookupValue(row.data.attempt_ref))
+                .filter(Boolean),
+        ));
+        const registrationIds = Array.from(new Set(
+            normalizedRows
+                .map((row) => normalizeExternalImportRegistrationId(row.data.registration_id))
+                .filter(Boolean),
+        ));
+        const userUniqueIds = Array.from(new Set(
+            normalizedRows
+                .map((row) => String(row.data.user_unique_id || '').trim())
+                .filter(Boolean),
+        ));
+        const usernames = Array.from(new Set(
+            normalizedRows
+                .map((row) => normalizeLookupValue(row.data.username))
+                .filter(Boolean),
+        ));
+        const emails = Array.from(new Set(
+            normalizedRows
+                .map((row) => normalizeLookupValue(row.data.email))
+                .filter(Boolean),
+        ));
+        const phones = Array.from(new Set(
+            normalizedRows
+                .map((row) => String(row.data.phone_number || '').trim())
+                .filter(Boolean),
+        ));
+
+        const logsByRef = attemptRefs.length > 0
+            ? await ExternalExamJoinLog.find({
+                examId: new mongoose.Types.ObjectId(examId),
+                attemptRef: { $in: attemptRefs },
+            })
+                .sort({ joinedAt: -1 })
+                .select('_id attemptRef studentId attemptNo joinedAt')
+                .lean()
+            : [];
+
+        const profileClauses: Record<string, unknown>[] = [];
+        if (registrationIds.length > 0) {
+            profileClauses.push({
+                registration_id: {
+                    $in: Array.from(new Set([
+                        ...registrationIds,
+                        ...registrationIds.map((value) => value.toUpperCase()),
+                        ...registrationIds.map((value) => value.toLowerCase()),
+                    ])),
+                },
+            });
+        }
+        if (userUniqueIds.length > 0) profileClauses.push({ user_unique_id: { $in: userUniqueIds } });
+        if (phones.length > 0) {
+            profileClauses.push({ phone_number: { $in: phones } });
+            profileClauses.push({ phone: { $in: phones } });
+        }
+
+        const profilesByIdentifiers = profileClauses.length > 0
+            ? await StudentProfile.find({ $or: profileClauses })
+                .select('user_id user_unique_id registration_id phone_number phone full_name groupIds email institution_name roll_number department ssc_batch hsc_batch guardian_name guardian_phone')
+                .lean()
+            : [];
+
+        const seededUserIds = Array.from(new Set([
+            ...logsByRef.map((item) => String(item.studentId || '')),
+            ...profilesByIdentifiers.map((item) => String(item.user_id || '')),
+        ].filter((value) => mongoose.Types.ObjectId.isValid(value))));
+
+        const userClauses: Record<string, unknown>[] = [];
+        if (seededUserIds.length > 0) {
+            userClauses.push({ _id: { $in: seededUserIds.map((value) => new mongoose.Types.ObjectId(value)) } });
+        }
+        if (usernames.length > 0) userClauses.push({ username: { $in: usernames } });
+        if (emails.length > 0) userClauses.push({ email: { $in: emails } });
+        if (phones.length > 0) userClauses.push({ phone_number: { $in: phones } });
+
+        const users = userClauses.length > 0
+            ? await User.find({ $or: userClauses })
+                .select('_id username email phone_number full_name subscription')
+                .lean()
+            : [];
+
+        const allUserIds = Array.from(new Set([
+            ...seededUserIds,
+            ...users.map((item) => String(item._id || '')),
+        ].filter((value) => mongoose.Types.ObjectId.isValid(value))));
+
+        const profiles = allUserIds.length > 0
+            ? await StudentProfile.find({ user_id: { $in: allUserIds.map((value) => new mongoose.Types.ObjectId(value)) } })
+                .select('user_id user_unique_id registration_id phone_number phone full_name groupIds email institution_name roll_number department ssc_batch hsc_batch guardian_name guardian_phone')
+                .lean()
+            : [];
+
+        const attemptLogs = allUserIds.length > 0
+            ? await ExternalExamJoinLog.find({
+                examId: new mongoose.Types.ObjectId(examId),
+                studentId: { $in: allUserIds.map((value) => new mongoose.Types.ObjectId(value)) },
+            })
+                .sort({ joinedAt: -1 })
+                .select('_id attemptRef studentId attemptNo status joinedAt')
+                .lean()
+            : [];
+
+        const userById = new Map<string, Record<string, unknown>>();
+        const userByUsername = new Map<string, Record<string, unknown>>();
+        const userByEmail = new Map<string, Record<string, unknown>>();
+        const userByPhone = new Map<string, Record<string, unknown>>();
+        for (const user of users as Array<Record<string, unknown>>) {
+            const userId = String(user._id || '');
+            userById.set(userId, user);
+            const username = normalizeLookupValue(user.username);
+            const email = normalizeLookupValue(user.email);
+            const phone = String(user.phone_number || '').trim();
+            if (username) userByUsername.set(username, user);
+            if (email) userByEmail.set(email, user);
+            if (phone) userByPhone.set(phone, user);
+        }
+
+        const profileByUserId = new Map<string, Record<string, unknown>>();
+        const profileByRegistrationId = new Map<string, Record<string, unknown>>();
+        const profileByUniqueId = new Map<string, Record<string, unknown>>();
+        const profileByPhone = new Map<string, Record<string, unknown>>();
+        for (const profile of profiles as Array<Record<string, unknown>>) {
+            const userId = String(profile.user_id || '');
+            if (userId) profileByUserId.set(userId, profile);
+            const registrationId = normalizeExternalImportRegistrationId(profile.registration_id);
+            const userUniqueId = String(profile.user_unique_id || '').trim();
+            const phone = String(profile.phone_number || profile.phone || '').trim();
+            if (registrationId) profileByRegistrationId.set(registrationId, profile);
+            if (userUniqueId) profileByUniqueId.set(userUniqueId, profile);
+            if (phone) profileByPhone.set(phone, profile);
+        }
+
+        const logByAttemptRef = new Map<string, Record<string, unknown>>();
+        const logByStudentAttempt = new Map<string, Record<string, unknown>>();
+        for (const log of attemptLogs as Array<Record<string, unknown>>) {
+            const attemptRef = normalizeLookupValue(log.attemptRef);
+            const studentId = String(log.studentId || '');
+            const attemptNo = Math.max(1, Number(log.attemptNo || 1));
+            if (attemptRef && !logByAttemptRef.has(attemptRef)) logByAttemptRef.set(attemptRef, log);
+            const compositeKey = `${studentId}:${attemptNo}`;
+            if (studentId && !logByStudentAttempt.has(compositeKey)) logByStudentAttempt.set(compositeKey, log);
+        }
+        for (const log of logsByRef as Array<Record<string, unknown>>) {
+            const attemptRef = normalizeLookupValue(log.attemptRef);
+            if (attemptRef && !logByAttemptRef.has(attemptRef)) logByAttemptRef.set(attemptRef, log);
+        }
+
+        const errors: Array<{ rowNo: number; identifier: string; reason: string }> = [];
+        const examTotalMarks = Math.max(0, Number((exam as Record<string, unknown>).totalMarks || 0));
+        const impactedStudentIds = new Set<string>();
+        let inserted = 0;
+        let updated = 0;
+        let profileUpdates = 0;
+
+        for (const row of normalizedRows) {
+            const attemptRef = normalizeLookupValue(row.data.attempt_ref);
+            const registrationId = normalizeExternalImportRegistrationId(row.data.registration_id);
+            const userUniqueId = String(row.data.user_unique_id || '').trim();
+            const username = normalizeLookupValue(row.data.username);
+            const email = normalizeLookupValue(row.data.email);
+            const phoneNumber = String(row.data.phone_number || '').trim();
+            const identifier = attemptRef || registrationId || userUniqueId || username || email || phoneNumber;
+
+            if (!identifier) {
+                errors.push({ rowNo: row.rowNo, identifier: '', reason: 'At least one identifier is required: cw_ref, registration_id, user_unique_id, username, email, or phone_number.' });
+                continue;
+            }
+
+            let matchedBy = '';
+            let matchedLog = attemptRef ? logByAttemptRef.get(attemptRef) || null : null;
+            let user = matchedLog ? userById.get(String(matchedLog.studentId || '')) || null : null;
+            let profile = matchedLog ? profileByUserId.get(String(matchedLog.studentId || '')) || null : null;
+
+            if (!user && registrationId) {
+                profile = profileByRegistrationId.get(registrationId) || null;
+                user = profile ? userById.get(String(profile.user_id || '')) || null : null;
+                if (user) matchedBy = 'registration_id';
+            }
+            if (!user && userUniqueId) {
+                profile = profileByUniqueId.get(userUniqueId) || null;
+                user = profile ? userById.get(String(profile.user_id || '')) || null : null;
+                if (user) matchedBy = 'user_unique_id';
+            }
+            if (!user && username) {
+                user = userByUsername.get(username) || null;
+                profile = user ? profileByUserId.get(String(user._id || '')) || null : null;
+                if (user) matchedBy = 'username';
+            }
+            if (!user && email) {
+                user = userByEmail.get(email) || null;
+                profile = user ? profileByUserId.get(String(user._id || '')) || null : null;
+                if (user) matchedBy = 'email';
+            }
+            if (!user && phoneNumber) {
+                profile = profileByPhone.get(phoneNumber) || null;
+                user = profile
+                    ? userById.get(String(profile.user_id || '')) || null
+                    : userByPhone.get(phoneNumber) || null;
+                if (!profile && user) profile = profileByUserId.get(String(user._id || '')) || null;
+                if (user) matchedBy = 'phone_number';
+            }
+
+            if (!matchedBy && matchedLog) matchedBy = 'attempt_ref';
+            if (!user) {
+                errors.push({ rowNo: row.rowNo, identifier, reason: 'No student matched the provided identifiers.' });
+                continue;
+            }
+
+            const requestedAttemptNo = Math.max(0, Number(parseNumeric(row.data.attempt_no) || 0));
+            const studentId = String(user._id || '');
+            const attemptNo = requestedAttemptNo || Math.max(1, Number(matchedLog?.attemptNo || 1));
+            if (!matchedLog) {
+                matchedLog = logByStudentAttempt.get(`${studentId}:${attemptNo}`) || null;
+            }
+
+            const importEligibility = await isStudentEligibleForExamImport(exam as Record<string, unknown>, user, profile);
+            if (!importEligibility.allowed) {
+                errors.push({ rowNo: row.rowNo, identifier, reason: importEligibility.reason || 'Matched student is outside the exam audience.' });
+                continue;
+            }
+
+            const importedTotalMarks = parseNumeric(row.data.total_marks);
+            const importedObtainedMarks = parseNumeric(row.data.obtained_marks);
+            const importedPercentage = parseNumeric(row.data.percentage);
+            const totalMarks = importedTotalMarks !== null
+                ? Math.max(0, Number(importedTotalMarks))
+                : examTotalMarks;
+
+            if (importedObtainedMarks === null && importedPercentage === null) {
+                errors.push({ rowNo: row.rowNo, identifier, reason: 'obtained_marks or percentage is required.' });
+                continue;
+            }
+            if (totalMarks <= 0 && importedPercentage !== null) {
+                errors.push({ rowNo: row.rowNo, identifier, reason: 'total_marks is required when percentage is provided and exam total marks is not set.' });
+                continue;
+            }
+
+            const obtainedMarksRaw = importedObtainedMarks !== null
+                ? Number(importedObtainedMarks)
+                : Number(((totalMarks * Number(importedPercentage || 0)) / 100).toFixed(2));
+            const obtainedMarks = totalMarks > 0
+                ? Math.min(totalMarks, Math.max(0, obtainedMarksRaw))
+                : Math.max(0, obtainedMarksRaw);
+            const percentage = importedPercentage !== null
+                ? Math.max(0, Math.min(100, Number(importedPercentage)))
+                : (totalMarks > 0 ? Number(((obtainedMarks / totalMarks) * 100).toFixed(2)) : 0);
+            const submittedAt = parseLooseDate(row.data.submitted_at) || new Date();
+            const timeTakenSec = Math.max(0, Number(parseNumeric(row.data.time_taken_sec) || 0));
+            const correctCount = Math.max(0, Number(parseNumeric(row.data.correct_count) || 0));
+            const wrongCount = Math.max(0, Number(parseNumeric(row.data.wrong_count) || 0));
+            const unansweredCount = Math.max(0, Number(parseNumeric(row.data.unanswered_count) || 0));
+
+            const filter = {
+                exam: new mongoose.Types.ObjectId(examId),
+                student: new mongoose.Types.ObjectId(studentId),
+                attemptNo,
+            };
+            const existing = await ExamResult.findOne(filter).select('_id').lean();
+            const resultDoc = await ExamResult.findOneAndUpdate(
+                filter,
+                {
+                    $set: {
+                        exam: new mongoose.Types.ObjectId(examId),
+                        student: new mongoose.Types.ObjectId(studentId),
+                        attemptNo,
+                        sourceType: 'external_import',
+                        syncStatus: syncProfileMode === 'none' ? 'pending' : 'synced',
+                        answers: [],
+                        totalMarks,
+                        obtainedMarks,
+                        correctCount,
+                        wrongCount,
+                        unansweredCount,
+                        percentage,
+                        pointsEarned: Math.round(percentage),
+                        serialId: String(row.data.serial_id || ''),
+                        rollNumber: String(row.data.roll_number || ''),
+                        registrationNumber: String(row.data.registration_id || ''),
+                        admitCardNumber: String(row.data.admit_card_number || ''),
+                        attendanceStatus: String(row.data.attendance_status || ''),
+                        passFail: String(row.data.pass_fail || ''),
+                        resultNote: String(row.data.exam_result_note || ''),
+                        profileUpdateNote: String(row.data.profile_update_note || ''),
+                        examCenterName: String(row.data.exam_center || ''),
+                        examCenterCode: String(row.data.exam_center_code || ''),
+                        subjectMarks: Array.isArray(row.data.subject_marks) ? row.data.subject_marks : [],
+                        timeTaken: timeTakenSec,
+                        deviceInfo: 'external_import',
+                        browserInfo: 'external_import',
+                        ipAddress: '',
+                        tabSwitchCount: 0,
+                        submittedAt,
+                        isAutoSubmitted: false,
+                        status: 'evaluated',
+                    },
+                },
+                {
+                    upsert: true,
+                    new: true,
+                    setDefaultsOnInsert: true,
+                },
+            ).lean();
+
+            if (!resultDoc?._id) {
+                errors.push({ rowNo: row.rowNo, identifier, reason: 'Failed to save imported result.' });
+                continue;
+            }
+
+            if (existing?._id) updated++;
+            else inserted++;
+            impactedStudentIds.add(studentId);
+
+            if (matchedLog?._id || attemptRef) {
+                await markExternalExamAttemptImported({
+                    attemptId: String(matchedLog?._id || ''),
+                    attemptRef: attemptRef || String(matchedLog?.attemptRef || ''),
+                    resultId: String(resultDoc._id),
+                    matchedBy: matchedBy || 'attempt_ref',
+                });
+            }
+
+            const syncResult = await syncExamResultToStudentProfile({
+                exam: exam as Record<string, unknown>,
+                result: resultDoc,
+                studentId,
+                source: 'external_import',
+                syncMode: syncProfileMode,
+                createdBy: String(req.user?._id || ''),
+                candidates: {
+                    serialId: row.data.serial_id,
+                    rollNumber: row.data.roll_number,
+                    registrationNumber: row.data.registration_id,
+                    admitCardNumber: row.data.admit_card_number,
+                    fullName: row.data.full_name,
+                    email: row.data.email,
+                    phoneNumber: row.data.phone_number,
+                    institutionName: row.data.institution_name,
+                    department: row.data.department,
+                    sscBatch: row.data.ssc_batch,
+                    hscBatch: row.data.hsc_batch,
+                    guardianName: row.data.guardian_name,
+                    guardianPhone: row.data.guardian_phone,
+                    examCenter: row.data.exam_center,
+                    examResultNote: row.data.exam_result_note,
+                    profileUpdateNote: row.data.profile_update_note,
+                    userUniqueId: row.data.user_unique_id,
+                    attendanceStatus: row.data.attendance_status,
+                    passFail: row.data.pass_fail,
+                },
+                notifyStudent: true,
+            });
+            if (syncResult.changed) profileUpdates++;
+        }
+
+        if (inserted === 0 && updated === 0) {
+            res.status(400).json({
+                message: 'No valid rows found to import.',
+                imported: 0,
+                errors,
+            });
+            return;
+        }
+
+        await recomputeGlobalExamRanks(examId);
+        await Promise.all(Array.from(impactedStudentIds).map((studentId) => updateStudentPoints(studentId)));
+
+        res.json({
+            message: 'External exam results imported successfully.',
+            examId,
+            examTitle: (exam as Record<string, unknown>).title,
+            imported: inserted + updated,
+            inserted,
+            updated,
+            profileUpdates,
+            invalid: errors.length,
+            errors,
+            syncProfileMode,
+        });
+    } catch (err) {
+        console.error('[adminImportExternalExamResults]', err);
+        res.status(500).json({ message: 'Server error during external import.' });
     }
 }
 
@@ -2233,3 +2974,4 @@ export async function adminLiveAttemptAction(req: AuthRequest, res: Response): P
         res.status(500).json({ message: 'Server error' });
     }
 }
+

@@ -34,6 +34,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../hooks/useAuth';
 import { useAdminRuntimeFlags } from '../../hooks/useAdminRuntimeFlags';
+import { downloadFile } from '../../utils/download';
 import {
     Plus, Search,
     CreditCard, Layers,
@@ -58,22 +59,6 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
             </div>
         </div>
     );
-}
-
-function exportCsv(filename: string, rows: Record<string, unknown>[]) {
-    if (!rows.length) return;
-    const headers = Object.keys(rows[0]);
-    const lines = [headers.join(',')];
-    for (const row of rows) {
-        lines.push(headers.map((h) => `"${String(row[h] ?? '').replace(/"/g, '""')}"`).join(','));
-    }
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
 }
 
 function ImportWizard({ groups, plans, onSuccess, onClose }: {
@@ -216,13 +201,7 @@ function ImportWizard({ groups, plans, onSuccess, onClose }: {
                             onClick={async () => {
                                 try {
                                     const res = await adminDownloadStudentTemplate();
-                                    const url = window.URL.createObjectURL(new Blob([res.data]));
-                                    const link = document.createElement('a');
-                                    link.href = url;
-                                    link.setAttribute('download', 'student_import_template.xlsx');
-                                    document.body.appendChild(link);
-                                    link.click();
-                                    link.remove();
+                                    downloadFile(res, { filename: 'student_import_template.xlsx' });
                                 } catch (err) {
                                     toast.error('Failed to download template');
                                 }
@@ -1557,8 +1536,8 @@ export default function StudentManagementPanel({ initialTab = 'students' }: { in
 
     const handleExportGroups = async () => {
         try {
-            const res = await adminExportStudentGroups();
-            exportCsv(`student-groups-${new Date().toISOString().split('T')[0]}.csv`, res.data || []);
+            const res = await adminExportStudentGroups({ q: search || undefined, format: 'csv' });
+            downloadFile(res, { filename: `student-groups-${new Date().toISOString().split('T')[0]}.csv` });
             toast.success('Groups exported');
         } catch (e: any) {
             toast.error(e.response?.data?.message || 'Group export failed');
@@ -1822,8 +1801,9 @@ export default function StudentManagementPanel({ initialTab = 'students' }: { in
                                             ...studentFilters,
                                             profileScoreBand: (studentFilters.profileScoreBand || undefined) as 'lt70' | 'gte70' | undefined,
                                             paymentStatus: (studentFilters.paymentStatus || undefined) as 'pending' | 'paid' | 'clear' | undefined,
+                                            format: 'csv',
                                         });
-                                        exportCsv(`students-export-${new Date().toISOString().split('T')[0]}.csv`, res.data || []);
+                                        downloadFile(res, { filename: `students-export-${new Date().toISOString().split('T')[0]}.csv` });
                                         toast.success('Export completed');
                                     } catch (err) {
                                         toast.error('Export failed');
@@ -1839,13 +1819,7 @@ export default function StudentManagementPanel({ initialTab = 'students' }: { in
                                 onClick={async () => {
                                     try {
                                         const res = await adminDownloadStudentTemplate();
-                                        const url = window.URL.createObjectURL(new Blob([res.data]));
-                                        const link = document.createElement('a');
-                                        link.href = url;
-                                        link.setAttribute('download', 'student_import_template.xlsx');
-                                        document.body.appendChild(link);
-                                        link.click();
-                                        link.remove();
+                                        downloadFile(res, { filename: 'student_import_template.xlsx' });
                                     } catch (err) {
                                         toast.error('Failed to download template');
                                     }

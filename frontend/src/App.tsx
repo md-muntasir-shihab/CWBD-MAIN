@@ -23,6 +23,7 @@ import HelpCenterPage from './pages/HelpCenter';
 import HelpArticlePage from './pages/HelpArticle';
 import SubscriptionPlansPage from './pages/SubscriptionPlans';
 import SubscriptionPlanDetailPage from './pages/SubscriptionPlanDetail';
+import SubscriptionPlanCheckoutPage from './pages/SubscriptionPlanCheckout';
 import LoginPage from './pages/Login';
 import AdminSecretLoginPage from './pages/AdminSecretLogin';
 import OtpVerificationPage from './pages/OtpVerification';
@@ -47,6 +48,7 @@ import AdminSettingsNotificationsPage from './pages/AdminSettingsNotifications';
 import AdminSettingsAnalyticsPage from './pages/AdminSettingsAnalytics';
 import AdminSettingsNewsPage from './pages/AdminSettingsNews';
 import AdminReportsPage from './pages/AdminReports';
+import AdminGuardShell from './components/admin/AdminGuardShell';
 import AdminNewsConsole from './pages/admin-news/AdminNewsConsole';
 import FinanceLayout from './components/admin/finance/FinanceLayout';
 import StudentManagementLayout from './components/admin/students/StudentManagementLayout';
@@ -87,6 +89,7 @@ import {
     AdminSubscriptionsV2Page,
 } from './pages/AdminCorePages';
 import CampaignConsolePage from './pages/admin/campaigns/CampaignConsolePage';
+import AdminHelpCenterPage from './pages/admin/help-center/AdminHelpCenterPage';
 import NotificationTestSendPage from './pages/admin/notifications/NotificationTestSendPage';
 import NotificationTriggersPage from './pages/admin/notifications/NotificationTriggersPage';
 import DataHubPage from './pages/admin/datahub/DataHubPage';
@@ -157,11 +160,18 @@ function resolveRouteTitle(pathname: string, siteName: string, defaultTitle: str
     if (pathname.startsWith('/help-center/')) return null;
     if (pathname === '/pricing') return withSite('Subscription Plans');
     if (pathname === '/subscription-plans') return withSite('Subscription Plans');
+    if (pathname.startsWith('/subscription-plans/checkout/')) return withSite('Subscription Checkout');
+    if (pathname.startsWith('/subscription-plans/')) return withSite('Subscription Plan Details');
     if (pathname === '/subscription') return withSite('Subscription Plans');
     if (pathname === '/subscriptions') return withSite('Subscription Plans');
     if (pathname === STUDENT_LOGIN) return withSite('Student Login');
     if (pathname === CHAIRMAN_LOGIN) return withSite('Chairman Login');
     if (pathname === ADMIN_LOGIN) return withSite('Admin Login');
+    if (pathname === '/support') return withSite('Student Support');
+    if (pathname.startsWith('/support/')) return withSite('Support Ticket');
+    if (pathname === '/notifications') return withSite('Student Notifications');
+    if (pathname === '/payments') return withSite('Student Payments');
+    if (pathname === '/results') return withSite('Student Results');
     if (pathname.startsWith('/__cw_admin__/settings')) return withSite('Admin Settings');
     if (pathname === ADMIN_DASHBOARD) return withSite('Admin Dashboard');
     if (pathname === '/__cw_admin__/universities') return withSite('Admin Universities');
@@ -170,8 +180,17 @@ function resolveRouteTitle(pathname: string, siteName: string, defaultTitle: str
     if (pathname === '/__cw_admin__/payments') return withSite('Admin Payments');
     if (pathname === '/__cw_admin__/exams') return withSite('Admin Exams');
     if (pathname === '/__cw_admin__/resources') return withSite('Admin Resources');
+    if (pathname.startsWith('/__cw_admin__/finance')) return withSite('Admin Finance Center');
+    if (pathname.startsWith('/__cw_admin__/subscriptions/plans')) return withSite('Admin Subscription Plans');
     if (pathname.startsWith('/__cw_admin__/subscription-plans')) return withSite('Admin Subscription Plans');
     if (pathname === '/__cw_admin__/support-center') return withSite('Admin Support Center');
+    if (pathname === '/__cw_admin__/contact') return withSite('Admin Contact Messages');
+    if (pathname === '/__cw_admin__/notification-center') return withSite('Admin Actionable Alerts');
+    if (pathname === '/__cw_admin__/help-center') return withSite('Admin Help Center');
+    if (pathname === '/__cw_admin__/settings/notifications') return withSite('Admin Notification Settings');
+    if (pathname === '/__cw_admin__/notifications/test-send') return withSite('Admin Notification Test Send');
+    if (pathname === '/__cw_admin__/notifications/triggers') return withSite('Admin Notification Triggers');
+    if (pathname.startsWith('/__cw_admin__/campaigns')) return withSite('Admin Campaign Platform');
     if (pathname === '/__cw_admin__/reports') return withSite('Admin Reports');
     if (pathname === '/__cw_admin__/question-bank') return withSite('Admin Question Bank');
     if (pathname.startsWith('/__cw_admin__/team/')) return withSite('Admin Team & Access Control');
@@ -209,7 +228,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
         STUDENT_APP_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
     const isFullScreen = FULL_SCREEN_PREFIXES.some((prefix) => path.startsWith(prefix));
     const { data: settings } = useWebsiteSettings();
-    useHomeLiveUpdates();
+    useHomeLiveUpdates(!isFullScreen && !isStudentAppRoute);
 
     // Dynamically update title + favicon from route + admin settings.
     useEffect(() => {
@@ -243,6 +262,13 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 }
 
 function LegacyExamTakeRedirect() {
+    const { examId } = useParams<{ examId: string }>();
+    const location = useLocation();
+    if (!examId) return <Navigate to="/exams" replace />;
+    return <Navigate to={`/exam/${examId}${location.search}`} replace />;
+}
+
+function LegacyStudentExamStartRedirect() {
     const { examId } = useParams<{ examId: string }>();
     const location = useLocation();
     if (!examId) return <Navigate to="/exams" replace />;
@@ -289,6 +315,7 @@ export default function App() {
                                 <Route path="/exam-portal" element={<Navigate to="/exams" replace />} />
                                 <Route path="/exams/landing" element={<Navigate to="/exams" replace />} />
                                 <Route path="/exams" element={<ExamsListPage />} />
+                                <Route path="/exams/:examId/start" element={<LegacyStudentExamStartRedirect />} />
                                 <Route path="/exam/:examId" element={<ExamRunnerPage />} />
                                 <Route path="/exam/:examId/result" element={<ExamResultPage />} />
                                 <Route path="/exam/:examId/solutions" element={<ExamSolutionsPage />} />
@@ -302,6 +329,7 @@ export default function App() {
                                 <Route path="/help-center/:slug" element={<HelpArticlePage />} />
                                 <Route path="/pricing" element={<Navigate to="/subscription-plans" replace />} />
                                 <Route path="/subscription-plans" element={<SubscriptionPlansPage />} />
+                                <Route path="/subscription-plans/checkout/:slug" element={<SubscriptionPlanCheckoutPage />} />
                                 <Route path="/subscription-plans/:planId" element={<SubscriptionPlanDetailPage />} />
                                 <Route path="/subscription" element={<Navigate to="/subscription-plans" replace />} />
                                 <Route path="/subscriptions" element={<Navigate to="/subscription-plans" replace />} />
@@ -326,17 +354,34 @@ export default function App() {
                                 <Route path={adminUi('universities/:id/edit')} element={<AdminUniversitiesPage />} />
                                 <Route path={ADMIN_PATHS.news} element={<Navigate to={adminUi('news/dashboard')} replace />} />
                                 <Route path={adminUi('news/*')} element={<AdminNewsConsole />} />
-                                <Route path={ADMIN_PATHS.exams} element={<AdminExamsPage />} />
+                                <Route
+                                    path={ADMIN_PATHS.exams}
+                                    element={
+                                        <AdminGuardShell
+                                            title="Exams"
+                                            description="Create and manage exams, questions, results, and payments."
+                                            allowedRoles={['superadmin', 'admin', 'moderator', 'editor']}
+                                        >
+                                            <AdminExamsPage />
+                                        </AdminGuardShell>
+                                    }
+                                />
                                 <Route path={ADMIN_PATHS.questionBank} element={<AdminQuestionBankPage />} />
                                 <Route path={adminUi('question-bank/*')} element={<AdminQuestionBankPage />} />
                                 <Route path={ADMIN_PATHS.students} element={<Navigate to={adminUi('student-management/list')} replace />} />
                                 <Route path={ADMIN_PATHS.studentGroups} element={<Navigate to={adminUi('student-management/groups')} replace />} />
-                                <Route path={adminUi('subscription-plans')} element={<AdminSubscriptionPlansPage />} />
-                                <Route path={adminUi('subscription-plans/new')} element={<AdminSubscriptionPlansPage />} />
+                                <Route path={adminUi('subscription-plans')} element={<Navigate to={adminUi('subscriptions/plans')} replace />} />
+                                <Route path={adminUi('subscription-plans/new')} element={<Navigate to={adminUi('subscriptions/plans/new')} replace />} />
+                                <Route path={adminUi('subscription-plans/:id')} element={<AdminSubscriptionPlansPage />} />
                                 <Route path={adminUi('subscription-plans/:id/edit')} element={<AdminSubscriptionPlansPage />} />
+                                <Route path={adminUi('subscriptions/plans')} element={<AdminSubscriptionPlansPage />} />
+                                <Route path={adminUi('subscriptions/plans/new')} element={<AdminSubscriptionPlansPage />} />
+                                <Route path={adminUi('subscriptions/plans/:id')} element={<AdminSubscriptionPlansPage />} />
+                                <Route path={adminUi('subscriptions/plans/:id/edit')} element={<AdminSubscriptionPlansPage />} />
                                 <Route path={ADMIN_PATHS.subscriptionsV2} element={<AdminSubscriptionsV2Page />} />
                                 <Route path={ADMIN_PATHS.resources} element={<AdminResourcesPage />} />
                                 <Route path={ADMIN_PATHS.supportCenter} element={<AdminSupportCenterPage />} />
+                                <Route path={ADMIN_PATHS.helpCenterAdmin} element={<AdminHelpCenterPage />} />
                                 <Route path={ADMIN_PATHS.contact} element={<AdminContactPage />} />
                                 <Route path={ADMIN_PATHS.payments} element={<Navigate to={adminUi('finance/transactions')} replace />} />
                                 <Route path={adminUi('finance')} element={<Navigate to={adminUi('finance/dashboard')} replace />} />

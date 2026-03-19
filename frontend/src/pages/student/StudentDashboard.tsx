@@ -1,5 +1,4 @@
 ﻿import { RefreshCw } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import { useStudentDashboardFull, useDashboardRealtime } from '../../hooks/useStudentDashboard';
 import type { DashboardSectionConfig } from '../../services/api';
 
@@ -77,17 +76,6 @@ export default function StudentDashboard() {
                 dailyFocus={data.dailyFocus}
                 personalizedCtas={data.personalizedCtas}
             />
-
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">My Subscription</p>
-                        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Manage your active plan, renewals, and activation requests from one place.</p>
-                    </div>
-                    <Link to="/subscription-plans" className="btn-outline text-sm">View Plans</Link>
-                </div>
-            </div>
-
             {/* 2 — Quick Status Cards */}
             {isSectionVisible(sections, 'quickStatus') && (
                 <QuickStatusCards status={data.quickStatus} />

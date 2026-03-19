@@ -13,6 +13,13 @@ import type {
     UniversityCategorySummary,
 } from '../services/api';
 import type { AxiosResponse } from 'axios';
+import {
+    buildUniversityLogoFallback,
+    daysUntilUniversityDate,
+    parseUniversityDate,
+    pickText,
+    toUniversitySlug,
+} from './universityPresentation';
 
 /* ── Public types re-exported for convenience ── */
 
@@ -146,17 +153,11 @@ if (IS_MOCK_MODE) {
 /* ── Response normalisation helpers ── */
 
 export function toSlug(value: string): string {
-    return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    return toUniversitySlug(value);
 }
 
 function safeDaysDiff(dateStr: string): number | null {
-    if (!dateStr) return null;
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return null;
-    const now = new Date();
-    const nowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const targetStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-    return Math.floor((targetStart - nowStart) / (24 * 60 * 60 * 1000));
+    return daysUntilUniversityDate(dateStr);
 }
 
 function computeUrgency(startStr: string, endStr: string, closingSoonDays = 7): {
@@ -165,9 +166,9 @@ function computeUrgency(startStr: string, endStr: string, closingSoonDays = 7): 
     deadlinePassed: boolean;
     applicationProgress: number | null;
 } {
-    const start = startStr ? new Date(startStr) : null;
-    const end = endStr ? new Date(endStr) : null;
-    if (!start || !end || isNaN(start.getTime()) || isNaN(end.getTime())) {
+    const start = parseUniversityDate(startStr);
+    const end = parseUniversityDate(endStr);
+    if (!start || !end) {
         return { urgencyState: 'unknown', daysLeft: null, deadlinePassed: false, applicationProgress: null };
     }
     const now = Date.now();
@@ -193,41 +194,40 @@ function computeUrgency(startStr: string, endStr: string, closingSoonDays = 7): 
 }
 
 export function buildLogoFallback(name: string, shortForm?: string): string {
-    if (shortForm && shortForm !== 'N/A') return shortForm.slice(0, 3).toUpperCase();
-    return name.split(' ').filter(w => !['of', 'the', 'and', 'for'].includes(w.toLowerCase())).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'U';
+    return buildUniversityLogoFallback(name, shortForm);
 }
 
 function normalizeUniversityCard(raw: ApiUniversity | ApiUniversityCardPreview): UniversityCard {
     const r = raw as unknown as Record<string, unknown>;
-    const name = String(r.name || '');
-    const category = String(r.category || '');
-    const clusterGroup = String(r.clusterGroup || '');
-    const applicationStartDate = String(r.applicationStartDate || r.applicationStart || '');
-    const applicationEndDate = String(r.applicationEndDate || r.applicationEnd || '');
-    const scienceExamDate = String(r.scienceExamDate || r.examDateScience || '');
-    const artsExamDate = String(r.artsExamDate || r.examDateArts || '');
-    const businessExamDate = String(r.businessExamDate || r.examDateBusiness || '');
-    const logoUrl = String(r.logoUrl || '');
+    const name = pickText(r.name);
+    const category = pickText(r.category);
+    const clusterGroup = pickText(r.clusterGroup);
+    const applicationStartDate = pickText(r.applicationStartDate || r.applicationStart);
+    const applicationEndDate = pickText(r.applicationEndDate || r.applicationEnd);
+    const scienceExamDate = pickText(r.scienceExamDate || r.examDateScience);
+    const artsExamDate = pickText(r.artsExamDate || r.examDateArts);
+    const businessExamDate = pickText(r.businessExamDate || r.examDateBusiness);
+    const logoUrl = pickText(r.logoUrl);
 
     const urgency = computeUrgency(applicationStartDate, applicationEndDate);
 
     return {
         id: String(r._id || r.id || ''),
         name,
-        shortForm: String(r.shortForm || 'N/A'),
-        slug: String(r.slug || ''),
+        shortForm: pickText(r.shortForm, 'N/A'),
+        slug: pickText(r.slug),
         category,
         categorySlug: toSlug(category),
         clusterGroup,
         clusterSlug: toSlug(clusterGroup),
-        contactNumber: String(r.contactNumber || ''),
+        contactNumber: pickText(r.contactNumber),
         established: typeof r.established === 'number' ? r.established
             : typeof r.establishedYear === 'number' ? r.establishedYear
             : null,
-        address: String(r.address || ''),
-        email: String(r.email || ''),
-        website: String(r.website || r.websiteUrl || ''),
-        admissionWebsite: String(r.admissionWebsite || r.admissionUrl || ''),
+        address: pickText(r.address),
+        email: pickText(r.email),
+        website: pickText(r.website || r.websiteUrl),
+        admissionWebsite: pickText(r.admissionWebsite || r.admissionUrl),
         totalSeats: String(r.totalSeats ?? 'N/A'),
         scienceSeats: String(r.scienceSeats ?? r.seatsScienceEng ?? 'N/A'),
         artsSeats: String(r.artsSeats ?? r.seatsArtsHum ?? 'N/A'),
@@ -240,9 +240,9 @@ function normalizeUniversityCard(raw: ApiUniversity | ApiUniversityCardPreview):
         examCentersPreview: Array.isArray(r.examCentersPreview) ? r.examCentersPreview as string[]
             : Array.isArray(r.examCenters) ? (r.examCenters as { city: string }[]).map(c => c.city).slice(0, 6)
             : [],
-        shortDescription: String(r.shortDescription || r.description || ''),
+        shortDescription: pickText(r.shortDescription || r.description),
         logoUrl,
-        logoFallbackText: buildLogoFallback(name, String(r.shortForm || '')),
+        logoFallbackText: buildLogoFallback(name, pickText(r.shortForm)),
         daysLeft: urgency.daysLeft,
         urgencyState: urgency.urgencyState,
         deadlinePassed: urgency.deadlinePassed,

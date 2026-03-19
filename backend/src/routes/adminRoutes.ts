@@ -42,6 +42,7 @@ import {
     adminSignExamBannerUpload,
     adminDownloadExamResultsImportTemplate,
     adminImportExamResults,
+    adminImportExternalExamResults,
     adminExportExamReport,
 } from '../controllers/adminExamController';
 import {
@@ -78,6 +79,7 @@ import {
     adminCreateUniversityCategory,
     adminDeleteUniversityCategory,
     adminGetUniversityCategoryMaster,
+    adminSyncUniversityCategoryConfig,
     adminToggleUniversityCategory,
     adminUpdateUniversityCategory,
 } from '../controllers/universityCategoryController';
@@ -120,12 +122,20 @@ import {
     adminGetResources, adminCreateResource, adminUpdateResource, adminDeleteResource,
     adminToggleResourcePublish, adminToggleResourceFeatured,
     adminGetResourceSettings, adminUpdateResourceSettings,
-    adminGetContactMessages, adminDeleteContactMessage, adminUpdateContactMessage,
     getSiteSettings, updateSiteSettings,
     adminExportNews, adminExportSubscriptionPlans as adminExportSubscriptionPlansLegacy, adminExportUniversities as adminExportUniversitiesLegacy,
     adminGetNewsCategories, adminCreateNewsCategory, adminUpdateNewsCategory,
     adminDeleteNewsCategory, adminToggleNewsCategory,
 } from '../controllers/cmsController';
+import {
+    adminArchiveContactMessage,
+    adminDeleteContactMessage,
+    adminGetContactMessageById,
+    adminGetContactMessages,
+    adminMarkContactMessageRead,
+    adminResolveContactMessage,
+    adminUpdateContactMessage,
+} from '../controllers/contactController';
 import {
     adminNewsV2Dashboard,
     adminNewsV2FetchNow,
@@ -325,6 +335,27 @@ import {
     adminGetReportsSummary,
 } from '../controllers/adminReportsController';
 import {
+    adminCommitExamImport,
+    adminCreateExamCenter,
+    adminCreateExamImportTemplate,
+    adminCreateExamMappingProfile,
+    adminDeleteExamCenter,
+    adminDeleteExamImportTemplate,
+    adminDeleteExamMappingProfile,
+    adminGetExamCenterSettings,
+    adminGetExamCenters,
+    adminGetExamImportLogs,
+    adminGetExamImportTemplates,
+    adminGetExamMappingProfiles,
+    adminGetExamProfileSyncLogs,
+    adminPreviewExamImport,
+    adminRunExamProfileSync,
+    adminUpdateExamCenter,
+    adminUpdateExamCenterSettings,
+    adminUpdateExamImportTemplate,
+    adminUpdateExamMappingProfile,
+} from '../controllers/examCenterController';
+import {
     adminCreateExpense,
     adminCreatePayment,
     adminCreateStaffPayout,
@@ -380,15 +411,22 @@ import {
 import {
     adminCreateNotice,
     adminGetNotices,
-    adminGetSupportTickets,
-    adminReplySupportTicket,
     adminToggleNotice,
-    adminUpdateSupportTicketStatus,
 } from '../controllers/adminSupportController';
 import {
     adminGetActionableAlerts,
+    adminGetActionableAlertsUnreadCount,
+    adminMarkAllActionableAlertsRead,
     adminMarkActionableAlertsRead,
+    adminMarkSingleActionableAlertRead,
 } from '../controllers/adminAlertController';
+import {
+    adminGetSupportTicketById,
+    adminGetSupportTickets,
+    adminMarkSupportTicketRead,
+    adminReplySupportTicket,
+    adminUpdateSupportTicketStatus,
+} from '../controllers/supportController';
 import {
     adminDownloadBackup,
     adminListBackups,
@@ -413,6 +451,7 @@ import {
     adminAssignSubscription,
     adminActivateUserSubscription,
     adminCreateSubscriptionPlan,
+    adminDuplicateSubscriptionPlan,
     adminCreateUserSubscription,
     adminDeleteSubscriptionPlan,
     adminExportSubscriptionPlans,
@@ -641,7 +680,7 @@ router.get('/jobs/health', authorize('superadmin', 'admin', 'moderator', 'editor
 router.get('/health', (_req: Request, res: Response) => {
     res.json({ status: 'OK', message: 'Admin API is running', timestamp: new Date().toISOString() });
 });
-router.get('/dashboard/summary', authorize('superadmin', 'admin', 'moderator', 'editor'), adminGetDashboardSummary);
+router.get('/dashboard/summary', authorize('superadmin', 'admin', 'moderator', 'editor', 'viewer', 'support_agent', 'finance_agent'), adminGetDashboardSummary);
 router.get('/openapi/exam-console.json', authorize('superadmin', 'admin', 'moderator', 'editor'), (_req: Request, res: Response) => {
     const candidatePaths = [
         path.resolve(process.cwd(), '../docs/openapi/exam-console.json'),
@@ -754,10 +793,30 @@ router.get('/exams/:examId/analytics', authorize('superadmin', 'admin', 'moderat
 router.get('/exams/:examId/export', authorize('superadmin', 'admin'), canViewReports, adminExportExamResults);
 router.get('/exams/:id/results/import-template', authorize('superadmin', 'admin', 'moderator', 'editor'), canViewReports, adminDownloadExamResultsImportTemplate);
 router.post('/exams/:id/results/import', authorize('superadmin', 'admin', 'moderator'), canEditExams, upload.single('file'), adminImportExamResults);
+router.post('/exams/:id/results/import-external', authorize('superadmin', 'admin', 'moderator'), canEditExams, upload.single('file'), adminImportExternalExamResults);
+router.post('/exams/:id/import/preview', authorize('superadmin', 'admin', 'moderator'), canEditExams, upload.single('file'), adminPreviewExamImport);
+router.post('/exams/:id/import/commit', authorize('superadmin', 'admin', 'moderator'), canEditExams, adminCommitExamImport);
+router.get('/exams/:id/import/logs', authorize('superadmin', 'admin', 'moderator', 'editor'), canViewReports, adminGetExamImportLogs);
+router.post('/exams/:id/profile-sync/run', authorize('superadmin', 'admin', 'moderator'), canEditExams, adminRunExamProfileSync);
+router.get('/exams/:id/profile-sync/logs', authorize('superadmin', 'admin', 'moderator', 'editor'), canViewReports, adminGetExamProfileSyncLogs);
 router.get('/exams/:id/reports/export', authorize('superadmin', 'admin', 'moderator', 'editor'), canViewReports, adminExportExamReport);
 router.get('/exams/:id/events/export', authorize('superadmin', 'admin', 'moderator'), canViewReports, adminExportExamEvents);
 router.post('/exams/:id/preview/start', authorize('superadmin', 'admin', 'moderator'), canEditExams, adminStartExamPreview);
 router.patch('/exams/:examId/reset-attempt/:userId', authorize('superadmin', 'admin'), canEditExams, adminResetExamAttempt);
+router.get('/exam-import-templates', authorize('superadmin', 'admin', 'moderator', 'editor'), canViewReports, adminGetExamImportTemplates);
+router.post('/exam-import-templates', authorize('superadmin', 'admin', 'moderator'), canEditExams, adminCreateExamImportTemplate);
+router.put('/exam-import-templates/:id', authorize('superadmin', 'admin', 'moderator'), canEditExams, adminUpdateExamImportTemplate);
+router.delete('/exam-import-templates/:id', authorize('superadmin', 'admin'), canDeleteData, adminDeleteExamImportTemplate);
+router.get('/exam-mapping-profiles', authorize('superadmin', 'admin', 'moderator', 'editor'), canViewReports, adminGetExamMappingProfiles);
+router.post('/exam-mapping-profiles', authorize('superadmin', 'admin', 'moderator'), canEditExams, adminCreateExamMappingProfile);
+router.put('/exam-mapping-profiles/:id', authorize('superadmin', 'admin', 'moderator'), canEditExams, adminUpdateExamMappingProfile);
+router.delete('/exam-mapping-profiles/:id', authorize('superadmin', 'admin'), canDeleteData, adminDeleteExamMappingProfile);
+router.get('/exam-centers', authorize('superadmin', 'admin', 'moderator', 'editor'), canViewReports, adminGetExamCenters);
+router.post('/exam-centers', authorize('superadmin', 'admin', 'moderator'), canEditExams, adminCreateExamCenter);
+router.put('/exam-centers/:id', authorize('superadmin', 'admin', 'moderator'), canEditExams, adminUpdateExamCenter);
+router.delete('/exam-centers/:id', authorize('superadmin', 'admin'), canDeleteData, adminDeleteExamCenter);
+router.get('/exam-center-settings', authorize('superadmin', 'admin', 'moderator', 'editor'), canViewReports, adminGetExamCenterSettings);
+router.put('/exam-center-settings', authorize('superadmin', 'admin', 'moderator'), canEditExams, adminUpdateExamCenterSettings);
 
 /* ── Questions (per-exam) ── */
 router.get('/exams/:examId/questions', authorize('superadmin', 'admin', 'moderator', 'editor'), adminGetQuestions);
@@ -816,6 +875,7 @@ router.get('/universities/categories', authorize('superadmin', 'admin', 'moderat
 router.get('/university-categories', authorize('superadmin', 'admin', 'moderator', 'editor'), adminGetUniversityCategoryMaster);
 router.post('/university-categories', authorize('superadmin', 'admin', 'moderator'), adminCreateUniversityCategory);
 router.put('/university-categories/:id', authorize('superadmin', 'admin', 'moderator'), adminUpdateUniversityCategory);
+router.post('/university-categories/:id/sync-config', authorize('superadmin', 'admin', 'moderator'), adminSyncUniversityCategoryConfig);
 router.patch('/university-categories/:id/toggle', authorize('superadmin', 'admin', 'moderator'), adminToggleUniversityCategory);
 router.delete('/university-categories/:id', authorize('superadmin', 'admin'), adminDeleteUniversityCategory);
 router.get('/universities/export', authorize('superadmin', 'admin', 'moderator', 'editor'), adminExportUniversities);
@@ -971,8 +1031,12 @@ router.get('/resource-settings', authorize('superadmin', 'admin', 'moderator', '
 router.put('/resource-settings', authorize('superadmin', 'admin', 'moderator'), adminUpdateResourceSettings);
 
 /* ── Contact Messages ── */
-router.get('/contact-messages', authorize('superadmin', 'admin', 'moderator'), adminGetContactMessages);
-router.patch('/contact-messages/:id', authorize('superadmin', 'admin', 'moderator'), adminUpdateContactMessage);
+router.get('/contact-messages', authorize('superadmin', 'admin', 'moderator', 'support_agent'), adminGetContactMessages);
+router.get('/contact-messages/:id', authorize('superadmin', 'admin', 'moderator', 'support_agent'), adminGetContactMessageById);
+router.patch('/contact-messages/:id', authorize('superadmin', 'admin', 'moderator', 'support_agent'), adminUpdateContactMessage);
+router.post('/contact-messages/:id/mark-read', authorize('superadmin', 'admin', 'moderator', 'support_agent'), adminMarkContactMessageRead);
+router.post('/contact-messages/:id/resolve', authorize('superadmin', 'admin', 'moderator', 'support_agent'), adminResolveContactMessage);
+router.post('/contact-messages/:id/archive', authorize('superadmin', 'admin', 'moderator', 'support_agent'), adminArchiveContactMessage);
 router.delete('/contact-messages/:id', authorize('superadmin', 'admin'), canDeleteData, adminDeleteContactMessage);
 
 /* ── Banners & Config ── */
@@ -1084,6 +1148,7 @@ router.delete('/student-groups/:id', authorize('superadmin', 'admin'), adminDele
 /* ── Subscription Plans ── */
 router.get('/subscription-plans', authorize('superadmin', 'admin', 'moderator', 'editor'), adminGetSubscriptionPlans);
 router.get('/subscription-plans/export', authorize('superadmin', 'admin', 'moderator', 'editor'), canManagePlans, adminExportSubscriptionPlans);
+router.post('/subscription-plans/:id/duplicate', authorize('superadmin', 'admin'), canManagePlans, adminDuplicateSubscriptionPlan);
 router.get('/subscription-plans/:id', authorize('superadmin', 'admin', 'moderator', 'editor'), adminGetSubscriptionPlanById);
 router.post('/subscription-plans', authorize('superadmin', 'admin'), canManagePlans, adminCreateSubscriptionPlan);
 router.put('/subscription-plans/reorder', authorize('superadmin', 'admin'), canManagePlans, adminReorderSubscriptionPlans);
@@ -1106,54 +1171,63 @@ router.post('/subscriptions/suspend', authorize('superadmin', 'admin', 'moderato
 router.get('/subscriptions/export', authorize('superadmin', 'admin', 'moderator', 'editor'), canManagePlans, adminExportSubscriptions);
 
 /* ── Student LTV ── */
-router.get('/students/:id/ltv', authorize('superadmin', 'admin', 'moderator'), canManageFinance, adminGetStudentLtv);
+router.get('/students/:id/ltv', authorize('superadmin', 'admin', 'moderator', 'finance_agent'), canManageFinance, adminGetStudentLtv);
 
 /* ── Manual Payments ── */
-router.get('/payments', authorize('superadmin', 'admin', 'moderator'), canManageFinance, adminGetPayments);
-router.get('/payments/export', authorize('superadmin', 'admin', 'moderator'), canManageFinance, adminExportPayments);
-router.post('/payments', authorize('superadmin', 'admin', 'moderator'), canManageFinance, adminCreatePayment);
-router.put('/payments/:id', authorize('superadmin', 'admin'), canManageFinance, requireTwoPersonForPaymentRefund, adminUpdatePayment);
-router.get('/students/:id/payments', authorize('superadmin', 'admin', 'moderator'), canManageFinance, adminGetStudentPayments);
+router.get('/payments', authorize('superadmin', 'admin', 'moderator', 'finance_agent'), canManageFinance, adminGetPayments);
+router.get('/payments/export', authorize('superadmin', 'admin', 'moderator', 'finance_agent'), canManageFinance, adminExportPayments);
+router.post('/payments', authorize('superadmin', 'admin', 'moderator', 'finance_agent'), canManageFinance, adminCreatePayment);
+router.put('/payments/:id', authorize('superadmin', 'admin', 'finance_agent'), canManageFinance, requireTwoPersonForPaymentRefund, adminUpdatePayment);
+router.get('/students/:id/payments', authorize('superadmin', 'admin', 'moderator', 'finance_agent'), canManageFinance, adminGetStudentPayments);
 
 /* ── Expenses ── */
-router.get('/finance/payments/:id/history', authorize('superadmin', 'admin', 'moderator'), canManageFinance, adminGetPayments); // Placeholder
-router.post('/finance/payments/:id/approve', authorize('superadmin', 'admin'), canManageFinance, adminApprovePayment);
-router.get('/expenses', authorize('superadmin', 'admin', 'moderator'), canManageFinance, adminGetExpenses);
-router.post('/expenses', authorize('superadmin', 'admin', 'moderator'), canManageFinance, adminCreateExpense);
-router.put('/expenses/:id', authorize('superadmin', 'admin'), canManageFinance, adminUpdateExpense);
+router.get('/finance/payments/:id/history', authorize('superadmin', 'admin', 'moderator', 'finance_agent'), canManageFinance, adminGetPayments); // Placeholder
+router.post('/finance/payments/:id/approve', authorize('superadmin', 'admin', 'finance_agent'), canManageFinance, adminApprovePayment);
+router.get('/expenses', authorize('superadmin', 'admin', 'moderator', 'finance_agent'), canManageFinance, adminGetExpenses);
+router.post('/expenses', authorize('superadmin', 'admin', 'moderator', 'finance_agent'), canManageFinance, adminCreateExpense);
+router.put('/expenses/:id', authorize('superadmin', 'admin', 'finance_agent'), canManageFinance, adminUpdateExpense);
 
 /* ── Staff Payouts ── */
-router.get('/staff-payouts', authorize('superadmin', 'admin', 'moderator'), canManageFinance, adminGetStaffPayouts);
-router.post('/staff-payouts', authorize('superadmin', 'admin'), canManageFinance, adminCreateStaffPayout);
+router.get('/staff-payouts', authorize('superadmin', 'admin', 'moderator', 'finance_agent'), canManageFinance, adminGetStaffPayouts);
+router.post('/staff-payouts', authorize('superadmin', 'admin', 'finance_agent'), canManageFinance, adminCreateStaffPayout);
 
 /* ── Finance Analytics ── */
-router.get('/finance/summary', authorize('superadmin', 'admin', 'moderator'), canManageFinance, adminGetFinanceSummary);
-router.get('/finance/revenue-series', authorize('superadmin', 'admin', 'moderator'), canManageFinance, adminGetFinanceRevenueSeries);
-router.get('/finance/student-growth', authorize('superadmin', 'admin', 'moderator'), canManageFinance, adminGetFinanceStudentGrowth);
-router.get('/finance/plan-distribution', authorize('superadmin', 'admin', 'moderator'), canManageFinance, adminGetFinancePlanDistribution);
-router.get('/finance/expense-breakdown', authorize('superadmin', 'admin', 'moderator'), canManageFinance, adminGetFinanceExpenseBreakdown);
-router.get('/finance/cashflow', authorize('superadmin', 'admin', 'moderator'), canManageFinance, adminGetFinanceCashflow);
-router.get('/finance/test-board', authorize('superadmin', 'admin', 'moderator'), canManageFinance, adminGetFinanceTestBoard);
-router.get('/finance/stream', authorize('superadmin', 'admin', 'moderator'), canManageFinance, adminFinanceStream);
+router.get('/finance/summary', authorize('superadmin', 'admin', 'moderator', 'finance_agent'), canManageFinance, adminGetFinanceSummary);
+router.get('/finance/revenue-series', authorize('superadmin', 'admin', 'moderator', 'finance_agent'), canManageFinance, adminGetFinanceRevenueSeries);
+router.get('/finance/student-growth', authorize('superadmin', 'admin', 'moderator', 'finance_agent'), canManageFinance, adminGetFinanceStudentGrowth);
+router.get('/finance/plan-distribution', authorize('superadmin', 'admin', 'moderator', 'finance_agent'), canManageFinance, adminGetFinancePlanDistribution);
+router.get('/finance/expense-breakdown', authorize('superadmin', 'admin', 'moderator', 'finance_agent'), canManageFinance, adminGetFinanceExpenseBreakdown);
+router.get('/finance/cashflow', authorize('superadmin', 'admin', 'moderator', 'finance_agent'), canManageFinance, adminGetFinanceCashflow);
+router.get('/finance/test-board', authorize('superadmin', 'admin', 'moderator', 'finance_agent'), canManageFinance, adminGetFinanceTestBoard);
+router.get('/finance/stream', authorize('superadmin', 'admin', 'moderator', 'finance_agent'), canManageFinance, adminFinanceStream);
 
 /* ── Dues & Reminders ── */
-router.get('/dues', authorize('superadmin', 'admin', 'moderator'), canManageFinance, adminGetDues);
-router.patch('/dues/:studentId', authorize('superadmin', 'admin'), canManageFinance, adminUpdateDue);
-router.post('/dues/:studentId/remind', authorize('superadmin', 'admin', 'moderator'), canManageFinance, adminSendDueReminder);
-router.post('/reminders/dispatch', authorize('superadmin', 'admin'), canManageFinance, adminDispatchReminders);
+router.get('/dues', authorize('superadmin', 'admin', 'moderator', 'finance_agent'), canManageFinance, adminGetDues);
+router.patch('/dues/:studentId', authorize('superadmin', 'admin', 'finance_agent'), canManageFinance, adminUpdateDue);
+router.post('/dues/:studentId/remind', authorize('superadmin', 'admin', 'moderator', 'finance_agent'), canManageFinance, adminSendDueReminder);
+router.post('/reminders/dispatch', authorize('superadmin', 'admin', 'finance_agent'), canManageFinance, adminDispatchReminders);
 
 /* ── Notices ── */
-router.get('/notices', authorize('superadmin', 'admin', 'moderator', 'editor'), canManageTickets, adminGetNotices);
-router.post('/notices', authorize('superadmin', 'admin', 'moderator'), canManageTickets, adminCreateNotice);
-router.patch('/notices/:id/toggle', authorize('superadmin', 'admin', 'moderator'), canManageTickets, adminToggleNotice);
+router.get('/notices', authorize('superadmin', 'admin', 'moderator', 'editor', 'support_agent'), canManageTickets, adminGetNotices);
+router.post('/notices', authorize('superadmin', 'admin', 'moderator', 'support_agent'), canManageTickets, adminCreateNotice);
+router.patch('/notices/:id/toggle', authorize('superadmin', 'admin', 'moderator', 'support_agent'), canManageTickets, adminToggleNotice);
 
 /* ── Support Tickets ── */
-router.get('/support-tickets', authorize('superadmin', 'admin', 'moderator'), canManageTickets, adminGetSupportTickets);
-router.patch('/support-tickets/:id/status', authorize('superadmin', 'admin', 'moderator'), canManageTickets, adminUpdateSupportTicketStatus);
-router.post('/support-tickets/:id/reply', authorize('superadmin', 'admin', 'moderator'), canManageTickets, adminReplySupportTicket);
+router.get('/support-tickets', authorize('superadmin', 'admin', 'moderator', 'support_agent'), canManageTickets, adminGetSupportTickets);
+router.get('/support-tickets/:id', authorize('superadmin', 'admin', 'moderator', 'support_agent'), canManageTickets, adminGetSupportTicketById);
+router.patch('/support-tickets/:id/status', authorize('superadmin', 'admin', 'moderator', 'support_agent'), canManageTickets, adminUpdateSupportTicketStatus);
+router.post('/support-tickets/:id/status', authorize('superadmin', 'admin', 'moderator', 'support_agent'), canManageTickets, adminUpdateSupportTicketStatus);
+router.post('/support-tickets/:id/reply', authorize('superadmin', 'admin', 'moderator', 'support_agent'), canManageTickets, adminReplySupportTicket);
+router.post('/support-tickets/:id/mark-read', authorize('superadmin', 'admin', 'moderator', 'support_agent'), canManageTickets, adminMarkSupportTicketRead);
 
-router.get('/alerts/feed', authorize('superadmin', 'admin', 'moderator'), adminGetActionableAlerts);
-router.post('/alerts/mark-read', authorize('superadmin', 'admin', 'moderator'), adminMarkActionableAlertsRead);
+router.get('/alerts/feed', authorize('superadmin', 'admin', 'moderator', 'viewer', 'support_agent', 'finance_agent'), adminGetActionableAlerts);
+router.post('/alerts/mark-read', authorize('superadmin', 'admin', 'moderator', 'viewer', 'support_agent', 'finance_agent'), adminMarkActionableAlertsRead);
+router.get('/alerts/unread-count', authorize('superadmin', 'admin', 'moderator', 'viewer', 'support_agent', 'finance_agent'), adminGetActionableAlertsUnreadCount);
+router.post('/alerts/:id/read', authorize('superadmin', 'admin', 'moderator', 'viewer', 'support_agent', 'finance_agent'), adminMarkSingleActionableAlertRead);
+router.post('/alerts/read-all', authorize('superadmin', 'admin', 'moderator', 'viewer', 'support_agent', 'finance_agent'), adminMarkAllActionableAlertsRead);
+router.get('/notifications/unread-count', authorize('superadmin', 'admin', 'moderator', 'viewer', 'support_agent', 'finance_agent'), adminGetActionableAlertsUnreadCount);
+router.post('/notifications/:id/read', authorize('superadmin', 'admin', 'moderator'), adminMarkSingleActionableAlertRead);
+router.post('/notifications/read-all', authorize('superadmin', 'admin', 'moderator'), adminMarkAllActionableAlertsRead);
 
 /* ── Backups ── */
 router.post('/backups/run', authorize('superadmin', 'admin'), canManageBackups, adminRunBackup);
@@ -1316,17 +1390,17 @@ router.put('/maintenance/status', authorize('superadmin', 'admin'), adminUpdateM
 /* ═══════════════════════════════════════════════════════════
    HELP CENTER (Knowledge Base)
    ═══════════════════════════════════════════════════════════ */
-router.get('/help-center/categories', authorize('superadmin', 'admin', 'moderator', 'editor'), adminGetHelpCategories);
-router.post('/help-center/categories', authorize('superadmin', 'admin', 'moderator'), adminCreateHelpCategory);
-router.put('/help-center/categories/:id', authorize('superadmin', 'admin', 'moderator'), adminUpdateHelpCategory);
+router.get('/help-center/categories', authorize('superadmin', 'admin', 'moderator', 'editor', 'viewer', 'support_agent'), adminGetHelpCategories);
+router.post('/help-center/categories', authorize('superadmin', 'admin', 'moderator', 'support_agent'), adminCreateHelpCategory);
+router.put('/help-center/categories/:id', authorize('superadmin', 'admin', 'moderator', 'support_agent'), adminUpdateHelpCategory);
 router.delete('/help-center/categories/:id', authorize('superadmin', 'admin'), adminDeleteHelpCategory);
-router.get('/help-center/articles', authorize('superadmin', 'admin', 'moderator', 'editor'), adminGetHelpArticles);
-router.get('/help-center/articles/:id', authorize('superadmin', 'admin', 'moderator', 'editor'), adminGetHelpArticle);
-router.post('/help-center/articles', authorize('superadmin', 'admin', 'moderator', 'editor'), adminCreateHelpArticle);
-router.put('/help-center/articles/:id', authorize('superadmin', 'admin', 'moderator', 'editor'), adminUpdateHelpArticle);
+router.get('/help-center/articles', authorize('superadmin', 'admin', 'moderator', 'editor', 'viewer', 'support_agent'), adminGetHelpArticles);
+router.get('/help-center/articles/:id', authorize('superadmin', 'admin', 'moderator', 'editor', 'viewer', 'support_agent'), adminGetHelpArticle);
+router.post('/help-center/articles', authorize('superadmin', 'admin', 'moderator', 'editor', 'support_agent'), adminCreateHelpArticle);
+router.put('/help-center/articles/:id', authorize('superadmin', 'admin', 'moderator', 'editor', 'support_agent'), adminUpdateHelpArticle);
 router.delete('/help-center/articles/:id', authorize('superadmin', 'admin'), adminDeleteHelpArticle);
-router.post('/help-center/articles/:id/publish', authorize('superadmin', 'admin', 'moderator'), adminPublishHelpArticle);
-router.post('/help-center/articles/:id/unpublish', authorize('superadmin', 'admin', 'moderator'), adminUnpublishHelpArticle);
+router.post('/help-center/articles/:id/publish', authorize('superadmin', 'admin', 'moderator', 'support_agent'), adminPublishHelpArticle);
+router.post('/help-center/articles/:id/unpublish', authorize('superadmin', 'admin', 'moderator', 'support_agent'), adminUnpublishHelpArticle);
 
 /* ═══════════════════════════════════════════════════════════
    CONTENT BLOCKS (Global Promotions / Banners)
