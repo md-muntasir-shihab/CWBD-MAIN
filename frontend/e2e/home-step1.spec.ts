@@ -6,7 +6,11 @@ function escapeRegExp(text: string): string {
 
 test.describe('Home Step1', () => {
     test('renders required home sections in strict order', async ({ page }) => {
+        const homeResponse = page.waitForResponse((response) =>
+            response.url().includes('/api/home') && response.ok(),
+        );
         await page.goto('/');
+        await homeResponse;
 
         const sectionLocators = [
             page.getByRole('textbox', { name: /Search universities, news, exams and resources/i }),
@@ -17,6 +21,13 @@ test.describe('Home Step1', () => {
             page.getByRole('heading', { name: /Latest News/i }),
             page.getByRole('heading', { name: /Resources/i }),
         ];
+
+        await expect
+            .poll(async () => {
+                const counts = await Promise.all(sectionLocators.map((locator) => locator.count()));
+                return counts.filter((count) => count > 0).length;
+            }, { timeout: 10_000 })
+            .toBeGreaterThan(3);
 
         const yPositions: number[] = [];
         for (const locator of sectionLocators) {
@@ -87,7 +98,9 @@ test.describe('Home Step1', () => {
             test.skip(true, 'No deadline universities available in seeded data.');
         }
 
-        const applyLinks = page.getByRole('link', { name: /^Apply$/i });
+        const deadlineSection = page.getByTestId('home-deadlines-section');
+        const applyLinks = deadlineSection.getByRole('link', { name: /Apply(?: Now)?/i });
+        await expect(deadlineSection).toBeVisible();
         await expect
             .poll(async () => applyLinks.count(), { timeout: 8_000 })
             .toBeGreaterThan(0);
@@ -141,11 +154,14 @@ test.describe('Home Step1', () => {
             return items.length > 0;
         });
 
-        const featuredHeading = page.getByRole('heading', { name: /Featured Universities/i });
-        await expect(featuredHeading).toBeVisible();
+        const featuredSection = page.getByTestId('home-featured-section');
+        await expect(featuredSection).toBeVisible();
+        await expect(page.getByRole('heading', { name: /Featured Universities/i })).toBeVisible();
 
         if (hasFeatured) {
-            await expect(page.getByRole('link', { name: /View Details/i }).first()).toBeVisible();
+            await expect(
+                featuredSection.locator('[data-testid="highlighted-category-card"], [data-university-card-id]').first()
+            ).toBeVisible();
         } else {
             await expect(page.getByText(/No featured universities match your filter/i)).toBeVisible();
         }

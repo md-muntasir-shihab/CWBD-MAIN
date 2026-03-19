@@ -10,7 +10,9 @@ import StudentDashboardConfig from '../models/StudentDashboardConfig';
 import StudentBadge from '../models/StudentBadge';
 import StudentApplication from '../models/StudentApplication';
 import StudentDueLedger from '../models/StudentDueLedger';
+import UserSubscription from '../models/UserSubscription';
 import { getExamCardMetrics } from './examCardMetricsService';
+import { getExternalExamAttemptCountsForStudent } from './externalExamAttemptService';
 import { getSecurityConfig } from './securityConfigService';
 
 type LeanStudentProfile = Record<string, unknown> & {
@@ -108,6 +110,27 @@ function matchFilterList(filterList: unknown, value?: string): boolean {
     return list.includes(normalizedValue);
 }
 
+function normalizeObjectIdArray(input: unknown): string[] {
+    if (!Array.isArray(input)) return [];
+    return input
+        .map((item) => {
+            if (!item) return '';
+            if (typeof item === 'string') return item;
+            if (typeof item === 'object' && '_id' in (item as Record<string, unknown>)) {
+                return String((item as Record<string, unknown>)._id || '');
+            }
+            return String(item);
+        })
+        .map((item) => item.trim())
+        .filter(Boolean);
+}
+
+function hasAnyIntersection(left: string[], right: string[]): boolean {
+    if (left.length === 0 || right.length === 0) return false;
+    const rightSet = new Set(right);
+    return left.some((item) => rightSet.has(item));
+}
+
 function toStatus(startDate: Date, endDate: Date, attemptsLeft: number): ExamCardStatus {
     const now = new Date();
     if (attemptsLeft <= 0) return 'closed';
@@ -136,12 +159,19 @@ export async function getOverallRankForStudent(studentId: string): Promise<numbe
 }
 
 export async function getStudentDashboardHeader(studentId: string) {
-    const [user, profile, config, overallRank, security] = await Promise.all([
+    const [user, profile, config, overallRank, security, activeSubscription] = await Promise.all([
         User.findById(studentId).select('_id username email full_name profile_photo subscription').lean(),
         StudentProfile.findOne({ user_id: studentId }).lean() as unknown as Promise<LeanStudentProfile | null>,
         ensureDashboardConfig(),
         getOverallRankForStudent(studentId),
         getSecurityConfig(true),
+        UserSubscription.findOne({
+            userId: studentId,
+            status: 'active',
+            expiresAtUTC: { $gt: new Date() },
+        })
+            .populate('planId', 'name code slug ctaLabel ctaUrl ctaMode')
+            .lean(),
     ]);
 
     if (!user || !profile) {
@@ -155,7 +185,33 @@ export async function getStudentDashboardHeader(studentId: string) {
         .replace('{{name}}', String(profile.full_name || user.full_name || user.username))
         .replace('{{completion}}', String(completion));
 
-    const subscription = user.subscription || { isActive: false };
+    const persistedSubscription = ((user.subscription as Record<string, unknown> | undefined) || {});
+    const activePlan = (activeSubscription?.planId as unknown as Record<string, unknown> | null) || null;
+    const expiryDate = activeSubscription?.expiresAtUTC
+        ? new Date(activeSubscription.expiresAtUTC).toISOString()
+        : (persistedSubscription.expiryDate ? new Date(persistedSubscription.expiryDate as string | Date).toISOString() : null);
+    const expiryTime = expiryDate ? new Date(expiryDate).getTime() : 0;
+    const subscriptionIsActive = Boolean(
+        activeSubscription || (
+            persistedSubscription.isActive &&
+            Number.isFinite(expiryTime) &&
+            expiryTime > Date.now()
+        )
+    );
+    const subscription = {
+        isActive: subscriptionIsActive,
+        planId: activeSubscription?.planId ? String(activeSubscription.planId) : String(persistedSubscription.planId || ''),
+        planSlug: String(activePlan?.slug || persistedSubscription.planSlug || ''),
+        planCode: String(activePlan?.code || persistedSubscription.planCode || persistedSubscription.plan || ''),
+        planName: String(activePlan?.name || persistedSubscription.planName || persistedSubscription.plan || ''),
+        expiryDate,
+        daysLeft: expiryDate
+            ? Math.max(0, Math.ceil((new Date(expiryDate).getTime() - Date.now()) / 86400000))
+            : null,
+        ctaLabel: String(activePlan?.ctaLabel || persistedSubscription.ctaLabel || (subscriptionIsActive ? 'Renew Plan' : 'View Plans')),
+        ctaUrl: String(activePlan?.ctaUrl || persistedSubscription.ctaUrl || '/subscription-plans'),
+        ctaMode: String(activePlan?.ctaMode || persistedSubscription.ctaMode || 'contact'),
+    };
 
     // Calculate Group Rank if student is in any groups
     let groupRank: number | null = null;
@@ -200,11 +256,7 @@ export async function getStudentDashboardHeader(studentId: string) {
         overallRank,
         groupRank,
         welcomeMessage,
-        subscription: {
-            isActive: Boolean(subscription.isActive),
-            planName: subscription.planName || subscription.plan || '',
-            expiryDate: subscription.expiryDate ? new Date(subscription.expiryDate as string | Date).toISOString() : null,
-        },
+        subscription,
         guardian_phone_verification_status: profile.guardianPhoneVerificationStatus || 'unverified',
         guardian_phone_verified_at: profile.guardianPhoneVerifiedAt || null,
         profile: {
@@ -242,10 +294,17 @@ export async function getStudentDashboardHeader(studentId: string) {
 }
 
 export async function getUpcomingExamCards(studentId: string): Promise<DashboardExamCard[]> {
-    const [profile, config, user, exams, results, activeSessions, security] = await Promise.all([
+    const [profile, config, user, activeSubscription, exams, results, activeSessions, security] = await Promise.all([
         StudentProfile.findOne({ user_id: studentId }).lean() as unknown as Promise<LeanStudentProfile | null>,
         ensureDashboardConfig(),
         User.findById(studentId).select('subscription').lean(),
+        UserSubscription.findOne({
+            userId: studentId,
+            status: 'active',
+            expiresAtUTC: { $gt: new Date() },
+        })
+            .populate('planId', 'code')
+            .lean(),
         Exam.find({ isPublished: true }).sort({ startDate: 1 }).lean(),
         ExamResult.find({ student: studentId }).select('exam attemptNo').lean(),
         ExamSession.find({ student: studentId, isActive: true }).select('exam sessionLocked').lean(),
@@ -259,24 +318,39 @@ export async function getUpcomingExamCards(studentId: string): Promise<Dashboard
         ? Number(security.examProtection.profileScoreThreshold || 70)
         : Number(config?.profileCompletionThreshold || 70);
     const now = new Date();
+    const activePlan = activeSubscription?.planId as unknown as Record<string, unknown> | null;
     const studentGroupIds = Array.isArray(profile.groupIds) ? profile.groupIds.map((id) => String(id)) : [];
     const studentPlanCode = String(
+        activePlan?.code ||
         (user?.subscription as Record<string, unknown> | undefined)?.planCode ||
         (user?.subscription as Record<string, unknown> | undefined)?.plan ||
         '',
     ).toLowerCase();
-    const subscriptionExpiryRaw = (user?.subscription as Record<string, unknown> | undefined)?.expiryDate;
-    const subscriptionExpiryTime = subscriptionExpiryRaw ? new Date(String(subscriptionExpiryRaw)).getTime() : 0;
+    const subscriptionExpiryTime = activeSubscription?.expiresAtUTC
+        ? new Date(activeSubscription.expiresAtUTC).getTime()
+        : ((user?.subscription as Record<string, unknown> | undefined)?.expiryDate
+            ? new Date(String((user?.subscription as Record<string, unknown> | undefined)?.expiryDate)).getTime()
+            : 0);
     const subscriptionActive = Boolean(
-        (user?.subscription as Record<string, unknown> | undefined)?.isActive &&
-        Number.isFinite(subscriptionExpiryTime) &&
-        subscriptionExpiryTime > Date.now()
+        activeSubscription
+        || (
+            (user?.subscription as Record<string, unknown> | undefined)?.isActive &&
+            Number.isFinite(subscriptionExpiryTime) &&
+            subscriptionExpiryTime > Date.now()
+        )
     );
-    const metricsMap = await getExamCardMetrics(exams as unknown as Array<Record<string, unknown>>);
+    const examIds = exams.map((exam) => String(exam._id || '')).filter(Boolean);
+    const [metricsMap, externalAttemptCountMap] = await Promise.all([
+        getExamCardMetrics(exams as unknown as Array<Record<string, unknown>>),
+        getExternalExamAttemptCountsForStudent(studentId, examIds),
+    ]);
     const resultCounts = new Map<string, number>();
     for (const r of results) {
         const examId = String(r.exam);
         resultCounts.set(examId, (resultCounts.get(examId) || 0) + 1);
+    }
+    for (const [examId, count] of externalAttemptCountMap.entries()) {
+        resultCounts.set(examId, Math.max(Number(resultCounts.get(examId) || 0), Number(count || 0)));
     }
 
     const lockedExamSet = new Set(
@@ -311,20 +385,25 @@ export async function getUpcomingExamCards(studentId: string): Promise<Dashboard
         const accessControl = (exam.accessControl && typeof exam.accessControl === 'object')
             ? (exam.accessControl as Record<string, unknown>)
             : {};
-        const requiredUserIds = Array.isArray(accessControl.allowedUserIds)
-            ? (accessControl.allowedUserIds as unknown[]).map((id) => String(id))
-            : [];
-        const requiredGroupIds = Array.isArray(accessControl.allowedGroupIds)
-            ? (accessControl.allowedGroupIds as unknown[]).map((id) => String(id))
-            : [];
+        const requiredUserIds = normalizeObjectIdArray(accessControl.allowedUserIds);
+        const requiredGroupIds = normalizeObjectIdArray(accessControl.allowedGroupIds);
         const requiredPlanCodes = Array.isArray(accessControl.allowedPlanCodes)
             ? (accessControl.allowedPlanCodes as unknown[]).map((code) => String(code).toLowerCase())
             : [];
-        const subscriptionRequired = Boolean((exam as Record<string, unknown>).subscriptionRequired) || requiredPlanCodes.length > 0;
+        const visibilityMode = String((exam as Record<string, unknown>).visibilityMode || 'all_students');
+        const targetGroupIds = normalizeObjectIdArray((exam as Record<string, unknown>).targetGroupIds || []);
+        const subscriptionRequired = Boolean((exam as Record<string, unknown>).subscriptionRequired)
+            || Boolean((exam as Record<string, unknown>).requiresActiveSubscription)
+            || visibilityMode === 'subscription_only'
+            || requiredPlanCodes.length > 0;
         let accessDeniedReason = '';
         if (requiredUserIds.length > 0 && !requiredUserIds.includes(String(studentId))) {
             accessDeniedReason = 'access_user_restricted';
-        } else if (requiredGroupIds.length > 0 && !requiredGroupIds.some((id) => studentGroupIds.includes(id))) {
+        } else if (requiredGroupIds.length > 0 && !hasAnyIntersection(requiredGroupIds, studentGroupIds)) {
+            accessDeniedReason = 'access_group_restricted';
+        } else if ((visibilityMode === 'group_only' || visibilityMode === 'custom')
+            && targetGroupIds.length > 0
+            && !hasAnyIntersection(targetGroupIds, studentGroupIds)) {
             accessDeniedReason = 'access_group_restricted';
         } else if (requiredPlanCodes.length > 0 && !requiredPlanCodes.includes(studentPlanCode)) {
             accessDeniedReason = 'access_plan_restricted';
@@ -342,7 +421,7 @@ export async function getUpcomingExamCards(studentId: string): Promise<Dashboard
             !accessDeniedReason &&
             completion >= threshold &&
             attemptsLeft > 0 &&
-            (status === 'live' || (status === 'upcoming' && !!exam.externalExamUrl))
+            status === 'live'
         );
 
         cards.push({

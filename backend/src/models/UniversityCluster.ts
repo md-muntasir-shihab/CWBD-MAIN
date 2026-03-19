@@ -1,4 +1,5 @@
 import mongoose, { Document, Schema } from 'mongoose';
+import type { IExamCenter } from './University';
 
 export interface IUniversityClusterDateConfig {
     applicationStartDate?: Date | null;
@@ -6,6 +7,8 @@ export interface IUniversityClusterDateConfig {
     scienceExamDate?: string;
     commerceExamDate?: string;
     artsExamDate?: string;
+    admissionWebsite?: string;
+    examCenters: IExamCenter[];
 }
 
 export interface IUniversityCluster extends Document {
@@ -26,12 +29,19 @@ export interface IUniversityCluster extends Document {
     updatedAt: Date;
 }
 
+const ExamCenterSchema = new Schema<IExamCenter>({
+    city: { type: String, required: true, trim: true },
+    address: { type: String, default: '', trim: true },
+}, { _id: false });
+
 const UniversityClusterDateConfigSchema = new Schema<IUniversityClusterDateConfig>({
     applicationStartDate: { type: Date, default: null },
     applicationEndDate: { type: Date, default: null },
     scienceExamDate: { type: String, default: '' },
     commerceExamDate: { type: String, default: '' },
     artsExamDate: { type: String, default: '' },
+    admissionWebsite: { type: String, default: '' },
+    examCenters: { type: [ExamCenterSchema], default: [] },
 }, { _id: false });
 
 const UniversityClusterSchema = new Schema<IUniversityCluster>({

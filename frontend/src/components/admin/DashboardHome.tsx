@@ -10,6 +10,7 @@ import {
     RefreshCw,
     Server,
     ShieldCheck,
+    TriangleAlert,
     UserSquare2,
     Users,
 } from 'lucide-react';
@@ -86,6 +87,7 @@ export default function DashboardHome({ universities, exams, users, onTabChange 
     };
 
     const summary = summaryQuery.data || fallbackSummary;
+    const usingFallbackSummary = summaryQuery.isError && !summaryQuery.data;
 
     const cards = useMemo<SummaryCard[]>(() => {
         return [
@@ -214,10 +216,22 @@ export default function DashboardHome({ universities, exams, users, onTabChange 
                 ))}
             </div>
 
+            {usingFallbackSummary ? (
+                <div className="rounded-2xl border border-amber-300/60 bg-amber-50 p-4 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+                    <p className="inline-flex items-center gap-2 font-semibold"><TriangleAlert className="h-4 w-4" /> Live summary unavailable</p>
+                    <p className="mt-1">
+                        The dashboard summary API failed, so these cards are showing local fallback values from the current page payload instead of trusted live counts.
+                    </p>
+                </div>
+            ) : null}
+
             <div className="rounded-2xl border border-emerald-500/20 bg-emerald-50 p-4 text-xs text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-100">
                 <p className="inline-flex items-center gap-2 font-semibold"><ShieldCheck className="h-4 w-4" /> System check</p>
                 <p className="mt-1">
                     DB: <span className="font-semibold">{summary.systemStatus.db}</span> - Last check: {new Date(summary.systemStatus.timeUTC).toLocaleString()}
+                </p>
+                <p className="mt-1">
+                    Source: <span className="font-semibold">{usingFallbackSummary ? 'fallback snapshot' : 'live summary'}</span>
                 </p>
             </div>
         </div>

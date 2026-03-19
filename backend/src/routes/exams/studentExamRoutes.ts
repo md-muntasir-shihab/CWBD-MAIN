@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { AuthRequest } from "../../middlewares/auth";
-import { requireAuth } from "../../middlewares/auth";
+import { requireAuth, requireAuthStudent } from "../../middlewares/auth";
 import { examAutoSaveLimit, examSessionStartLimit, examSubmitLimit } from "../../middleware/examRateLimit";
 import {
   getExamAttemptResult,
@@ -26,30 +26,30 @@ function withLegacyExamId(req: AuthRequest, examId: string): AuthRequest {
   return proxiedReq;
 }
 
-studentExamRoutes.post("/exams/:examId/sessions/start", requireAuth, examSessionStartLimit, async (req, res) => {
+studentExamRoutes.post("/exams/:examId/sessions/start", requireAuth, requireAuthStudent, examSessionStartLimit, async (req, res) => {
   await startExam(withLegacyExamId(req, String(req.params.examId || "")), res);
 });
 
-studentExamRoutes.get("/exams/:examId/sessions/:sessionId/questions", requireAuth, async (req, res) => {
+studentExamRoutes.get("/exams/:examId/sessions/:sessionId/questions", requireAuth, requireAuthStudent, async (req, res) => {
   await getExamAttemptState(withLegacyExamId(req, String(req.params.examId || "")), res);
 });
 
-studentExamRoutes.post("/exams/:examId/sessions/:sessionId/answers", requireAuth, examAutoSaveLimit, async (req, res) => {
+studentExamRoutes.post("/exams/:examId/sessions/:sessionId/answers", requireAuth, requireAuthStudent, examAutoSaveLimit, async (req, res) => {
   await saveExamAttemptAnswer(withLegacyExamId(req, String(req.params.examId || "")), res);
 });
 
-studentExamRoutes.post("/exams/:examId/sessions/:sessionId/submit", requireAuth, examSubmitLimit, async (req, res) => {
+studentExamRoutes.post("/exams/:examId/sessions/:sessionId/submit", requireAuth, requireAuthStudent, examSubmitLimit, async (req, res) => {
   await submitExamAttempt(withLegacyExamId(req, String(req.params.examId || "")), res);
 });
 
-studentExamRoutes.get("/exams/:examId/sessions/:sessionId/result", requireAuth, async (req, res) => {
+studentExamRoutes.get("/exams/:examId/sessions/:sessionId/result", requireAuth, requireAuthStudent, async (req, res) => {
   await getExamAttemptResult(withLegacyExamId(req, String(req.params.examId || "")), res);
 });
 
-studentExamRoutes.get("/exams/:examId/sessions/:sessionId/solutions", requireAuth, async (req, res) => {
+studentExamRoutes.get("/exams/:examId/sessions/:sessionId/solutions", requireAuth, requireAuthStudent, async (req, res) => {
   await getExamAttemptSolutions(withLegacyExamId(req, String(req.params.examId || "")), res);
 });
 
-studentExamRoutes.get("/exams/:examId/pdf/questions", generateQuestionsPdf);
-studentExamRoutes.get("/exams/:examId/pdf/solutions", generateSolutionsPdf);
-studentExamRoutes.get("/exams/:examId/sessions/:sessionId/pdf/answers", requireAuth, generateAnswersPdf);
+studentExamRoutes.get("/exams/:examId/pdf/questions", requireAuth, requireAuthStudent, generateQuestionsPdf);
+studentExamRoutes.get("/exams/:examId/pdf/solutions", requireAuth, requireAuthStudent, generateSolutionsPdf);
+studentExamRoutes.get("/exams/:examId/sessions/:sessionId/pdf/answers", requireAuth, requireAuthStudent, generateAnswersPdf);

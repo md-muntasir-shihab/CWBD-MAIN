@@ -4,11 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { UserPlus, Eye, EyeOff, Send, X, Search, Plus, Users, CreditCard } from 'lucide-react';
 import { createStudent, getStudentGroups } from '../../../api/adminStudentApi';
 import { adminUi } from '../../../lib/appRoutes';
-import api from '../../../services/api';
+import { adminGetSubscriptionPlans, type AdminSubscriptionPlan } from '../../../services/api';
 
 const DEPARTMENTS = ['science', 'arts', 'commerce'] as const;
 const GENDERS = ['male', 'female', 'other'] as const;
-const PAYMENT_METHODS = ['cash', 'bkash', 'nagad', 'bank', 'card', 'other'] as const;
+const PAYMENT_METHODS = ['cash', 'bkash', 'nagad', 'bank', 'card', 'manual'] as const;
 
 interface GroupOption { _id: string; name: string; color?: string; type?: string; studentCount?: number }
 
@@ -34,7 +34,7 @@ export default function StudentCreatePage() {
 
   const { data: plans } = useQuery({
     queryKey: ['subscription-plans'],
-    queryFn: () => api.get('/admin/subscription-plans').then(r => r.data?.data ?? []),
+    queryFn: async () => (await adminGetSubscriptionPlans()).data.items ?? [],
   });
 
   const { data: groupsData } = useQuery({
@@ -62,12 +62,13 @@ export default function StudentCreatePage() {
       ...form,
       planId: form.planId || undefined,
       groupIds: form.groupIds.length ? form.groupIds : undefined,
-      recordPayment: form.recordPayment || undefined,
+      recordPayment: form.recordPayment,
       paymentAmount: form.paymentAmount ? Number(form.paymentAmount) : undefined,
       paymentMethod: form.paymentMethod || undefined,
     }),
     onSuccess: (data) => {
-      navigate(adminUi(`student-management/students/${data.user._id}`));
+      const studentId = data?.student?._id || data?.user?._id;
+      navigate(studentId ? adminUi(`student-management/students/${studentId}`) : adminUi('student-management/list'));
     },
   });
 
@@ -272,7 +273,7 @@ export default function StudentCreatePage() {
               <label className={labelCls}>Assign Plan (Optional)</label>
               <select className={inputCls} value={form.planId} onChange={e => set('planId', e.target.value)}>
                 <option value="">No plan assignment</option>
-                {Array.isArray(plans) && plans.map((p: Record<string, string>) => (
+                {Array.isArray(plans) && plans.map((p: AdminSubscriptionPlan) => (
                   <option key={p._id} value={p._id}>{p.name} ({p.code})</option>
                 ))}
               </select>

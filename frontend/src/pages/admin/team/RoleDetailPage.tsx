@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import AdminGuardShell from '../../../components/admin/AdminGuardShell';
+import { useModuleAccess } from '../../../hooks/useModuleAccess';
 import {
   teamApi,
   type TeamRoleItem,
@@ -24,6 +25,7 @@ const TABS: { key: DetailTab; label: string; icon: React.ElementType }[] = [
 export default function RoleDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { hasAccess } = useModuleAccess();
   const [tab, setTab] = useState<DetailTab>('overview');
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<TeamRoleItem | null>(null);
@@ -32,6 +34,9 @@ export default function RoleDetailPage() {
   const [modules, setModules] = useState<string[]>([]);
   const [actions, setActions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const canCreateTeam = hasAccess('team_access_control', 'create');
+  const canEditTeam = hasAccess('team_access_control', 'edit');
+  const canDeleteTeam = hasAccess('team_access_control', 'delete');
 
   async function loadRole() {
     if (!id) return;
@@ -177,8 +182,8 @@ export default function RoleDetailPage() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={handleDuplicate} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"><Copy className="h-3.5 w-3.5" /> Duplicate</button>
-                  {!role.isSystemRole && (
+                  {canCreateTeam && <button onClick={handleDuplicate} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"><Copy className="h-3.5 w-3.5" /> Duplicate</button>}
+                  {!role.isSystemRole && canDeleteTeam && (
                     <button onClick={handleDelete} className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-400 dark:hover:bg-rose-900/30"><Trash2 className="h-3.5 w-3.5" /> Delete</button>
                   )}
                 </div>
@@ -209,11 +214,11 @@ export default function RoleDetailPage() {
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-xs text-slate-500">Role Name</label>
-                    <input className="admin-input w-full" value={editForm.name} onChange={(e) => setEditForm(v => ({ ...v, name: e.target.value }))} disabled={role.isSystemRole} />
+                    <input className="admin-input w-full" value={editForm.name} onChange={(e) => setEditForm(v => ({ ...v, name: e.target.value }))} disabled={role.isSystemRole || !canEditTeam} />
                   </div>
                   <div>
                     <label className="mb-1 block text-xs text-slate-500">Base Platform Role</label>
-                    <select className="admin-input w-full" value={editForm.basePlatformRole} onChange={(e) => setEditForm(v => ({ ...v, basePlatformRole: e.target.value }))} disabled={role.isSystemRole}>
+                    <select className="admin-input w-full" value={editForm.basePlatformRole} onChange={(e) => setEditForm(v => ({ ...v, basePlatformRole: e.target.value }))} disabled={role.isSystemRole || !canEditTeam}>
                       <option value="viewer">viewer</option>
                       <option value="editor">editor</option>
                       <option value="moderator">moderator</option>
@@ -224,10 +229,10 @@ export default function RoleDetailPage() {
                   </div>
                   <div className="md:col-span-2">
                     <label className="mb-1 block text-xs text-slate-500">Description</label>
-                    <textarea className="admin-input w-full" rows={3} value={editForm.description} onChange={(e) => setEditForm(v => ({ ...v, description: e.target.value }))} disabled={role.isSystemRole} />
+                    <textarea className="admin-input w-full" rows={3} value={editForm.description} onChange={(e) => setEditForm(v => ({ ...v, description: e.target.value }))} disabled={role.isSystemRole || !canEditTeam} />
                   </div>
                 </div>
-                {!role.isSystemRole && (
+                {!role.isSystemRole && canEditTeam && (
                   <button onClick={handleSave} disabled={saving} className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
                     <Save className="h-4 w-4" /> {saving ? 'Saving...' : 'Save Changes'}
                   </button>
@@ -258,24 +263,31 @@ export default function RoleDetailPage() {
                               <input
                                 type="checkbox"
                                 checked={!!permissions[mod]?.[act]}
+                                disabled={!canEditTeam}
                                 onChange={() => togglePerm(mod, act)}
                                 className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                               />
                             </td>
                           ))}
                           <td className="px-2 py-2 text-center">
-                            <button onClick={() => toggleModuleAll(mod)} className="text-xs text-indigo-600 hover:underline dark:text-indigo-400">
-                              {actions.every((a) => permissions[mod]?.[a]) ? 'None' : 'All'}
-                            </button>
+                            {canEditTeam ? (
+                              <button onClick={() => toggleModuleAll(mod)} className="text-xs text-indigo-600 hover:underline dark:text-indigo-400">
+                                {actions.every((a) => permissions[mod]?.[a]) ? 'None' : 'All'}
+                              </button>
+                            ) : (
+                              <span className="text-xs text-slate-400 dark:text-slate-500">View only</span>
+                            )}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-                <button onClick={handleSavePermissions} disabled={saving} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
-                  <CheckCircle2 className="h-4 w-4" /> {saving ? 'Saving...' : 'Save Permissions'}
-                </button>
+                {canEditTeam && (
+                  <button onClick={handleSavePermissions} disabled={saving} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
+                    <CheckCircle2 className="h-4 w-4" /> {saving ? 'Saving...' : 'Save Permissions'}
+                  </button>
+                )}
               </div>
             )}
 

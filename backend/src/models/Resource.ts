@@ -23,7 +23,7 @@ export interface IResource extends Document {
 
 const ResourceSchema = new Schema<IResource>({
     title: { type: String, required: true, trim: true },
-    slug: { type: String, sparse: true, index: true },
+    slug: { type: String },
     description: { type: String },
     type: { type: String, enum: ['pdf', 'link', 'video', 'audio', 'image', 'note'], required: true },
     category: { type: String, default: 'General' },

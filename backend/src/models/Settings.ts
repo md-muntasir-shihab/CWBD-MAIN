@@ -90,6 +90,13 @@ export interface ISiteSettings extends Document {
             supportTicketCreated: boolean;
         };
     };
+    examCenterSettings: {
+        defaultSyncMode: 'fill_missing_only' | 'overwrite_mapped_fields';
+        autoCreateExamCenters: boolean;
+        notifyStudentsOnSync: boolean;
+        notifyGuardiansOnResult: boolean;
+        allowExternalImports: boolean;
+    };
     runtimeVersion: number;
     updatedBy: mongoose.Types.ObjectId;
     createdAt: Date;
@@ -204,6 +211,13 @@ const SiteSettingsSchema = new Schema<ISiteSettings>({
             subscriptionPlanClick: { type: Boolean, default: true },
             supportTicketCreated: { type: Boolean, default: true },
         },
+    },
+    examCenterSettings: {
+        defaultSyncMode: { type: String, enum: ['fill_missing_only', 'overwrite_mapped_fields'], default: 'overwrite_mapped_fields' },
+        autoCreateExamCenters: { type: Boolean, default: true },
+        notifyStudentsOnSync: { type: Boolean, default: true },
+        notifyGuardiansOnResult: { type: Boolean, default: false },
+        allowExternalImports: { type: Boolean, default: true },
     },
     runtimeVersion: { type: Number, default: 1 },
     updatedBy: { type: Schema.Types.ObjectId, ref: 'User' },

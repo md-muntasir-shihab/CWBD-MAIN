@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import AdminGuardShell from '../../../components/admin/AdminGuardShell';
+import { useModuleAccess } from '../../../hooks/useModuleAccess';
 import { ADMIN_PATHS } from '../../../routes/adminPaths';
 import {
   teamApi,
@@ -124,7 +125,11 @@ function StatusBadge({ status }: { status: string }) {
 export default function TeamAccessConsolePage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { hasAccess } = useModuleAccess();
   const view = useMemo(() => getViewFromPath(location.pathname), [location.pathname]);
+  const canCreateTeam = hasAccess('team_access_control', 'create');
+  const canEditTeam = hasAccess('team_access_control', 'edit');
+  const canDeleteTeam = hasAccess('team_access_control', 'delete');
 
   const [loading, setLoading] = useState(false);
   const [members, setMembers] = useState<TeamMemberItem[]>([]);
@@ -386,7 +391,7 @@ export default function TeamAccessConsolePage() {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input className="admin-input w-full pl-9" placeholder={`Search ${view}...`} value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
-            {view === 'members' && (
+            {view === 'members' && canCreateTeam && (
               <button onClick={() => setShowCreateForm((v) => !v)} className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-500">
                 <Plus className="h-4 w-4" /> Add Member
               </button>
@@ -404,7 +409,7 @@ export default function TeamAccessConsolePage() {
         {view === 'members' && (
           <>
             <AnimatePresence>
-              {showCreateForm && (
+              {showCreateForm && canCreateTeam && (
                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
                   <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900 md:grid-cols-2">
                     <input className="admin-input" placeholder="Full name" value={newMember.fullName} onChange={(e) => setNewMember((v) => ({ ...v, fullName: e.target.value }))} />
@@ -443,20 +448,22 @@ export default function TeamAccessConsolePage() {
                         <p className="truncate text-sm font-semibold text-slate-900 hover:text-indigo-600 dark:text-slate-100 dark:hover:text-indigo-400">{displayName}</p>
                         <p className="truncate text-xs text-slate-500">{member.email}</p>
                       </div>
-                      <div className="relative" onClick={(e) => e.stopPropagation()}>
-                        <button onClick={() => setActionMenuId(actionMenuId === member._id ? null : member._id)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300">
-                          <MoreVertical className="h-4 w-4" />
-                        </button>
-                        {actionMenuId === member._id && (
-                          <div className="absolute right-0 top-8 z-20 w-44 rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
-                            <button onClick={() => { handleMemberAction(member._id, 'activate'); setActionMenuId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700"><UserCheck className="h-3.5 w-3.5 text-emerald-600" /> Activate</button>
-                            <button onClick={() => { handleMemberAction(member._id, 'suspend'); setActionMenuId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700"><UserX className="h-3.5 w-3.5 text-amber-600" /> Suspend</button>
-                            <button onClick={() => { handleMemberAction(member._id, 'reset'); setActionMenuId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700"><KeyRound className="h-3.5 w-3.5 text-indigo-600" /> Reset Password</button>
-                            <button onClick={() => { handleMemberAction(member._id, 'revoke'); setActionMenuId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700"><Lock className="h-3.5 w-3.5 text-rose-600" /> Revoke Sessions</button>
-                            <button onClick={() => { handleMemberAction(member._id, 'resend'); setActionMenuId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700"><Mail className="h-3.5 w-3.5 text-cyan-600" /> Resend Invite</button>
-                          </div>
-                        )}
-                      </div>
+                      {canCreateTeam && (
+                        <div className="relative" onClick={(e) => e.stopPropagation()}>
+                          <button onClick={() => setActionMenuId(actionMenuId === member._id ? null : member._id)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300">
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
+                          {actionMenuId === member._id && (
+                            <div className="absolute right-0 top-8 z-20 w-44 rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                              <button onClick={() => { handleMemberAction(member._id, 'activate'); setActionMenuId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700"><UserCheck className="h-3.5 w-3.5 text-emerald-600" /> Activate</button>
+                              <button onClick={() => { handleMemberAction(member._id, 'suspend'); setActionMenuId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700"><UserX className="h-3.5 w-3.5 text-amber-600" /> Suspend</button>
+                              <button onClick={() => { handleMemberAction(member._id, 'reset'); setActionMenuId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700"><KeyRound className="h-3.5 w-3.5 text-indigo-600" /> Reset Password</button>
+                              <button onClick={() => { handleMemberAction(member._id, 'revoke'); setActionMenuId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700"><Lock className="h-3.5 w-3.5 text-rose-600" /> Revoke Sessions</button>
+                              <button onClick={() => { handleMemberAction(member._id, 'resend'); setActionMenuId(null); }} className="flex w-full items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700"><Mail className="h-3.5 w-3.5 text-cyan-600" /> Resend Invite</button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300"><Shield className="h-3 w-3" /> {getRoleName(member)}</span>
@@ -480,13 +487,15 @@ export default function TeamAccessConsolePage() {
         {view === 'roles' && (
           <>
             <div className="flex flex-wrap items-center gap-3">
-              <button onClick={() => setShowCreateForm((v) => !v)} className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-500">
-                <Plus className="h-4 w-4" /> Create Role
-              </button>
+              {canCreateTeam && (
+                <button onClick={() => setShowCreateForm((v) => !v)} className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-500">
+                  <Plus className="h-4 w-4" /> Create Role
+                </button>
+              )}
             </div>
 
             <AnimatePresence>
-              {showCreateForm && (
+              {showCreateForm && canCreateTeam && (
                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
                   <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900 md:grid-cols-2">
                     <input className="admin-input" placeholder="Role name" value={newRole.name} onChange={(e) => setNewRole((v) => ({ ...v, name: e.target.value }))} />
@@ -526,8 +535,8 @@ export default function TeamAccessConsolePage() {
                     <span className="inline-flex items-center gap-1"><Users className="h-3.5 w-3.5" /> {role.totalUsers ?? 0} users</span>
                   </div>
                   <div className="mt-3 flex gap-2" onClick={(e) => e.stopPropagation()}>
-                    <button className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800" onClick={async () => { await teamApi.duplicateRole(role._id); toast.success('Role duplicated'); await loadRoles(); }}><Copy className="h-3 w-3" /> Duplicate</button>
-                    {!role.isSystemRole && <button className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-400 dark:hover:bg-rose-950/20" onClick={async () => { await teamApi.deleteRole(role._id); toast.success('Role archived'); await loadRoles(); }}><Trash2 className="h-3 w-3" /> Archive</button>}
+                    {canCreateTeam && <button className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800" onClick={async () => { await teamApi.duplicateRole(role._id); toast.success('Role duplicated'); await loadRoles(); }}><Copy className="h-3 w-3" /> Duplicate</button>}
+                    {!role.isSystemRole && canDeleteTeam && <button className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-400 dark:hover:bg-rose-950/20" onClick={async () => { await teamApi.deleteRole(role._id); toast.success('Role archived'); await loadRoles(); }}><Trash2 className="h-3 w-3" /> Archive</button>}
                   </div>
                 </div>
               ))}
@@ -555,9 +564,13 @@ export default function TeamAccessConsolePage() {
                 <option value="">Select role</option>
                 {roles.map((role) => <option key={role._id} value={role._id}>{role.name}</option>)}
               </select>
-              <button className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500" onClick={handleSaveMatrix}><CheckCircle2 className="h-4 w-4" /> Save</button>
-              <button className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800" onClick={() => { const full: ModulePermissionMap = {}; matrixModules.forEach(m => { full[m] = {}; matrixActions.forEach(a => { full[m][a] = true; }); }); setMatrix(full); }}>Enable All</button>
-              <button className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800" onClick={() => setMatrix(emptyPermissions(matrixModules))}>Disable All</button>
+              {canEditTeam && (
+                <>
+                  <button className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500" onClick={handleSaveMatrix}><CheckCircle2 className="h-4 w-4" /> Save</button>
+                  <button className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800" onClick={() => { const full: ModulePermissionMap = {}; matrixModules.forEach(m => { full[m] = {}; matrixActions.forEach(a => { full[m][a] = true; }); }); setMatrix(full); }}>Enable All</button>
+                  <button className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800" onClick={() => setMatrix(emptyPermissions(matrixModules))}>Disable All</button>
+                </>
+              )}
             </div>
 
             <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
@@ -579,6 +592,7 @@ export default function TeamAccessConsolePage() {
                             type="checkbox"
                             className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600"
                             checked={Boolean(matrix[moduleName]?.[action])}
+                            disabled={!canEditTeam}
                             onChange={(e) => {
                               setMatrix((prev) => ({
                                 ...prev,
@@ -592,9 +606,13 @@ export default function TeamAccessConsolePage() {
                         </td>
                       ))}
                       <td className="px-2 py-2 text-center">
-                        <button className="text-[10px] text-indigo-600 hover:underline dark:text-indigo-400" onClick={() => { const newMap = { ...matrix }; const allOn = matrixActions.every(a => matrix[moduleName]?.[a]); newMap[moduleName] = {}; matrixActions.forEach(a => { newMap[moduleName][a] = !allOn; }); setMatrix(newMap); }}>
-                          {matrixActions.every(a => matrix[moduleName]?.[a]) ? 'None' : 'All'}
-                        </button>
+                        {canEditTeam ? (
+                          <button className="text-[10px] text-indigo-600 hover:underline dark:text-indigo-400" onClick={() => { const newMap = { ...matrix }; const allOn = matrixActions.every(a => matrix[moduleName]?.[a]); newMap[moduleName] = {}; matrixActions.forEach(a => { newMap[moduleName][a] = !allOn; }); setMatrix(newMap); }}>
+                            {matrixActions.every(a => matrix[moduleName]?.[a]) ? 'None' : 'All'}
+                          </button>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500">View only</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -606,21 +624,23 @@ export default function TeamAccessConsolePage() {
 
         {view === 'approval-rules' && (
           <>
-            <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900 md:grid-cols-2">
-              <input className="admin-input" placeholder="Module" value={newRule.module} onChange={(e) => setNewRule((v) => ({ ...v, module: e.target.value }))} />
-              <input className="admin-input" placeholder="Action" value={newRule.action} onChange={(e) => setNewRule((v) => ({ ...v, action: e.target.value }))} />
-              <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-                <input type="checkbox" checked={newRule.requiresApproval} onChange={(e) => setNewRule((v) => ({ ...v, requiresApproval: e.target.checked }))} />
-                Requires approval
-              </label>
-              <select className="admin-input" multiple value={newRule.approverRoleIds} onChange={(e) => {
-                const ids = Array.from(e.target.selectedOptions).map((item) => item.value);
-                setNewRule((v) => ({ ...v, approverRoleIds: ids }));
-              }}>
-                {roles.map((role) => <option key={role._id} value={role._id}>{role.name}</option>)}
-              </select>
-              <button className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 md:col-span-2" onClick={handleCreateRule}>Create Rule</button>
-            </div>
+            {canCreateTeam && (
+              <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900 md:grid-cols-2">
+                <input className="admin-input" placeholder="Module" value={newRule.module} onChange={(e) => setNewRule((v) => ({ ...v, module: e.target.value }))} />
+                <input className="admin-input" placeholder="Action" value={newRule.action} onChange={(e) => setNewRule((v) => ({ ...v, action: e.target.value }))} />
+                <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                  <input type="checkbox" checked={newRule.requiresApproval} onChange={(e) => setNewRule((v) => ({ ...v, requiresApproval: e.target.checked }))} />
+                  Requires approval
+                </label>
+                <select className="admin-input" multiple value={newRule.approverRoleIds} onChange={(e) => {
+                  const ids = Array.from(e.target.selectedOptions).map((item) => item.value);
+                  setNewRule((v) => ({ ...v, approverRoleIds: ids }));
+                }}>
+                  {roles.map((role) => <option key={role._id} value={role._id}>{role.name}</option>)}
+                </select>
+                <button className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 md:col-span-2" onClick={handleCreateRule}>Create Rule</button>
+              </div>
+            )}
 
             <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
               <table className="min-w-full text-sm">
@@ -641,7 +661,11 @@ export default function TeamAccessConsolePage() {
                       <td className="px-3 py-2">{rule.requiresApproval ? 'Yes' : 'No'}</td>
                       <td className="px-3 py-2">{rule.approverRoleIds.map((r) => typeof r === 'string' ? r : r.name).join(', ') || '-'}</td>
                       <td className="px-3 py-2">
-                        <button className="rounded bg-rose-600 px-2 py-1 text-xs text-white" onClick={async () => { await teamApi.deleteApprovalRule(rule._id); toast.success('Rule deleted'); await loadApprovalRules(); }}>Delete</button>
+                        {canDeleteTeam ? (
+                          <button className="rounded bg-rose-600 px-2 py-1 text-xs text-white" onClick={async () => { await teamApi.deleteApprovalRule(rule._id); toast.success('Rule deleted'); await loadApprovalRules(); }}>Delete</button>
+                        ) : (
+                          <span className="text-xs text-slate-400 dark:text-slate-500">View only</span>
+                        )}
                       </td>
                     </tr>
                   ))}

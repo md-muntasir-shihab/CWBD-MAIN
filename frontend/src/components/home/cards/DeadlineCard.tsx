@@ -1,101 +1,140 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Globe, ExternalLink } from 'lucide-react';
-import CountdownChip, { DeadlineProgress, daysUntil, urgencyTone } from '../CountdownChip';
+import { ExternalLink, Globe } from 'lucide-react';
+import CountdownChip, { daysUntil, urgencyTone } from '../CountdownChip';
 import type { ApiUniversityCardPreview } from '../../../services/api';
+import UniversityLogo from '../../university/UniversityLogo';
+import { formatUniversityDate, pickText } from '../../../lib/universityPresentation';
 
 interface DeadlineCardProps {
-  university: ApiUniversityCardPreview;
+    university: ApiUniversityCardPreview;
 }
 
 const borderTone: Record<string, string> = {
-  danger: 'border-red-300 dark:border-red-700/60',
-  warning: 'border-amber-300 dark:border-amber-700/60',
-  success: 'border-emerald-300 dark:border-emerald-700/60',
-  muted: 'border-gray-200 dark:border-gray-700',
+    danger: 'border-red-500/45',
+    warning: 'border-amber-500/45',
+    success: 'border-emerald-500/35',
+    muted: 'border-slate-700/70',
 };
 
+function ExamChip({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="rounded-xl border border-slate-700/80 bg-slate-950/55 px-3 py-2">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{label}</p>
+            <p className="mt-1 text-xs font-semibold text-slate-100">{formatUniversityDate(value, 'en-GB', { day: '2-digit', month: 'short' })}</p>
+        </div>
+    );
+}
+
 export default function DeadlineCard({ university: uni }: DeadlineCardProps) {
-  const endDate = uni.applicationEndDate || uni.applicationEnd;
-  const startDate = uni.applicationStartDate || uni.applicationStart;
-  const days = daysUntil(endDate);
-  const tone = urgencyTone(days);
+    const endDate = uni.applicationEndDate || uni.applicationEnd;
+    const startDate = uni.applicationStartDate || uni.applicationStart;
+    const days = daysUntil(endDate);
+    const tone = urgencyTone(days);
+    const officialUrl = pickText(uni.website);
+    const applyUrl = pickText(uni.admissionWebsite);
+    const detailsUrl = `/universities/${uni.slug}`;
 
-  return (
-    <motion.div
-      whileHover={{ y: -3 }}
-      className={`snap-start shrink-0 w-[280px] sm:w-[300px] md:w-[320px] rounded-2xl border-2 ${borderTone[tone]} bg-white dark:bg-gray-900 shadow-card hover:shadow-card-hover transition-shadow flex flex-col overflow-hidden`}
-    >
-      {/* Header with logo + info */}
-      <div className="p-4 pb-3 flex items-start gap-3">
-        <div className="w-12 h-12 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden shrink-0 border border-gray-200 dark:border-gray-700">
-          {uni.logoUrl ? (
-            <img src={uni.logoUrl} alt={uni.shortForm} className="w-full h-full object-contain p-1" />
-          ) : (
-            <span className="text-sm font-bold text-gray-500 dark:text-gray-400">{uni.shortForm?.slice(0, 3)}</span>
-          )}
-        </div>
-        <div className="flex-1 min-w-0">
-          <Link to={`/universities/${uni.slug}`} className="block">
-            <h3 className="font-semibold text-sm text-gray-900 dark:text-white leading-snug line-clamp-2 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
-              {uni.name}
-            </h3>
-          </Link>
-          <div className="flex items-center gap-2 mt-1">
-            <span className="text-[11px] px-2 py-0.5 rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 font-medium">
-              {uni.category}
-            </span>
-            {uni.clusterGroup && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 font-medium">
-                {uni.clusterGroup}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Deadline info */}
-      <div className="px-4 pb-3 space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-gray-500 dark:text-gray-400">
-            Ends: {endDate ? new Date(endDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'TBD'}
-          </span>
-          <CountdownChip targetDate={endDate} size="sm" />
-        </div>
-        <DeadlineProgress startDate={startDate} endDate={endDate} />
-      </div>
-
-      {/* Seats summary */}
-      {(uni.totalSeats || uni.scienceSeats || uni.artsSeats || uni.businessSeats) && (
-        <div className="px-4 pb-3">
-          <div className="flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400">
-            <span>Total: <b className="text-gray-700 dark:text-gray-300">{uni.totalSeats || '—'}</b></span>
-            {uni.scienceSeats && <span>· Sci: {uni.scienceSeats}</span>}
-            {uni.artsSeats && <span>· Arts: {uni.artsSeats}</span>}
-            {uni.businessSeats && <span>· Biz: {uni.businessSeats}</span>}
-          </div>
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="mt-auto px-4 pb-4 flex items-center gap-2">
-        {(uni.admissionWebsite || uni.website) && (
-          <a
-            href={uni.admissionWebsite || uni.website}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-          >
-            <Globe className="w-3.5 h-3.5" /> Official
-          </a>
-        )}
-        <Link
-          to={`/universities/${uni.slug}`}
-          className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-xs font-semibold transition-colors"
+    return (
+        <motion.article
+            whileHover={{ y: -3 }}
+            className={`flex w-[250px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border bg-slate-900/95 shadow-[0_14px_30px_rgba(4,12,24,0.26)] transition-shadow hover:shadow-[0_20px_40px_rgba(4,12,24,0.30)] sm:w-[270px] md:w-[290px] ${borderTone[tone]}`}
         >
-          <ExternalLink className="w-3.5 h-3.5" /> Apply
-        </Link>
-      </div>
-    </motion.div>
-  );
+            <div className="flex items-start gap-3 p-4 pb-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-700 bg-slate-950">
+                    <UniversityLogo
+                        name={uni.name}
+                        shortForm={uni.shortForm}
+                        logoUrl={uni.logoUrl}
+                        alt={uni.shortForm || uni.name}
+                        containerClassName="h-full w-full"
+                        imageClassName="h-full w-full object-contain p-1"
+                        fallbackClassName="rounded-none"
+                    />
+                </div>
+                <div className="min-w-0 flex-1">
+                    <Link to={detailsUrl} className="block">
+                        <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-white transition-colors hover:text-cyan-200">
+                            {uni.name}
+                        </h3>
+                    </Link>
+                    <p className="mt-1 truncate text-[11px] font-bold uppercase tracking-[0.16em] text-cyan-300">
+                        {pickText(uni.shortForm, 'N/A')}
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-200">
+                            {uni.category}
+                        </span>
+                        {uni.clusterGroup && (
+                            <span className="rounded-full border border-purple-500/20 bg-purple-500/10 px-2 py-0.5 text-[11px] font-medium text-purple-200">
+                                {uni.clusterGroup}
+                            </span>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            <div className="space-y-3 px-4 pb-4">
+                <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-300">
+                        Apply by {formatUniversityDate(endDate, 'en-GB', { day: '2-digit', month: 'short' })}
+                    </span>
+                    <CountdownChip targetDate={endDate} size="sm" />
+                </div>
+                <div className="rounded-2xl border border-slate-700/80 bg-slate-950/55 p-3">
+                    <div className="flex items-center justify-between gap-3 text-xs">
+                        <span className="text-slate-500">Application Window</span>
+                        <span className="text-right font-semibold text-slate-100">
+                            {formatUniversityDate(startDate, 'en-GB', { day: '2-digit', month: 'short' })} - {formatUniversityDate(endDate, 'en-GB', { day: '2-digit', month: 'short' })}
+                        </span>
+                    </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                    <ExamChip label="Science" value={uni.examDateScience || uni.scienceExamDate || ''} />
+                    <ExamChip label="Arts" value={uni.examDateArts || uni.artsExamDate || ''} />
+                    <ExamChip label="Business" value={uni.examDateBusiness || uni.businessExamDate || ''} />
+                </div>
+            </div>
+
+            <div className="mt-auto grid grid-cols-3 gap-2 px-4 pb-4">
+                {applyUrl ? (
+                    <a
+                        href={applyUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-500 px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+                    >
+                        <ExternalLink className="h-3.5 w-3.5" /> Apply
+                    </a>
+                ) : (
+                    <Link
+                        to={detailsUrl}
+                        className="inline-flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-500 px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+                    >
+                        <ExternalLink className="h-3.5 w-3.5" /> Details
+                    </Link>
+                )}
+                {officialUrl ? (
+                    <a
+                        href={officialUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl border border-slate-700 px-3 py-2 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-800"
+                    >
+                        <Globe className="h-3.5 w-3.5" /> Official
+                    </a>
+                ) : (
+                    <span className="inline-flex min-h-[42px] items-center justify-center rounded-xl border border-slate-700 px-3 py-2 text-xs font-medium text-slate-500">
+                        Official N/A
+                    </span>
+                )}
+                <Link
+                    to={detailsUrl}
+                    className="inline-flex min-h-[42px] items-center justify-center rounded-xl border border-slate-700 px-3 py-2 text-xs font-medium text-slate-200 transition-colors hover:bg-slate-800"
+                >
+                    Details
+                </Link>
+            </div>
+        </motion.article>
+    );
 }

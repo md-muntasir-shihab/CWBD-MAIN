@@ -2,7 +2,9 @@ import { Schema, model } from "mongoose";
 
 const userSchema = new Schema(
   {
-    userId: { type: String, required: true, unique: true },
+    // Legacy exam routes read from the shared users collection.
+    // The canonical User model owns index management for that collection.
+    userId: { type: String, trim: true, index: { unique: true, sparse: true } },
     username: { type: String, required: true, unique: true },
     passwordHash: { type: String, required: true },
     role: { type: String, enum: ["student", "admin", "moderator", "editor", "chairman"], default: "student" },
@@ -22,7 +24,11 @@ const userSchema = new Schema(
     dateOfBirth: Date,
     profileScore: { type: Number, default: 0 }
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    autoIndex: false,
+    autoCreate: false,
+  }
 );
 
 export const UserModel = model("users", userSchema);

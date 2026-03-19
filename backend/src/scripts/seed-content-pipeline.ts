@@ -111,6 +111,13 @@ function toSlug(value: string): string {
     return slugify(String(value || '').trim(), { lower: true, strict: true });
 }
 
+function buildReachableExampleUrl(slug: string, kind: 'website' | 'admission'): string {
+    const safeSlug = encodeURIComponent(slug);
+    return kind === 'admission'
+        ? `https://example.com/admission/${safeSlug}`
+        : `https://example.com/universities/${safeSlug}`;
+}
+
 function nowPlusDays(days: number): Date {
     return new Date(Date.now() + days * DAY_MS);
 }
@@ -309,28 +316,38 @@ export async function seedContentPipeline(
 
     const categoryDocs = await Promise.all(UNIVERSITY_CATEGORY_ORDER.map(async (name, index) => {
         const slug = toSlug(name);
-        return UniversityCategory.findOneAndUpdate(
-            { slug },
-            {
-                $set: {
-                    name,
-                    slug,
-                    labelEn: name,
-                    labelBn: '',
-                    colorToken: '',
-                    icon: '',
-                    isActive: true,
-                    homeHighlight: index < 4,
-                    homeOrder: index + 1,
-                    updatedBy: primaryAdminId,
+        try {
+            return await UniversityCategory.findOneAndUpdate(
+                { name },
+                {
+                    $set: {
+                        name,
+                        slug,
+                        labelEn: name,
+                        labelBn: '',
+                        colorToken: '',
+                        icon: '',
+                        isActive: true,
+                        homeHighlight: index < 4,
+                        homeOrder: index + 1,
+                        updatedBy: primaryAdminId,
+                    },
+                    $setOnInsert: { createdBy: primaryAdminId },
                 },
-                $setOnInsert: { createdBy: primaryAdminId },
-            },
-            { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
-        );
+                { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true },
+            );
+        } catch (err: unknown) {
+            const e = err as { code?: number };
+            if (e.code === 11000) {
+                return UniversityCategory.findOne({ name });
+            }
+            throw err;
+        }
     }));
     const categoryIdByName = new Map<string, mongoose.Types.ObjectId>(
-        categoryDocs.map((doc) => [doc.name, ensureObjectId(doc._id)]),
+        categoryDocs
+            .filter((doc): doc is NonNullable<typeof doc> => Boolean(doc))
+            .map((doc) => [doc.name, ensureObjectId(doc._id)]),
     );
 
     const planSeeds: Array<Record<string, unknown>> = [
@@ -483,11 +500,73 @@ export async function seedContentPipeline(
             name: 'Rajshahi University of Engineering & Technology',
             shortForm: 'RUET',
             category: 'Science & Technology',
-            clusterGroup: 'Engineering Cluster',
             featured: true,
             featuredOrder: 3,
             established: 1964,
             address: 'Kazla, Rajshahi',
+        },
+        {
+            name: 'Bangladesh University of Engineering and Technology',
+            shortForm: 'BUET',
+            category: 'Science & Technology',
+            featured: true,
+            featuredOrder: 4,
+            established: 1962,
+            address: 'Palashi, Dhaka',
+        },
+        {
+            name: 'Khulna University of Engineering & Technology',
+            shortForm: 'KUET',
+            category: 'Science & Technology',
+            featured: true,
+            featuredOrder: 5,
+            established: 1974,
+            address: 'Fulbarigate, Khulna',
+        },
+        {
+            name: 'Chittagong University of Engineering & Technology',
+            shortForm: 'CUET',
+            category: 'Science & Technology',
+            featured: true,
+            featuredOrder: 6,
+            established: 1968,
+            address: 'Raozan, Chattogram',
+        },
+        {
+            name: 'Shahjalal University of Science and Technology',
+            shortForm: 'SUST',
+            category: 'Science & Technology',
+            featured: false,
+            featuredOrder: 22,
+            established: 1986,
+            address: 'Kumargaon, Sylhet',
+        },
+        {
+            name: 'Dhaka University of Engineering & Technology',
+            shortForm: 'DUET',
+            category: 'Science & Technology',
+            featured: false,
+            featuredOrder: 23,
+            established: 1980,
+            address: 'Gazipur',
+        },
+        {
+            name: 'Islamic University of Technology',
+            shortForm: 'IUT',
+            category: 'Science & Technology',
+            featured: false,
+            featuredOrder: 24,
+            established: 1981,
+            address: 'Board Bazar, Gazipur',
+        },
+        {
+            name: 'Hajee Mohammad Danesh Science & Technology University',
+            shortForm: 'HSTU',
+            category: 'Science & Technology',
+            featured: false,
+            featuredOrder: 25,
+            established: 1999,
+            address: 'Dinajpur',
         },
         {
             name: 'Khulna University',
@@ -495,7 +574,7 @@ export async function seedContentPipeline(
             category: 'GST (General/Public)',
             clusterGroup: 'GST Cluster',
             featured: true,
-            featuredOrder: 4,
+            featuredOrder: 7,
             established: 1991,
             address: 'Khulna',
         },
@@ -542,10 +621,10 @@ export async function seedContentPipeline(
                     address: String(seed.address || 'Dhaka'),
                     contactNumber: '+8801711000000',
                     email: `${slug}@campusway.local`,
-                    website: `https://${slug}.example.com`,
-                    websiteUrl: `https://${slug}.example.com`,
-                    admissionWebsite: `https://${slug}.example.com/admission`,
-                    admissionUrl: `https://${slug}.example.com/admission`,
+                    website: buildReachableExampleUrl(slug, 'website'),
+                    websiteUrl: buildReachableExampleUrl(slug, 'website'),
+                    admissionWebsite: buildReachableExampleUrl(slug, 'admission'),
+                    admissionUrl: buildReachableExampleUrl(slug, 'admission'),
                     totalSeats: String(1200 + index * 100),
                     scienceSeats: String(500 + index * 50),
                     artsSeats: String(350 + index * 30),

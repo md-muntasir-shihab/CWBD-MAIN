@@ -7,8 +7,7 @@ import {
 } from 'lucide-react';
 import { useUniversityDetail } from '../hooks/useUniversityQueries';
 import { normalizeExternalUrl } from '../utils/url';
-import DefaultLogo from '../components/university/DefaultLogo';
-import { buildLogoFallback } from '../lib/apiClient';
+import UniversityLogo from '../components/university/UniversityLogo';
 
 /* ── Helpers ── */
 function fmtDate(d: string | undefined | null): string {
@@ -125,7 +124,7 @@ export default function UniversityDetailsPage() {
 
     useSEO(
         uni ? `${uni.name} (${uni.shortForm}) Admission ${new Date().getFullYear()}` : 'University Details',
-        uni?.shortDescription || uni?.description || ''
+        uni?.description || uni?.shortDescription || ''
     );
 
     const handleShare = useCallback(() => {
@@ -192,6 +191,7 @@ export default function UniversityDetailsPage() {
     const established = uni.establishedYear || uni.established;
     const contact = uni.contactNumber || '';
     const email = uni.email || '';
+    const fullDescription = String(uni.description || '').trim();
 
     const examCenters: Array<string | { city: string; address?: string }> = uni.examCenters ?? [];
 
@@ -210,19 +210,15 @@ export default function UniversityDetailsPage() {
                     animate={{ opacity: 1, y: 0 }}
                     className="flex flex-col sm:flex-row items-start gap-5"
                 >
-                    {/* Logo */}
-                    {uni.logoUrl ? (
-                        <img
-                            src={uni.logoUrl}
-                            alt={`${uni.shortForm} logo`}
-                            className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-[var(--surface)] object-contain shadow-md flex-shrink-0"
-                            loading="lazy"
-                        />
-                    ) : (
-                        <div className="w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0 rounded-2xl shadow-md overflow-hidden border-2 border-primary/20 dark:border-primary/30">
-                            <DefaultLogo fallbackText={buildLogoFallback(uni.name || '', uni.shortForm || '')} textClassName="text-2xl sm:text-3xl" />
-                        </div>
-                    )}
+                    <UniversityLogo
+                        name={uni.name || ''}
+                        shortForm={uni.shortForm || ''}
+                        logoUrl={uni.logoUrl || ''}
+                        alt={`${uni.shortForm || uni.name} logo`}
+                        containerClassName="h-16 w-16 flex-shrink-0 overflow-hidden rounded-2xl border-2 border-primary/20 shadow-md dark:border-primary/30 sm:h-20 sm:w-20"
+                        imageClassName="h-full w-full rounded-2xl bg-[var(--surface)] object-contain"
+                        fallbackTextClassName="text-2xl sm:text-3xl"
+                    />
 
                     <div className="flex-1 min-w-0">
                         <h1 className="text-2xl sm:text-3xl font-heading font-bold text-[var(--text)] leading-tight">
@@ -282,11 +278,6 @@ export default function UniversityDetailsPage() {
                                 <span>Established {established}</span>
                             </div>
                         )}
-                        {(uni.shortDescription || uni.description) && (
-                            <p className="text-[var(--muted)] leading-relaxed">
-                                {uni.description || uni.shortDescription}
-                            </p>
-                        )}
                         {uni.address && (
                             <div className="flex items-start gap-2 text-[var(--text)]">
                                 <MapPin className="w-4 h-4 text-[var(--muted)] mt-0.5 flex-shrink-0" />
@@ -305,11 +296,21 @@ export default function UniversityDetailsPage() {
                                 <a href={`mailto:${email}`} className="hover:text-[var(--primary)] transition">{email}</a>
                             </div>
                         )}
-                        {!established && !(uni.shortDescription || uni.description) && !uni.address && !contact && !email && (
+                        {!established && !uni.address && !contact && !email && (
                             <p className="text-[var(--muted)]">No overview information available.</p>
                         )}
                     </div>
                 </Section>
+
+                {fullDescription && (
+                    <Section title="Description" icon={BookOpen}>
+                        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)]/50 p-4 sm:p-5">
+                            <p className="whitespace-pre-line text-sm leading-7 text-[var(--text)]">
+                                {fullDescription}
+                            </p>
+                        </div>
+                    </Section>
+                )}
 
                 {/* ─── 3. SEATS TABLE ─── */}
                 <Section title="Seats" icon={Users}>

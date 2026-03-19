@@ -35,6 +35,7 @@ const inp = (extra = '') =>
 export default function NotificationTriggersPage() {
   return (
     <AdminGuardShell
+      requiredModule="notifications"
       title="Auto-Notification Triggers"
       description="অটো-নোটিফিকেশন ট্রিগার ম্যানেজ করুন — ইভেন্ট অনুযায়ী SMS/Email স্বয়ংক্রিয়ভাবে পাঠানো হবে"
     >

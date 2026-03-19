@@ -88,12 +88,12 @@ export default function PremiumCarousel({
 
   return (
     <div className="relative group/carousel" role="region" aria-label={ariaLabel || 'Content carousel'}>
-      {/* Left arrow */}
+      {/* Left arrow - enhanced with gradient glow */}
       {showArrows && canScrollLeft && (
         <button
           onClick={() => scrollCarousel(ref, 'left')}
           aria-label="Scroll left"
-          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 hidden md:flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-800 shadow-elevated border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all opacity-0 group-hover/carousel:opacity-100"
+          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 hidden md:flex items-center justify-center w-11 h-11 rounded-full bg-white/90 dark:bg-gray-800/90 backdrop-blur-md shadow-lg shadow-black/10 dark:shadow-black/30 border border-gray-200/80 dark:border-gray-700/80 text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 hover:scale-110 hover:shadow-xl transition-all duration-300 opacity-0 group-hover/carousel:opacity-100"
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
@@ -108,23 +108,23 @@ export default function PremiumCarousel({
         {children}
       </div>
 
-      {/* Right arrow */}
+      {/* Right arrow - enhanced with gradient glow */}
       {showArrows && canScrollRight && (
         <button
           onClick={() => scrollCarousel(ref, 'right')}
           aria-label="Scroll right"
-          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-10 hidden md:flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-gray-800 shadow-elevated border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all opacity-0 group-hover/carousel:opacity-100"
+          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-10 hidden md:flex items-center justify-center w-11 h-11 rounded-full bg-white/90 dark:bg-gray-800/90 backdrop-blur-md shadow-lg shadow-black/10 dark:shadow-black/30 border border-gray-200/80 dark:border-gray-700/80 text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 hover:scale-110 hover:shadow-xl transition-all duration-300 opacity-0 group-hover/carousel:opacity-100"
         >
           <ChevronRight className="w-5 h-5" />
         </button>
       )}
 
-      {/* Fade edges */}
+      {/* Fade edges - enhanced with wider, smoother gradient */}
       {canScrollLeft && (
-        <div className="absolute left-0 top-0 bottom-2 w-8 bg-gradient-to-r from-gray-50 dark:from-gray-950 to-transparent pointer-events-none z-[1] md:hidden" />
+        <div className="absolute left-0 top-0 bottom-2 w-12 bg-gradient-to-r from-gray-50 via-gray-50/60 dark:from-gray-950 dark:via-gray-950/60 to-transparent pointer-events-none z-[1]" />
       )}
       {canScrollRight && (
-        <div className="absolute right-0 top-0 bottom-2 w-8 bg-gradient-to-l from-gray-50 dark:from-gray-950 to-transparent pointer-events-none z-[1] md:hidden" />
+        <div className="absolute right-0 top-0 bottom-2 w-12 bg-gradient-to-l from-gray-50 via-gray-50/60 dark:from-gray-950 dark:via-gray-950/60 to-transparent pointer-events-none z-[1]" />
       )}
     </div>
   );

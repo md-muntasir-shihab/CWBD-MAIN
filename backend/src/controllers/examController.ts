@@ -15,7 +15,6 @@ import ExamCertificate from '../models/ExamCertificate';
 import StudentDueLedger from '../models/StudentDueLedger';
 import ManualPayment from '../models/ManualPayment';
 import SiteSettings from '../models/Settings';
-import ExternalExamJoinLog from '../models/ExternalExamJoinLog';
 import {
     addExamAttemptStreamClient,
     broadcastExamAttemptEvent,
@@ -25,6 +24,12 @@ import { broadcastAdminLiveEvent } from '../realtime/adminLiveStream';
 import { getExamCardMetrics } from '../services/examCardMetricsService';
 import { getSecurityConfig } from '../services/securityConfigService';
 import { finalizeExamSession } from '../services/examFinalizationService';
+import { getCanonicalSubscriptionSnapshot } from '../services/subscriptionAccessService';
+import {
+    createExternalExamAttempt,
+    getExternalExamAttemptCount,
+    getExternalExamAttemptCountsForStudent,
+} from '../services/externalExamAttemptService';
 
 /** Verify user subscription — returns true if user has ANY subscription plan (active or demo) */
 type SubscriptionGateResult = {
@@ -47,7 +52,7 @@ function getLegacyExpiryFromNow(): Date {
  * 2) transitional fallback: old students with missing subscription metadata get legacy_free backfill
  */
 async function verifySubscription(userId: string): Promise<SubscriptionGateResult> {
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).select('role subscription');
     if (!user) return { allowed: false, reason: 'missing' };
 
     if (['superadmin', 'admin', 'moderator'].includes(user.role)) {
@@ -58,27 +63,24 @@ async function verifySubscription(userId: string): Promise<SubscriptionGateResul
         return { allowed: true };
     }
 
-    const sub = user.subscription || {};
-    const hasAnyPlanIdentity = Boolean(sub.plan || sub.planCode || sub.planName);
+    const snapshot = await getCanonicalSubscriptionSnapshot(
+        userId,
+        (user.subscription as Record<string, unknown> | undefined),
+    );
 
-    // Check if subscription is missing or incomplete
-    if (!hasAnyPlanIdentity || !sub.expiryDate || typeof sub.isActive !== 'boolean') {
+    if (!snapshot.hasPlanIdentity) {
         return { allowed: false, reason: 'missing' };
     }
 
-    const current = user.subscription || {};
-    const isActive = current.isActive === true;
-    const expiryDate = current.expiryDate ? new Date(current.expiryDate) : null;
-
-    if (!isActive) {
-        return { allowed: false, reason: 'inactive', expiryDate };
+    if (!snapshot.isActive || snapshot.allowsExams === false) {
+        return {
+            allowed: false,
+            reason: snapshot.reason === 'expired' ? 'expired' : 'inactive',
+            expiryDate: snapshot.expiresAtUTC,
+        };
     }
 
-    if (!expiryDate || Number.isNaN(expiryDate.getTime()) || expiryDate.getTime() < Date.now()) {
-        return { allowed: false, reason: 'expired', expiryDate };
-    }
-
-    return { allowed: true, expiryDate };
+    return { allowed: true, expiryDate: snapshot.expiresAtUTC };
 }
 
 /** Verify the student can access this specific exam */
@@ -118,22 +120,24 @@ export async function getStudentExams(req: AuthRequest, res: Response): Promise<
     try {
         const studentId = req.user!._id;
         const subscriptionState = await verifySubscription(studentId);
-        const hasActiveSubscription = subscriptionState.allowed;
+        let hasActiveSubscription = subscriptionState.allowed;
 
         const now = new Date();
         const exams = await Exam.find({ isPublished: true }).sort({ startDate: 1 }).lean();
+        const examIds = exams.map((exam) => String(exam._id || '')).filter(Boolean);
         const [profile, user, dueLedger] = await Promise.all([
             StudentProfile.findOne({ user_id: studentId }).select('groupIds').lean(),
             User.findById(studentId).select('subscription').lean(),
             StudentDueLedger.findOne({ studentId }).select('netDue').lean(),
         ]);
+        const subscriptionSnapshot = await getCanonicalSubscriptionSnapshot(
+            studentId,
+            (user?.subscription as Record<string, unknown> | undefined),
+        );
         const pendingDueAmount = Number((dueLedger as { netDue?: number } | null)?.netDue || 0);
         const studentGroupIds = normalizeObjectIdArray(profile?.groupIds || []);
-        const studentPlanCode = String(
-            (user?.subscription as Record<string, unknown> | undefined)?.planCode ||
-            (user?.subscription as Record<string, unknown> | undefined)?.plan ||
-            '',
-        ).toLowerCase();
+        const studentPlanCode = subscriptionSnapshot.planCode;
+        hasActiveSubscription = subscriptionState.allowed && subscriptionSnapshot.allowsExams !== false;
 
         // Fetch student's completed results (multi-attempt aware)
         const results = await ExamResult.find({ student: studentId }).sort({ submittedAt: -1 }).lean();
@@ -144,6 +148,7 @@ export async function getStudentExams(req: AuthRequest, res: Response): Promise<
             if (!resultMap.has(examKey)) resultMap.set(examKey, r as unknown as Record<string, unknown>);
             attemptCountMap.set(examKey, (attemptCountMap.get(examKey) || 0) + 1);
         }
+        const externalAttemptCountMap = await getExternalExamAttemptCountsForStudent(studentId, examIds);
 
         // Fetch active session if any
         const activeSessions = await ExamSession.find({
@@ -158,7 +163,10 @@ export async function getStudentExams(req: AuthRequest, res: Response): Promise<
             .map(e => {
                 const examKey = e._id!.toString();
                 const result = resultMap.get(examKey);
-                const attempts = attemptCountMap.get(examKey) || 0;
+                const attempts = Math.max(
+                    Number(attemptCountMap.get(examKey) || 0),
+                    Number(externalAttemptCountMap.get(examKey) || 0),
+                );
                 const accessControl = (e.accessControl && typeof e.accessControl === 'object')
                     ? (e.accessControl as Record<string, unknown>)
                     : {};
@@ -357,33 +365,30 @@ export async function getPublicExamList(req: AuthRequest, res: Response): Promis
                     expiresAt: { $gt: now },
                 }).select('exam').lean(),
             ]);
+            const externalAttemptCountMap = await getExternalExamAttemptCountsForStudent(studentId, examIds);
 
             studentGroupIds = normalizeObjectIdArray(profile?.groupIds || []);
             pendingDueAmount = Number((dueLedger as { netDue?: number } | null)?.netDue || 0);
-            studentPlanCode = String(
-                (user?.subscription as Record<string, unknown> | undefined)?.planCode ||
-                (user?.subscription as Record<string, unknown> | undefined)?.plan ||
-                ''
-            ).toLowerCase();
-
-            const subscriptionExpiryRaw = (user?.subscription as Record<string, unknown> | undefined)?.expiryDate;
-            const subscriptionExpiry = subscriptionExpiryRaw ? new Date(String(subscriptionExpiryRaw)).getTime() : 0;
-            hasActiveSubscription = Boolean(
-                (user?.subscription as Record<string, unknown> | undefined)?.isActive &&
-                Number.isFinite(subscriptionExpiry) &&
-                subscriptionExpiry > Date.now()
+            const subscriptionSnapshot = await getCanonicalSubscriptionSnapshot(
+                studentId,
+                (user?.subscription as Record<string, unknown> | undefined),
             );
+            studentPlanCode = subscriptionSnapshot.planCode;
+            hasActiveSubscription = subscriptionSnapshot.isActive && subscriptionSnapshot.allowsExams !== false;
 
             attemptsMap = resultRows.reduce((map, row) => {
                 const examId = String(row.exam || '');
                 map.set(examId, (map.get(examId) || 0) + 1);
                 return map;
             }, new Map<string, number>());
+            for (const [examId, count] of externalAttemptCountMap.entries()) {
+                attemptsMap.set(examId, Math.max(Number(attemptsMap.get(examId) || 0), Number(count || 0)));
+            }
 
             activeSessionMap = new Set(activeSessions.map((row) => String(row.exam || '')).filter(Boolean));
         }
 
-        const cards: PublicExamListItem[] = exams
+        const cards = exams
             .map((exam, index) => {
                 const examRecord = exam as Record<string, unknown>;
                 const examId = String(exam._id || '');
@@ -394,16 +399,32 @@ export async function getPublicExamList(req: AuthRequest, res: Response): Promis
                 const requiredUserIds = normalizeObjectIdArray(accessControl.allowedUserIds);
                 const requiredGroupIds = normalizeObjectIdArray(accessControl.allowedGroupIds);
                 const requiredPlanCodes = toStringArray(accessControl.allowedPlanCodes).map((code) => code.toLowerCase());
-                const subscriptionRequired = Boolean((exam as Record<string, unknown>).subscriptionRequired) || requiredPlanCodes.length > 0;
+                const visibilityMode = String((exam as Record<string, unknown>).visibilityMode || 'all_students');
+                const targetGroupIds = normalizeObjectIdArray((exam as Record<string, unknown>).targetGroupIds);
+                const subscriptionRequired = Boolean((exam as Record<string, unknown>).subscriptionRequired)
+                    || Boolean((exam as Record<string, unknown>).requiresActiveSubscription)
+                    || visibilityMode === 'subscription_only'
+                    || requiredPlanCodes.length > 0;
                 const paymentRequired = subscriptionRequired;
                 const attemptsUsed = Number(attemptsMap.get(examId) || 0);
                 const attemptLimit = Math.max(1, Number(exam.attemptLimit || 1));
                 const attemptsLeft = Math.max(0, attemptLimit - attemptsUsed);
+                const specificModeRestricted = String(exam.accessMode || 'all') === 'specific';
                 const specificModeDenied = (
-                    String(exam.accessMode || 'all') === 'specific' &&
+                    specificModeRestricted &&
                     Array.isArray(exam.allowedUsers) &&
                     !exam.allowedUsers.some((id: unknown) => String(id) === studentId)
                 );
+                const hasGroupScopedVisibility = (visibilityMode === 'group_only' || visibilityMode === 'custom') && targetGroupIds.length > 0;
+                const hiddenFromPublic = !isStudent && (
+                    specificModeRestricted ||
+                    requiredUserIds.length > 0 ||
+                    requiredGroupIds.length > 0 ||
+                    hasGroupScopedVisibility
+                );
+                if (hiddenFromPublic) {
+                    return null;
+                }
 
                 let lockReason: PublicExamLockReason = 'none';
                 if (!isStudent) {
@@ -411,19 +432,18 @@ export async function getPublicExamList(req: AuthRequest, res: Response): Promis
                 } else {
                     const userDenied = requiredUserIds.length > 0 && !requiredUserIds.includes(studentId);
                     const groupDenied = requiredGroupIds.length > 0 && !hasAnyIntersection(requiredGroupIds, studentGroupIds);
-                    // New visibility mode check (Phase 12)
-                    const visibilityMode = String((exam as Record<string, unknown>).visibilityMode || 'all_students');
-                    const targetGroupIds = normalizeObjectIdArray((exam as Record<string, unknown>).targetGroupIds);
                     const visibilityGroupDenied = (visibilityMode === 'group_only' || visibilityMode === 'custom')
                         && targetGroupIds.length > 0
                         && !hasAnyIntersection(targetGroupIds, studentGroupIds);
                     const groupRestricted = userDenied || groupDenied || specificModeDenied || visibilityGroupDenied;
+                    if (groupRestricted) {
+                        return null;
+                    }
                     const planDenied = requiredPlanCodes.length > 0 && !requiredPlanCodes.includes(studentPlanCode);
                     const subscriptionDenied = subscriptionRequired && !hasActiveSubscription && !planDenied;
                     const paymentPending = paymentRequired && hasActiveSubscription && pendingDueAmount > 0;
 
-                    if (groupRestricted) lockReason = 'group_restricted';
-                    else if (planDenied) lockReason = 'plan_restricted';
+                    if (planDenied) lockReason = 'plan_restricted';
                     else if (subscriptionDenied || paymentPending) lockReason = 'subscription_required';
                 }
 
@@ -472,6 +492,8 @@ export async function getPublicExamList(req: AuthRequest, res: Response): Promis
                     myAttemptStatus,
                 };
             })
+            .filter((card) => card !== null) as PublicExamListItem[];
+        const filteredCards = cards
             .filter((card) => {
                 if (statusFilter && card.status !== statusFilter) return false;
                 if (paidFilter === 'paid' && !card.paymentRequired) return false;
@@ -479,7 +501,7 @@ export async function getPublicExamList(req: AuthRequest, res: Response): Promis
                 return true;
             });
 
-        const items = cards.slice(skip, skip + limit).map((item, idx) => ({
+        const items = filteredCards.slice(skip, skip + limit).map((item, idx) => ({
             ...item,
             serialNo: skip + idx + 1,
         }));
@@ -488,8 +510,8 @@ export async function getPublicExamList(req: AuthRequest, res: Response): Promis
             items,
             page,
             limit,
-            total: cards.length,
-            pages: Math.max(1, Math.ceil(cards.length / limit)),
+            total: filteredCards.length,
+            pages: Math.max(1, Math.ceil(filteredCards.length / limit)),
             serverNow: now.toISOString(),
         });
     } catch (err) {
@@ -600,19 +622,23 @@ export async function getExamLanding(req: AuthRequest, res: Response): Promise<v
             getExamCardMetrics(exams as unknown as Record<string, unknown>[]),
             StudentDueLedger.findOne({ studentId }).select('netDue').lean(),
         ]);
+        const externalAttemptCountMap = await getExternalExamAttemptCountsForStudent(studentId, examIds);
         const pendingDueAmount = Number((dueLedger as { netDue?: number } | null)?.netDue || 0);
+        const subscriptionSnapshot = await getCanonicalSubscriptionSnapshot(
+            studentId,
+            (user?.subscription as Record<string, unknown> | undefined),
+        );
 
         const studentGroupIds = normalizeObjectIdArray(profile?.groupIds || []);
-        const studentPlanCode = String(
-            (user?.subscription as Record<string, unknown> | undefined)?.planCode ||
-            (user?.subscription as Record<string, unknown> | undefined)?.plan ||
-            '',
-        ).toLowerCase();
+        const studentPlanCode = subscriptionSnapshot.planCode;
 
         const attemptCountByExam = new Map<string, number>();
         for (const result of results) {
             const examKey = String(result.exam || '');
             attemptCountByExam.set(examKey, (attemptCountByExam.get(examKey) || 0) + 1);
+        }
+        for (const [examId, count] of externalAttemptCountMap.entries()) {
+            attemptCountByExam.set(examId, Math.max(Number(attemptCountByExam.get(examId) || 0), Number(count || 0)));
         }
 
         const activeSessionExamIds = new Set(
@@ -815,19 +841,21 @@ async function ensurePendingExamPaymentRecord(examId: string, studentId: string,
     });
 }
 
-async function getEligibilitySummary(exam: Record<string, unknown>, studentId: string): Promise<EligibilitySummary> {
+export async function getEligibilitySummary(exam: Record<string, unknown>, studentId: string): Promise<EligibilitySummary> {
     const examId = String(exam._id || '');
-    const [subscriptionState, profile, threshold, attemptsUsed, user, dueLedger, examPayment] = await Promise.all([
+    const [subscriptionState, profile, threshold, resultAttemptsUsed, externalAttemptsUsed, user, dueLedger, examPayment] = await Promise.all([
         verifySubscription(studentId),
         StudentProfile.findOne({ user_id: studentId }).select('profile_completion_percentage groupIds').lean(),
         getProfileCompletionThreshold(),
         ExamResult.countDocuments({ exam: examId, student: studentId }),
+        getExternalExamAttemptCount(examId, studentId),
         User.findById(studentId).select('subscription').lean(),
         StudentDueLedger.findOne({ studentId }).select('netDue').lean(),
         mongoose.Types.ObjectId.isValid(examId)
             ? ManualPayment.findOne({ studentId, examId, entryType: 'exam_fee' }).sort({ createdAt: -1 }).lean()
             : Promise.resolve(null),
     ]);
+    const attemptsUsed = Math.max(Number(resultAttemptsUsed || 0), Number(externalAttemptsUsed || 0));
 
     const reasons: string[] = [];
     const currentProfileCompletion = Number(profile?.profile_completion_percentage || 0);
@@ -866,11 +894,11 @@ async function getEligibilitySummary(exam: Record<string, unknown>, studentId: s
     const requiredPlanCodes = toStringArray(accessControl.allowedPlanCodes).map((code) => code.toLowerCase());
     const subscriptionRequired = Boolean(exam.subscriptionRequired) || requiredPlanCodes.length > 0;
     const studentGroupIds = normalizeObjectIdArray(profile?.groupIds || []);
-    const studentPlanCode = String(
-        (user?.subscription as Record<string, unknown> | undefined)?.planCode ||
-        (user?.subscription as Record<string, unknown> | undefined)?.plan ||
-        ''
-    ).toLowerCase();
+    const subscriptionSnapshot = await getCanonicalSubscriptionSnapshot(
+        studentId,
+        (user?.subscription as Record<string, unknown> | undefined),
+    );
+    const studentPlanCode = subscriptionSnapshot.planCode;
 
     let accessDeniedReason = '';
     if (requiredUserIds.length > 0 && !requiredUserIds.includes(studentId)) {
@@ -1413,7 +1441,16 @@ export async function getStudentExamById(req: AuthRequest, res: Response): Promi
 /* ─────── POST /api/exams/:id/start ─────── */
 export async function startExam(req: AuthRequest, res: Response): Promise<void> {
     try {
-        const studentId = req.user!._id;
+        if (!req.user?._id) {
+            res.status(401).json({ message: 'Authentication required.' });
+            return;
+        }
+        if (req.user.role !== 'student') {
+            res.status(403).json({ message: 'Student access only.' });
+            return;
+        }
+
+        const studentId = req.user._id;
         const examRef = String(req.params.id || '');
 
         const user = await User.findById(studentId).lean();
@@ -1508,21 +1545,34 @@ export async function startExam(req: AuthRequest, res: Response): Promise<void> 
         if (exam.externalExamUrl) {
             try {
                 const profileSnapshot = await StudentProfile.findOne({ user_id: studentId })
-                    .select('registration_id groupIds')
+                    .select('registration_id user_unique_id groupIds phone phone_number full_name')
                     .lean();
-                const forwardedFor = req.headers['x-forwarded-for'];
-                const ipAddress = (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor)?.split(',')[0] || req.socket.remoteAddress || '';
                 const sourcePanel = String((req.body as Record<string, unknown> | undefined)?.sourcePanel || req.query?.source || 'exam_start').trim() || 'exam_start';
-                await ExternalExamJoinLog.create({
+                const externalAttempt = await createExternalExamAttempt({
                     examId: exam._id,
-                    studentId: new mongoose.Types.ObjectId(studentId),
-                    joinedAt: new Date(),
+                    studentId,
+                    attemptNo: eligibility.attemptsUsed + 1,
                     sourcePanel,
-                    registration_id_snapshot: String((profileSnapshot as { registration_id?: unknown } | null)?.registration_id || ''),
-                    groupIds_snapshot: normalizeObjectIdArray((profileSnapshot as { groupIds?: unknown } | null)?.groupIds || []),
-                    ip: String(ipAddress || ''),
-                    userAgent: String(req.headers['user-agent'] || ''),
+                    registrationIdSnapshot: String((profileSnapshot as { registration_id?: unknown } | null)?.registration_id || ''),
+                    userUniqueIdSnapshot: String((profileSnapshot as { user_unique_id?: unknown } | null)?.user_unique_id || ''),
+                    usernameSnapshot: String(user.username || ''),
+                    emailSnapshot: String(user.email || ''),
+                    phoneNumberSnapshot: String((profileSnapshot as { phone_number?: unknown; phone?: unknown } | null)?.phone_number || (profileSnapshot as { phone?: unknown } | null)?.phone || ''),
+                    fullNameSnapshot: String((profileSnapshot as { full_name?: unknown } | null)?.full_name || user.full_name || user.username || ''),
+                    groupIdsSnapshot: normalizeObjectIdArray((profileSnapshot as { groupIds?: unknown } | null)?.groupIds || []),
+                    ip: getRequestIp(req),
+                    userAgent: getRequestUserAgent(req),
+                    externalExamUrl: String(exam.externalExamUrl || ''),
                 });
+                res.json({
+                    redirect: true,
+                    externalExamUrl: externalAttempt.redirectUrl,
+                    externalAttemptRef: externalAttempt.attemptRef,
+                    exam: sanitizeExamForStudent(exam),
+                    serverNow: new Date().toISOString(),
+                    serverOffsetMs: 0,
+                });
+                return;
             } catch (logErr) {
                 console.warn('[startExam external join log]', logErr);
             }
@@ -2565,7 +2615,7 @@ async function loadExamAttemptResultContext(params: {
 
     const answers = !Boolean(reviewSettings.showQuestion)
         ? []
-        : rawAnswers.map((answer) => {
+        : rawAnswers.map((answer: Record<string, unknown>) => {
             const next = { ...answer } as Record<string, unknown>;
             if (!Boolean(reviewSettings.showSelectedAnswer)) {
                 delete next.selectedAnswer;
@@ -3150,6 +3200,7 @@ async function getQuestionsByIdsAndFormat(questionIds: string[], exam: typeof Ex
 }
 
 function sanitizeExamForStudent(exam: typeof Exam.prototype) {
+    const examCenterSnapshot = ((exam as unknown as Record<string, unknown>).examCenterSnapshot || {}) as Record<string, unknown>;
     return {
         _id: exam._id,
         title: exam.title,
@@ -3161,6 +3212,8 @@ function sanitizeExamForStudent(exam: typeof Exam.prototype) {
         totalQuestions: exam.totalQuestions,
         totalMarks: exam.totalMarks,
         duration: exam.duration,
+        deliveryMode: (exam as any).deliveryMode || 'internal',
+        examMode: String((exam as any).deliveryMode || 'internal') === 'external_link' ? 'external_link' : 'internal_system',
         negativeMarking: exam.negativeMarking,
         negativeMarkValue: exam.negativeMarkValue,
         allowBackNavigation: exam.allowBackNavigation,
@@ -3170,6 +3223,9 @@ function sanitizeExamForStudent(exam: typeof Exam.prototype) {
         answerEditLimitPerQuestion: exam.answerEditLimitPerQuestion,
         bannerImageUrl: exam.bannerImageUrl,
         logoUrl: (exam as any).logoUrl || '',
+        examCenterName: String(examCenterSnapshot.name || ''),
+        examCenterCode: String(examCenterSnapshot.code || ''),
+        examCenterAddress: String(examCenterSnapshot.address || ''),
         startDate: exam.startDate,
         endDate: exam.endDate,
         resultPublishDate: exam.resultPublishDate,

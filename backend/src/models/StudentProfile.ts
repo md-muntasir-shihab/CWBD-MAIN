@@ -35,6 +35,11 @@ export interface IStudentProfile extends Document {
     profile_completion_percentage: number;
     points: number;
     rank?: number;
+    examIdentity?: Record<string, unknown>;
+    examHistory?: Array<Record<string, unknown>>;
+    latestExamResultSummary?: string;
+    examDataLastSyncAt?: Date | null;
+    examDataLastSyncSource?: string;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -78,6 +83,11 @@ const StudentProfileSchema = new Schema<IStudentProfile>({
     profile_completion_percentage: { type: Number, default: 0, min: 0, max: 100 },
     points: { type: Number, default: 0, index: true },
     rank: { type: Number },
+    examIdentity: { type: Schema.Types.Mixed, default: {} },
+    examHistory: { type: [Schema.Types.Mixed], default: [] } as any,
+    latestExamResultSummary: { type: String, default: '' },
+    examDataLastSyncAt: { type: Date, default: null },
+    examDataLastSyncSource: { type: String, default: '' },
 }, { timestamps: true });
 
 StudentProfileSchema.index({ full_name: 1 });

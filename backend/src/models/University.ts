@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
-interface IExamCenter {
+export interface IExamCenter {
     city: string;
     address: string;
 }
@@ -51,6 +51,7 @@ export interface IUniversity extends Document {
         businessExamDate?: string;
     };
     clusterSyncLocked?: boolean;
+    categorySyncLocked?: boolean;
     // Top-level application & exam dates
     applicationStartDate?: Date;
     applicationEndDate?: Date;
@@ -130,6 +131,7 @@ const UniversitySchema = new Schema<IUniversity>({
     clusterCount: Number,
     clusterDateOverrides: { type: ClusterDateOverridesSchema, default: () => ({}) },
     clusterSyncLocked: { type: Boolean, default: false },
+    categorySyncLocked: { type: Boolean, default: false },
     applicationStartDate: Date,
     applicationEndDate: Date,
     scienceExamDate: { type: String, default: 'N/A' },

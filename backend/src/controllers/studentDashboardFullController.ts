@@ -12,6 +12,7 @@ import ManualPayment from '../models/ManualPayment';
 import StudentDueLedger from '../models/StudentDueLedger';
 import Resource from '../models/Resource';
 import { getSecurityConfig } from '../services/securityConfigService';
+import { getCanonicalSubscriptionSnapshot } from '../services/subscriptionAccessService';
 import {
     getStudentDashboardHeader,
     getUpcomingExamCards,
@@ -259,7 +260,11 @@ async function getWatchlistSummary(studentId: string) {
 }
 
 async function getRecommendedResources(_studentId: string, weakSubjects: string[] = []) {
-    const allResources = await Resource.find({ isPublic: true })
+    const subscriptionSnapshot = await getCanonicalSubscriptionSnapshot(_studentId);
+    const resourceFilter: Record<string, unknown> = subscriptionSnapshot.allowsPremiumResources === true
+        ? {}
+        : { isPublic: true };
+    const allResources = await Resource.find(resourceFilter)
         .sort({ isFeatured: -1, publishDate: -1 })
         .limit(20)
         .select('title description type category tags fileUrl externalUrl thumbnailUrl isFeatured')

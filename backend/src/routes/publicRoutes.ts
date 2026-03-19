@@ -61,16 +61,18 @@ import { adminLoginRateLimiter, examStartRateLimiter, examSubmitRateLimiter, log
 import { getProfile, getProfileDashboard, updateProfile } from '../controllers/profileController';
 import { getServices, getServiceDetails } from '../controllers/serviceController';
 import { getCategories as getServiceCategories } from '../controllers/serviceCategoryController';
+import { studentGetNotices } from '../controllers/adminSupportController';
 import {
     studentCreateSupportTicket,
-    studentGetNotices,
+    studentGetSupportEligibility,
     studentGetSupportTicketById,
     studentGetSupportTickets,
     studentReplySupportTicket,
-} from '../controllers/adminSupportController';
+} from '../controllers/supportController';
 import { updateStudentProfile } from '../controllers/studentController';
 import {
     getMySubscription,
+    getHomeSubscriptionPlans,
     getPublicSubscriptionPlanById,
     getPublicSubscriptionPlans,
     requestSubscriptionPayment,
@@ -97,10 +99,9 @@ import {
     getStudentMeResults,
     markStudentNotificationsRead,
 } from '../controllers/studentHubController';
-import ContactMessage from '../models/ContactMessage';
 import { contactRateLimiter } from '../middlewares/securityRateLimit';
 import { uploadMedia, uploadMiddleware } from '../controllers/mediaController';
-import { createAdminAlert } from '../services/adminAlertService';
+import { submitPublicContactMessage } from '../controllers/contactController';
 import {
     getPublicFeaturedNews,
     getPublicNewsCategories,
@@ -169,8 +170,9 @@ router.get('/settings/public', getSettings);
 router.get('/settings/analytics', getPublicAnalyticsSettings);
 router.get('/security/public-config', getPublicSecurityConfigController);
 router.get('/subscription-plans', getPublicSubscriptionPlans);
-router.get('/subscription-plans/:id', getPublicSubscriptionPlanById);
 router.get('/subscription-plans/public', getPublicSubscriptionPlans);
+router.get('/subscription-plans/:slug', getPublicSubscriptionPlanById);
+router.get('/home/subscription-plans', optionalAuthenticate, getHomeSubscriptionPlans);
 router.get('/home-settings/public', getPublicHomeSettings);
 router.get('/social-links/public', getPublicSocialLinks);
 
@@ -220,46 +222,12 @@ router.get('/service-categories', getServiceCategories);
 router.get('/services/:id', getServiceDetails);
 
 /* ── Public — Contact Submit ── */
-router.post('/contact', contactRateLimiter, async (req, res) => {
-    try {
-        const { name, email, subject, message, phone } = req.body;
-
-        if (!name || !email || !subject || !message) {
-            return res.status(400).json({ message: 'Missing required fields' });
-        }
-
-        if (email && !/^\S+@\S+\.\S+$/.test(email)) {
-            return res.status(400).json({ message: 'Invalid email format' });
-        }
-
-        const msg = await ContactMessage.create({
-            name: String(name).slice(0, 100),
-            email: String(email).toLowerCase(),
-            phone: phone ? String(phone).slice(0, 20) : undefined,
-            subject: String(subject).slice(0, 200),
-            message: String(message).slice(0, 5000),
-            ip: req.ip,
-            userAgent: req.headers['user-agent']
-        });
-
-        await createAdminAlert({
-            title: 'New contact message',
-            message: `${msg.subject} from ${msg.name}`,
-            linkUrl: `/__cw_admin__/contact?focus=${String(msg._id)}`,
-            category: 'update',
-            targetRole: 'admin',
-        });
-
-        res.status(201).json({ message: 'Message sent successfully', id: msg._id });
-    } catch (error: any) {
-        console.error('Contact form error:', error);
-        res.status(500).json({ message: 'Server error' });
-    }
-});
+router.post('/contact', contactRateLimiter, optionalAuthenticate, submitPublicContactMessage);
 
 /* ── Protected — Student Exam Portal ── */
 router.get('/exams/public-list', optionalAuthenticate, getPublicExamList);
 router.get('/exams', ...examAccessMiddlewares, getStudentExams);
+router.get('/exams/my-visible', ...examAccessMiddlewares, getStudentExams);
 router.get('/exams/landing', ...examAccessMiddlewares, getExamLanding);
 router.get('/exams/:id', ...examAccessMiddlewares, getStudentExamById);
 router.get('/exams/:id/details', ...examAccessMiddlewares, getStudentExamDetails);
@@ -281,6 +249,11 @@ router.post('/alerts/:alertId/ack', authenticate, ackStudentAlert);
 router.get('/qbank/picker', authenticate, getQbankPicker);
 router.post('/qbank/usage/increment', authenticate, incrementQbankUsage);
 router.get('/student/notices', authenticate, studentGetNotices);
+router.get('/support/eligibility', authenticate, studentGetSupportEligibility);
+router.get('/support/my-tickets', authenticate, studentGetSupportTickets);
+router.post('/support/tickets', authenticate, studentCreateSupportTicket);
+router.get('/support/tickets/:id', authenticate, studentGetSupportTicketById);
+router.post('/support/tickets/:id/reply', authenticate, studentReplySupportTicket);
 router.post('/student/support-tickets', authenticate, studentCreateSupportTicket);
 router.get('/student/support-tickets', authenticate, studentGetSupportTickets);
 router.get('/student/support-tickets/:id', authenticate, studentGetSupportTicketById);

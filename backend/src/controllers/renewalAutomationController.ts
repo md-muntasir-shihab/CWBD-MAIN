@@ -1,9 +1,11 @@
 import { Response } from 'express';
 import mongoose from 'mongoose';
+import SubscriptionPlan from '../models/SubscriptionPlan';
 import UserSubscription from '../models/UserSubscription';
 import SubscriptionAutomationLog from '../models/SubscriptionAutomationLog';
 import AuditLog from '../models/AuditLog';
 import { AuthRequest } from '../middlewares/auth';
+import { syncUserSubscriptionCache } from '../services/subscriptionLifecycleService';
 import { getClientIp } from '../utils/requestMeta';
 
 /* ── helpers ── */
@@ -23,6 +25,23 @@ async function createAudit(req: AuthRequest, action: string, details?: Record<st
         target_type: 'subscription',
         ip_address: getClientIp(req),
         details: details || {},
+    });
+}
+
+async function syncCacheFromSubscription(sub: {
+    userId: mongoose.Types.ObjectId;
+    planId: mongoose.Types.ObjectId;
+    status: string;
+    startAtUTC?: Date | null;
+    expiresAtUTC?: Date | null;
+}): Promise<void> {
+    const plan = await SubscriptionPlan.findById(sub.planId).lean();
+    await syncUserSubscriptionCache({
+        userId: String(sub.userId),
+        plan: (plan as Record<string, unknown> | null) || null,
+        status: String(sub.status || 'expired'),
+        startAtUTC: sub.startAtUTC || null,
+        expiresAtUTC: sub.expiresAtUTC || null,
     });
 }
 
@@ -97,6 +116,7 @@ export async function adminExtendSubscription(req: AuthRequest, res: Response): 
     sub.expiresAtUTC = new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
     if (sub.status === 'expired') sub.status = 'active';
     await sub.save();
+    await syncCacheFromSubscription(sub);
 
     await SubscriptionAutomationLog.create({
         studentId: sub.userId,
@@ -123,6 +143,7 @@ export async function adminExpireSubscription(req: AuthRequest, res: Response): 
     sub.status = 'expired';
     sub.expiresAtUTC = new Date();
     await sub.save();
+    await syncCacheFromSubscription(sub);
 
     await SubscriptionAutomationLog.create({
         studentId: sub.userId,
@@ -152,6 +173,7 @@ export async function adminReactivateSubscription(req: AuthRequest, res: Respons
     sub.status = 'active';
     sub.expiresAtUTC = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
     await sub.save();
+    await syncCacheFromSubscription(sub);
 
     await SubscriptionAutomationLog.create({
         studentId: sub.userId,

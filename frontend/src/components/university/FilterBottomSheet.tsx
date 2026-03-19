@@ -107,8 +107,8 @@ export default function FilterBottomSheet({
                                 >
                                     <option value="closing_soon">Closing Soon</option>
                                     <option value="exam_soon">Exam Soon</option>
-                                    <option value="name_asc">Name (A → Z)</option>
-                                    <option value="name_desc">Name (Z → A)</option>
+                                    <option value="name_asc">Name (A-Z)</option>
+                                    <option value="name_desc">Name (Z-A)</option>
                                 </select>
                             </div>
                         </div>

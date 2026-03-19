@@ -10,6 +10,7 @@ export interface IScheduleWindow {
 
 export interface IExam extends Document {
     title: string;
+    slug?: string;
     title_bn?: string;
     type?: 'Science' | 'Arts' | 'Commerce' | 'Mixed'; // Exam Type
     group_category?: 'SSC' | 'HSC' | 'Admission' | 'Custom';
@@ -54,6 +55,15 @@ export interface IExam extends Document {
     /* ── External exam: if set, student redirected instead of in-app exam ── */
     deliveryMode?: 'internal' | 'external_link';
     externalExamUrl?: string;
+    examCenterId?: mongoose.Types.ObjectId | null;
+    examCenterSnapshot?: {
+        name?: string;
+        address?: string;
+        code?: string;
+        note?: string;
+    };
+    templateId?: mongoose.Types.ObjectId | null;
+    importProfileId?: mongoose.Types.ObjectId | null;
     logoUrl?: string;
     share_link?: string;
     short_link?: string;
@@ -161,6 +171,7 @@ const ScheduleWindowSchema = new Schema({
 
 const ExamSchema = new Schema<IExam>({
     title: { type: String, required: true, trim: true },
+    slug: { type: String, default: '', trim: true },
     title_bn: { type: String, default: '' },
     type: { type: String, enum: ['Science', 'Arts', 'Commerce', 'Mixed'], default: 'Mixed' },
     group_category: { type: String, enum: ['SSC', 'HSC', 'Admission', 'Custom'], default: 'Custom' },
@@ -198,6 +209,15 @@ const ExamSchema = new Schema<IExam>({
     answerEditLimitPerQuestion: { type: Number, default: undefined },
     deliveryMode: { type: String, enum: ['internal', 'external_link'], default: 'internal' },
     externalExamUrl: { type: String, default: null },
+    examCenterId: { type: Schema.Types.ObjectId, ref: 'ExamCenter', default: null },
+    examCenterSnapshot: {
+        name: { type: String, default: '' },
+        address: { type: String, default: '' },
+        code: { type: String, default: '' },
+        note: { type: String, default: '' },
+    },
+    templateId: { type: Schema.Types.ObjectId, ref: 'ExamImportTemplate', default: null },
+    importProfileId: { type: Schema.Types.ObjectId, ref: 'ExamMappingProfile', default: null },
     logoUrl: { type: String, default: '' },
     share_link: { type: String, default: '', trim: true },
     short_link: { type: String, default: '', trim: true },
@@ -286,11 +306,23 @@ ExamSchema.index({ status: 1 });
 ExamSchema.index({ group_category: 1, startDate: 1 });
 ExamSchema.index({ isPublished: 1, startDate: 1, endDate: 1, group_category: 1 });
 ExamSchema.index({ share_link: 1 }, { unique: true, sparse: true });
+ExamSchema.index({ slug: 1 }, { unique: true, sparse: true });
 
 ExamSchema.pre('validate', function validateExternalExamConfig(next) {
     const doc = this as IExam;
     const deliveryMode = String(doc.deliveryMode || 'internal').trim().toLowerCase();
     const externalExamUrl = String(doc.externalExamUrl || '').trim();
+    const slugSeed = String(doc.slug || doc.title || '')
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+
+    if (!doc.slug) {
+        doc.slug = slugSeed || `exam-${Date.now()}`;
+    } else {
+        doc.slug = slugSeed || doc.slug;
+    }
 
     if (deliveryMode === 'external_link') {
         if (!externalExamUrl) {

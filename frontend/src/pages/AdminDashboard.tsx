@@ -50,7 +50,6 @@ import QuestionImporter from '../components/admin/QuestionImporter';
 import UsersPanel from '../components/admin/UsersPanel';
 import AdminProfilePanel from '../components/admin/AdminProfilePanel';
 import StudentDashboardControlPanel from '../components/admin/StudentDashboardControlPanel';
-import StudentManagementPanel from '../components/admin/StudentManagementPanel';
 import SecuritySettingsPanel from '../components/admin/SecuritySettingsPanel';
 import AlertsPanel from '../components/admin/AlertsPanel';
 import UniversitiesPanel from '../components/admin/UniversitiesPanel';
@@ -1777,7 +1776,31 @@ export default function AdminDashboard({ forcedTab, forcedSubtab }: AdminDashboa
             case 'file-upload': return renderFileUpload();
             case 'reports': return <ReportsPanel exams={exams} users={users} />;
             case 'home-control': return <HomeControlPanel />;
-            case 'student-management': return <StudentManagementPanel initialTab={studentManagementTab} />;
+            case 'student-management':
+                return (
+                    <div className="rounded-2xl border border-indigo-500/20 bg-slate-900/60 p-8 text-center">
+                        <h3 className="text-2xl font-bold text-white">Student Management Module</h3>
+                        <p className="mt-2 text-sm text-slate-400">
+                            Student and subscription management now runs from the route-based admin console.
+                        </p>
+                        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                            <button
+                                className="btn-primary"
+                                onClick={() => navigate(studentManagementTab === 'groups'
+                                    ? '/__cw_admin__/student-management/groups'
+                                    : '/__cw_admin__/student-management/list')}
+                            >
+                                Open Student Console
+                            </button>
+                            <button
+                                className="btn-secondary"
+                                onClick={() => navigate('/__cw_admin__/subscriptions/plans')}
+                            >
+                                Open Subscription Plans
+                            </button>
+                        </div>
+                    </div>
+                );
             case 'subscription-plans':
                 return (
                     <div className="rounded-2xl border border-indigo-500/20 bg-slate-900/60 p-8 text-center">
@@ -1786,8 +1809,8 @@ export default function AdminDashboard({ forcedTab, forcedSubtab }: AdminDashboa
                             Subscription plans management has moved to dedicated admin routes.
                         </p>
                         <div className="mt-6">
-                            <button className="btn-primary" onClick={() => navigate('/__cw_admin__/subscription-plans')}>
-                                Open /__cw_admin__/subscription-plans
+                            <button className="btn-primary" onClick={() => navigate('/__cw_admin__/subscriptions/plans')}>
+                                Open /__cw_admin__/subscriptions/plans
                             </button>
                         </div>
                     </div>

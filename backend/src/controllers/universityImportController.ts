@@ -1,17 +1,29 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import XLSX from 'xlsx';
 import slugify from 'slugify';
 import University from '../models/University';
 import UniversityCategory from '../models/UniversityCategory';
+import UniversityCluster from '../models/UniversityCluster';
 import UniversityImportJob from '../models/UniversityImportJob';
 import { broadcastHomeStreamEvent } from '../realtime/homeStream';
-import { normalizeUniversityCategoryStrict } from '../utils/universityCategories';
+import {
+    backfillUniversityTaxonomyIfNeeded,
+    ensureUniversityCategoryByName,
+    ensureUniversityClusterByName,
+    normalizeExamCenters,
+    normalizeUniversityImportRow,
+    reconcileUniversityClusterAssignments,
+    syncManualClusterMembership,
+} from '../services/universitySyncService';
 
 const TARGET_FIELDS = [
     'category',
     'clusterGroup',
     'name',
     'shortForm',
+    'shortDescription',
+    'description',
     'establishedYear',
     'address',
     'contactNumber',
@@ -29,6 +41,14 @@ const TARGET_FIELDS = [
     'examDateBusiness',
     'examCenters',
     'logoUrl',
+    'isActive',
+    'featured',
+    'featuredOrder',
+    'categorySyncLocked',
+    'clusterSyncLocked',
+    'verificationStatus',
+    'remarks',
+    'slug',
 ] as const;
 
 const TEMPLATE_HEADERS = [...TARGET_FIELDS];
@@ -40,9 +60,70 @@ type ValidationResult = {
     duplicateRows: number[];
 };
 
+const FIELD_HEADER_ALIASES: Record<TargetField, string[]> = {
+    category: ['category', 'Category'],
+    clusterGroup: ['clusterGroup', 'cluster', 'Cluster'],
+    name: ['name', 'Name', 'university', 'University Name'],
+    shortForm: ['shortForm', 'short form', 'short_name', 'short name', 'Short Form'],
+    shortDescription: ['shortDescription', 'short description', 'Short Description'],
+    description: ['description', 'Description'],
+    establishedYear: ['establishedYear', 'established', 'Established', 'established year'],
+    address: ['address', 'Address'],
+    contactNumber: ['contactNumber', 'contact', 'Contact', 'phone', 'Phone'],
+    email: ['email', 'Email'],
+    websiteUrl: ['websiteUrl', 'website', 'Website'],
+    admissionUrl: ['admissionUrl', 'admissionWebsite', 'admission site', 'Admission Site', 'Admission Website'],
+    totalSeats: ['totalSeats', 'total seats', 'Total Seats'],
+    seatsScienceEng: ['seatsScienceEng', 'scienceSeats', 'science seats', 'Science Seats'],
+    seatsArtsHum: ['seatsArtsHum', 'artsSeats', 'arts seats', 'Arts Seats'],
+    seatsBusiness: ['seatsBusiness', 'businessSeats', 'business seats', 'Business Seats'],
+    applicationStartDate: ['applicationStartDate', 'application start date', 'App Start', 'applicationStart', 'start date'],
+    applicationEndDate: ['applicationEndDate', 'application end date', 'App End', 'applicationEnd', 'deadline'],
+    examDateScience: ['examDateScience', 'scienceExamDate', 'Science Exam', 'science exam'],
+    examDateArts: ['examDateArts', 'artsExamDate', 'Arts Exam', 'arts exam'],
+    examDateBusiness: ['examDateBusiness', 'businessExamDate', 'Business Exam', 'business exam', 'commerceExamDate', 'Commerce Exam'],
+    examCenters: ['examCenters', 'exam centers', 'Exam Centers'],
+    logoUrl: ['logoUrl', 'logo', 'Logo'],
+    isActive: ['isActive', 'active', 'Active', 'status'],
+    featured: ['featured', 'Featured'],
+    featuredOrder: ['featuredOrder', 'featured order', 'Featured Order'],
+    categorySyncLocked: ['categorySyncLocked', 'category sync locked', 'Category Sync Locked'],
+    clusterSyncLocked: ['clusterSyncLocked', 'cluster sync locked', 'Cluster Sync Locked'],
+    verificationStatus: ['verificationStatus', 'verification status', 'Verification Status'],
+    remarks: ['remarks', 'Remarks', 'notes', 'Notes'],
+    slug: ['slug', 'Slug'],
+};
+
 function buildSlug(name: string): string {
     const normalized = slugify(name || '', { lower: true, strict: true });
     return normalized || `university-${Date.now()}`;
+}
+
+function normalizeHeaderKey(value: string): string {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '');
+}
+
+function buildSuggestedMapping(headers: string[]): Record<string, string> {
+    const normalizedHeaderMap = new Map<string, string>();
+    headers.forEach((header) => {
+        const normalized = normalizeHeaderKey(header);
+        if (!normalized || normalizedHeaderMap.has(normalized)) return;
+        normalizedHeaderMap.set(normalized, header);
+    });
+
+    return TARGET_FIELDS.reduce<Record<string, string>>((acc, field) => {
+        const candidates = [field, ...(FIELD_HEADER_ALIASES[field] || [])]
+            .map((entry) => normalizeHeaderKey(entry))
+            .filter(Boolean);
+        const match = candidates.find((candidate) => normalizedHeaderMap.has(candidate));
+        if (match) {
+            acc[field] = String(normalizedHeaderMap.get(match));
+        }
+        return acc;
+    }, {});
 }
 
 function escapeRegex(value: string): string {
@@ -52,6 +133,14 @@ function escapeRegex(value: string): string {
 function csvEscape(value: unknown): string {
     const text = String(value ?? '');
     if (text.includes('"') || text.includes(',') || text.includes('\n')) return `"${text.replace(/"/g, '""')}"`;
+    return text;
+}
+
+function normalizeLooseOptionalText(value: unknown): string {
+    const text = String(value ?? '').trim();
+    if (!text) return '';
+    const lowered = text.toLowerCase();
+    if (['n/a', 'na', 'none', 'null', '-', '--'].includes(lowered)) return '';
     return text;
 }
 
@@ -74,6 +163,23 @@ function looksLikeUrl(value: string): boolean {
 
 function parseDate(raw: unknown): Date | null {
     if (raw === undefined || raw === null || raw === '') return null;
+    if (raw instanceof Date) {
+        return Number.isNaN(raw.getTime()) ? null : raw;
+    }
+    const numericValue = typeof raw === 'number' ? raw : Number(String(raw));
+    if (Number.isFinite(numericValue)) {
+        const excelDate = XLSX.SSF.parse_date_code(numericValue);
+        if (excelDate) {
+            return new Date(
+                excelDate.y,
+                Math.max(0, excelDate.m - 1),
+                excelDate.d,
+                excelDate.H || 0,
+                excelDate.M || 0,
+                Math.floor(excelDate.S || 0),
+            );
+        }
+    }
     const date = new Date(String(raw));
     if (Number.isNaN(date.getTime())) return null;
     return date;
@@ -96,23 +202,6 @@ function normalizeValue(rawRow: Record<string, unknown>, mapping: Record<string,
     const mappedHeader = mapping[field];
     if (mappedHeader && rawRow[mappedHeader] !== undefined && rawRow[mappedHeader] !== null && rawRow[mappedHeader] !== '') return rawRow[mappedHeader];
     if (defaults[field] !== undefined) return defaults[field];
-    if (rawRow[field] !== undefined) return rawRow[field];
-
-    const legacyFallbackMap: Partial<Record<TargetField, string[]>> = {
-        websiteUrl: ['website'],
-        admissionUrl: ['admissionWebsite'],
-        seatsScienceEng: ['scienceSeats'],
-        seatsArtsHum: ['artsSeats'],
-        seatsBusiness: ['businessSeats'],
-        establishedYear: ['established'],
-        examDateScience: ['scienceExamDate'],
-        examDateArts: ['artsExamDate'],
-        examDateBusiness: ['commerceExamDate', 'businessExamDate'],
-    };
-    const fallbacks = legacyFallbackMap[field] || [];
-    for (const key of fallbacks) {
-        if (rawRow[key] !== undefined && rawRow[key] !== null && rawRow[key] !== '') return rawRow[key];
-    }
     return '';
 }
 
@@ -126,16 +215,22 @@ function validateAndNormalizeRows(rows: Record<string, unknown>[], mapping: Reco
 
     rows.forEach((row, index) => {
         const rowNumber = index + 2;
-        const name = String(normalizeValue(row, mapping, defaults, 'name') || '').trim();
-        const shortFormRaw = String(normalizeValue(row, mapping, defaults, 'shortForm') || '').trim();
+        const rawNormalized = TARGET_FIELDS.reduce<Record<string, unknown>>((acc, field) => {
+            acc[field] = normalizeValue(row, mapping, defaults, field);
+            return acc;
+        }, {});
+
+        const name = String(rawNormalized.name || '').trim();
+        const shortFormRaw = String(rawNormalized.shortForm || '').trim();
         const shortForm = normalizeShortForm(name, shortFormRaw);
-        const category = normalizeUniversityCategoryStrict(normalizeValue(row, mapping, defaults, 'category'));
-        const clusterGroup = String(normalizeValue(row, mapping, defaults, 'clusterGroup') || '').trim();
-        const email = String(normalizeValue(row, mapping, defaults, 'email') || '').trim();
-        const websiteUrl = String(normalizeValue(row, mapping, defaults, 'websiteUrl') || '').trim();
-        const admissionUrl = String(normalizeValue(row, mapping, defaults, 'admissionUrl') || '').trim();
-        const appStartRaw = normalizeValue(row, mapping, defaults, 'applicationStartDate');
-        const appEndRaw = normalizeValue(row, mapping, defaults, 'applicationEndDate');
+        const category = String(rawNormalized.category || '').trim();
+        const clusterGroup = String(rawNormalized.clusterGroup || '').trim();
+        const email = normalizeLooseOptionalText(rawNormalized.email);
+        const websiteUrl = normalizeLooseOptionalText(rawNormalized.websiteUrl);
+        const admissionUrl = normalizeLooseOptionalText(rawNormalized.admissionUrl);
+        const requestedSlug = String(rawNormalized.slug || '').trim();
+        const appStartRaw = rawNormalized.applicationStartDate;
+        const appEndRaw = rawNormalized.applicationEndDate;
         const appStartDate = parseDate(appStartRaw);
         const appEndDate = parseDate(appEndRaw);
 
@@ -171,36 +266,47 @@ function validateAndNormalizeRows(rows: Record<string, unknown>[], mapping: Reco
         const fileKey = `${name.toLowerCase()}::${shortForm.toLowerCase()}`;
         if (fileKeySeen.has(fileKey)) duplicateRows.push(rowNumber);
         fileKeySeen.add(fileKey);
-        if (admissionUrl) {
-            const admissionKey = admissionUrl.toLowerCase();
-            if (admissionKeySeen.has(admissionKey)) duplicateRows.push(rowNumber);
-            admissionKeySeen.add(admissionKey);
+        if (requestedSlug) {
+            const slugKey = requestedSlug.toLowerCase();
+            if (admissionKeySeen.has(slugKey)) duplicateRows.push(rowNumber);
+            admissionKeySeen.add(slugKey);
         }
 
-        normalizedRows.push({
+        normalizedRows.push(normalizeUniversityImportRow({
+            ...rawNormalized,
             rowNumber,
             category,
             clusterGroup,
             name,
             shortForm,
-            establishedYear: Number(normalizeValue(row, mapping, defaults, 'establishedYear') || 0) || undefined,
-            address: String(normalizeValue(row, mapping, defaults, 'address') || '').trim(),
-            contactNumber: String(normalizeValue(row, mapping, defaults, 'contactNumber') || '').trim(),
+            shortDescription: String(rawNormalized.shortDescription || '').trim(),
+            description: String(rawNormalized.description || '').trim(),
+            establishedYear: Number(rawNormalized.establishedYear || 0) || undefined,
+            address: String(rawNormalized.address || '').trim(),
+            contactNumber: String(rawNormalized.contactNumber || '').trim(),
             email,
             websiteUrl,
             admissionUrl,
-            totalSeats: String(normalizeValue(row, mapping, defaults, 'totalSeats') || 'N/A').trim() || 'N/A',
-            seatsScienceEng: String(normalizeValue(row, mapping, defaults, 'seatsScienceEng') || 'N/A').trim() || 'N/A',
-            seatsArtsHum: String(normalizeValue(row, mapping, defaults, 'seatsArtsHum') || 'N/A').trim() || 'N/A',
-            seatsBusiness: String(normalizeValue(row, mapping, defaults, 'seatsBusiness') || 'N/A').trim() || 'N/A',
+            totalSeats: String(rawNormalized.totalSeats || 'N/A').trim() || 'N/A',
+            seatsScienceEng: String(rawNormalized.seatsScienceEng || 'N/A').trim() || 'N/A',
+            seatsArtsHum: String(rawNormalized.seatsArtsHum || 'N/A').trim() || 'N/A',
+            seatsBusiness: String(rawNormalized.seatsBusiness || 'N/A').trim() || 'N/A',
             applicationStartDate: appStartDate,
             applicationEndDate: appEndDate,
-            examDateScience: String(normalizeValue(row, mapping, defaults, 'examDateScience') || '').trim(),
-            examDateArts: String(normalizeValue(row, mapping, defaults, 'examDateArts') || '').trim(),
-            examDateBusiness: String(normalizeValue(row, mapping, defaults, 'examDateBusiness') || '').trim(),
-            examCenters: String(normalizeValue(row, mapping, defaults, 'examCenters') || '').trim(),
-            logoUrl: String(normalizeValue(row, mapping, defaults, 'logoUrl') || '').trim(),
-        });
+            examDateScience: String(rawNormalized.examDateScience || '').trim(),
+            examDateArts: String(rawNormalized.examDateArts || '').trim(),
+            examDateBusiness: String(rawNormalized.examDateBusiness || '').trim(),
+            examCenters: normalizeExamCenters(rawNormalized.examCenters),
+            logoUrl: String(rawNormalized.logoUrl || '').trim(),
+            isActive: rawNormalized.isActive,
+            featured: rawNormalized.featured,
+            featuredOrder: Number(rawNormalized.featuredOrder || 0) || 0,
+            categorySyncLocked: rawNormalized.categorySyncLocked,
+            clusterSyncLocked: rawNormalized.clusterSyncLocked,
+            verificationStatus: String(rawNormalized.verificationStatus || '').trim(),
+            remarks: String(rawNormalized.remarks || '').trim(),
+            slug: requestedSlug,
+        }));
     });
 
     return { normalizedRows, failedRows, duplicateRows: Array.from(new Set(duplicateRows)).sort((a, b) => a - b) };
@@ -239,6 +345,7 @@ export async function adminInitUniversityImport(req: Request, res: Response): Pr
             headers,
             sampleRows: rows.slice(0, 20),
             targetFields: TARGET_FIELDS,
+            suggestedMapping: buildSuggestedMapping(headers),
         });
     } catch (err) {
         console.error('adminInitUniversityImport error:', err);
@@ -248,6 +355,7 @@ export async function adminInitUniversityImport(req: Request, res: Response): Pr
 
 export async function adminValidateUniversityImport(req: Request, res: Response): Promise<void> {
     try {
+        await backfillUniversityTaxonomyIfNeeded();
         const job = await UniversityImportJob.findById(req.params.jobId);
         if (!job) { res.status(404).json({ message: 'Import job not found.' }); return; }
 
@@ -259,24 +367,24 @@ export async function adminValidateUniversityImport(req: Request, res: Response)
             defaults,
         );
 
-        const dbDuplicates: number[] = [];
-        for (const row of normalizedRows) {
-            const name = String(row.name || '').trim();
-            const shortForm = String(row.shortForm || '').trim();
-            const admissionUrl = String(row.admissionUrl || '').trim();
-            const exists = await University.findOne({
-                $or: [
-                    { name: { $regex: `^${escapeRegex(name)}$`, $options: 'i' }, shortForm: { $regex: `^${escapeRegex(shortForm)}$`, $options: 'i' } },
-                    ...(admissionUrl
-                        ? [
-                            { admissionWebsite: { $regex: `^${escapeRegex(admissionUrl)}$`, $options: 'i' } },
-                            { admissionUrl: { $regex: `^${escapeRegex(admissionUrl)}$`, $options: 'i' } },
-                        ]
-                        : []),
-                ],
-            }).select('_id').lean();
-            if (exists) dbDuplicates.push(Number(row.rowNumber || 0));
-        }
+        const existingUniversities = await University.find({})
+            .select('name shortForm slug')
+            .lean();
+        const existingByNameShort = new Set(
+            existingUniversities.map((item) => `${String(item.name || '').trim().toLowerCase()}::${String(item.shortForm || '').trim().toLowerCase()}`),
+        );
+        const existingBySlug = new Set(
+            existingUniversities
+                .map((item) => String(item.slug || '').trim().toLowerCase())
+                .filter(Boolean),
+        );
+        const dbDuplicates = normalizedRows
+            .filter((row) => {
+                const fileKey = `${String(row.name || '').trim().toLowerCase()}::${String(row.shortForm || '').trim().toLowerCase()}`;
+                const slugKey = String(row.slug || '').trim().toLowerCase();
+                return existingByNameShort.has(fileKey) || Boolean(slugKey && existingBySlug.has(slugKey));
+            })
+            .map((row) => Number(row.rowNumber || 0));
 
         job.mapping = mapping;
         job.defaults = defaults;
@@ -295,6 +403,9 @@ export async function adminValidateUniversityImport(req: Request, res: Response)
             validationSummary: job.validationSummary,
             failedRows: failedRows.slice(0, 200),
             failedRowCount: failedRows.length,
+            warnings: duplicateRows.length > 0 || dbDuplicates.length > 0
+                ? ['Duplicate university rows were detected in the file or existing database records.']
+                : [],
             duplicates: {
                 inFile: duplicateRows,
                 inDatabase: Array.from(new Set(dbDuplicates)).filter(Boolean).sort((a, b) => a - b),
@@ -308,74 +419,197 @@ export async function adminValidateUniversityImport(req: Request, res: Response)
 
 export async function adminCommitUniversityImport(req: Request, res: Response): Promise<void> {
     try {
+        await backfillUniversityTaxonomyIfNeeded();
         const job = await UniversityImportJob.findById(req.params.jobId);
         if (!job) { res.status(404).json({ message: 'Import job not found.' }); return; }
         if (job.status !== 'validated') { res.status(400).json({ message: 'Run validation before committing import.' }); return; }
 
         const mode = String(req.body?.mode || 'update-existing').toLowerCase() === 'create-only' ? 'create-only' : 'update-existing';
         const rows = (job.normalizedRows || []) as Array<Record<string, unknown>>;
+        const actorId = (req as Request & { user?: { _id?: string } }).user?._id || null;
         let inserted = 0;
         let updated = 0;
         const failedRows = [...(job.failedRows || [])];
+        const warnings = new Set<string>();
+
+        const categoryNames = Array.from(new Set(
+            rows.map((row) => String(row.category || '').trim()).filter(Boolean),
+        ));
+        const clusterNames = Array.from(new Set(
+            rows.map((row) => String(row.clusterGroup || '').trim()).filter(Boolean),
+        ));
+
+        const existingCategories = await UniversityCategory.find({ name: { $in: categoryNames } }).select('_id name').lean() as Array<{ _id: mongoose.Types.ObjectId; name: string }>;
+        const existingClusters = await UniversityCluster.find({ name: { $in: clusterNames } }).select('_id name').lean() as Array<{ _id: mongoose.Types.ObjectId; name: string }>;
+        const categoryMap = new Map<string, { _id: mongoose.Types.ObjectId; name: string }>(
+            existingCategories.map((item) => [String(item.name || '').trim(), item]),
+        );
+        const clusterMap = new Map<string, { _id: mongoose.Types.ObjectId; name: string }>(
+            existingClusters.map((item) => [String(item.name || '').trim(), item]),
+        );
+        const createdCategoryNames = new Set<string>();
+        const createdClusterNames = new Set<string>();
+
+        for (const categoryName of categoryNames) {
+            if (categoryMap.has(categoryName)) continue;
+            const created = await ensureUniversityCategoryByName(categoryName);
+            categoryMap.set(categoryName, created);
+            createdCategoryNames.add(categoryName);
+        }
+        for (const clusterName of clusterNames) {
+            if (clusterMap.has(clusterName)) continue;
+            const created = await ensureUniversityClusterByName(clusterName);
+            clusterMap.set(clusterName, created);
+            createdClusterNames.add(clusterName);
+        }
+
+        const existingUniversities = await University.find({})
+            .select('_id name shortForm slug')
+            .lean();
+        const existingByNameShort = new Map<string, { _id: mongoose.Types.ObjectId; slug?: string }>();
+        const existingBySlug = new Map<string, { _id: mongoose.Types.ObjectId; slug?: string }>();
+        const slugOwnerMap = new Map<string, string>();
+
+        existingUniversities.forEach((item) => {
+            const key = `${String(item.name || '').trim().toLowerCase()}::${String(item.shortForm || '').trim().toLowerCase()}`;
+            if (key) existingByNameShort.set(key, { _id: item._id, slug: String(item.slug || '') });
+            const slug = String(item.slug || '').trim().toLowerCase();
+            if (slug) {
+                existingBySlug.set(slug, { _id: item._id, slug: String(item.slug || '') });
+                slugOwnerMap.set(slug, String(item._id));
+            }
+        });
+
+        const bulkOps: Array<Record<string, unknown>> = [];
+        const clusterAssignments = new Map<string, string[]>();
+        const clearClusterAssignments: string[] = [];
+
+        const reserveUniqueSlug = (requested: string, ownerId?: string): string => {
+            const seed = requested || `university-${Date.now()}`;
+            const normalizedSeed = buildSlug(seed);
+            let candidate = normalizedSeed;
+            let suffix = 1;
+            while (true) {
+                const owner = slugOwnerMap.get(candidate.toLowerCase());
+                if (!owner || (ownerId && owner === ownerId)) {
+                    slugOwnerMap.set(candidate.toLowerCase(), ownerId || '__pending__');
+                    return candidate;
+                }
+                candidate = `${normalizedSeed}-${suffix}`;
+                suffix += 1;
+            }
+        };
 
         for (const row of rows) {
             try {
-                const category = normalizeUniversityCategoryStrict(row.category || '');
-                const categoryDoc = await UniversityCategory.findOne({ name: category }).select('_id').lean();
-                const payload = {
-                    name: String(row.name || '').trim(),
-                    shortForm: String(row.shortForm || '').trim(),
-                    category,
-                    categoryId: categoryDoc ? categoryDoc._id : null,
-                    clusterGroup: String(row.clusterGroup || '').trim(),
-                    applicationStartDate: row.applicationStartDate || null,
-                    applicationEndDate: row.applicationEndDate || null,
-                    scienceExamDate: String(row.examDateScience || '').trim(),
-                    artsExamDate: String(row.examDateArts || '').trim(),
-                    businessExamDate: String(row.examDateBusiness || '').trim(),
-                    contactNumber: String(row.contactNumber || '').trim(),
-                    address: String(row.address || '').trim(),
-                    email: String(row.email || '').trim(),
-                    website: String(row.websiteUrl || '').trim(),
-                    websiteUrl: String(row.websiteUrl || '').trim(),
-                    admissionWebsite: String(row.admissionUrl || '').trim(),
-                    admissionUrl: String(row.admissionUrl || '').trim(),
-                    established: row.establishedYear ? Number(row.establishedYear) : undefined,
-                    establishedYear: row.establishedYear ? Number(row.establishedYear) : undefined,
-                    totalSeats: String(row.totalSeats || 'N/A').trim() || 'N/A',
-                    scienceSeats: String(row.seatsScienceEng || 'N/A').trim() || 'N/A',
-                    artsSeats: String(row.seatsArtsHum || 'N/A').trim() || 'N/A',
-                    businessSeats: String(row.seatsBusiness || 'N/A').trim() || 'N/A',
-                    logoUrl: String(row.logoUrl || '').trim(),
-                    isArchived: false,
-                };
-
-                const existing = await University.findOne({
-                    $or: [
-                        {
-                            name: { $regex: `^${escapeRegex(String(payload.name))}$`, $options: 'i' },
-                            shortForm: { $regex: `^${escapeRegex(String(payload.shortForm))}$`, $options: 'i' },
-                        },
-                        ...(payload.admissionWebsite
-                            ? [
-                                { admissionWebsite: { $regex: `^${escapeRegex(String(payload.admissionWebsite))}$`, $options: 'i' } },
-                                { admissionUrl: { $regex: `^${escapeRegex(String(payload.admissionWebsite))}$`, $options: 'i' } },
-                            ]
-                            : []),
-                    ],
-                });
+                const normalized = normalizeUniversityImportRow(row as Record<string, unknown>);
+                const name = String(normalized.name || '').trim();
+                const shortForm = String(normalized.shortForm || '').trim();
+                const admissionUrl = normalizeLooseOptionalText(normalized.admissionUrl);
+                const requestedSlugKey = String(normalized.slug || '').trim().toLowerCase();
+                const lookupKey = `${name.toLowerCase()}::${shortForm.toLowerCase()}`;
+                const existing = (requestedSlugKey ? existingBySlug.get(requestedSlugKey) : undefined)
+                    || existingByNameShort.get(lookupKey);
 
                 if (existing && mode === 'create-only') {
-                    failedRows.push({ rowNumber: Number(row.rowNumber || 0), reason: 'Duplicate existing row (create-only mode).', payload: row });
+                    failedRows.push({ rowNumber: Number(normalized.rowNumber || 0), reason: 'Duplicate existing row (create-only mode).', payload: row });
                     continue;
                 }
 
+                const categoryName = String(normalized.category || '').trim();
+                const clusterName = String(normalized.clusterGroup || '').trim();
+                const categoryDoc = categoryName ? categoryMap.get(categoryName) : null;
+                const clusterDoc = clusterName ? clusterMap.get(clusterName) : null;
+                const existingId = existing ? String(existing._id) : '';
+                const requestedSlug = String(normalized.slug || '').trim();
+                const slug = reserveUniqueSlug(requestedSlug || (existing?.slug || buildSlug(name)), existingId || undefined);
+                if (requestedSlug && slug !== requestedSlug) {
+                    warnings.add(`Some imported slugs were adjusted to keep them unique. Example: ${requestedSlug} -> ${slug}`);
+                }
+
+                const payload = {
+                    name,
+                    shortForm,
+                    category: categoryName,
+                    categoryId: categoryDoc ? categoryDoc._id : null,
+                    clusterId: clusterDoc ? clusterDoc._id : null,
+                    clusterName: clusterDoc ? clusterDoc.name : '',
+                    clusterGroup: clusterDoc ? clusterDoc.name : '',
+                    shortDescription: String(normalized.shortDescription || '').trim(),
+                    description: String(normalized.description || '').trim(),
+                    applicationStartDate: normalized.applicationStartDate || null,
+                    applicationEndDate: normalized.applicationEndDate || null,
+                    scienceExamDate: String(normalized.examDateScience || normalized.scienceExamDate || '').trim(),
+                    examDateScience: String(normalized.examDateScience || normalized.scienceExamDate || '').trim(),
+                    artsExamDate: String(normalized.examDateArts || normalized.artsExamDate || '').trim(),
+                    examDateArts: String(normalized.examDateArts || normalized.artsExamDate || '').trim(),
+                    businessExamDate: String(normalized.examDateBusiness || normalized.businessExamDate || '').trim(),
+                    examDateBusiness: String(normalized.examDateBusiness || normalized.businessExamDate || '').trim(),
+                    examCenters: normalizeExamCenters(normalized.examCenters),
+                    contactNumber: String(normalized.contactNumber || '').trim(),
+                    address: String(normalized.address || '').trim(),
+                    email: String(normalized.email || '').trim(),
+                    website: String(normalized.websiteUrl || '').trim(),
+                    websiteUrl: String(normalized.websiteUrl || '').trim(),
+                    admissionWebsite: admissionUrl,
+                    admissionUrl,
+                    established: normalized.establishedYear ? Number(normalized.establishedYear) : undefined,
+                    establishedYear: normalized.establishedYear ? Number(normalized.establishedYear) : undefined,
+                    totalSeats: String(normalized.totalSeats || 'N/A').trim() || 'N/A',
+                    scienceSeats: String(normalized.seatsScienceEng || 'N/A').trim() || 'N/A',
+                    seatsScienceEng: String(normalized.seatsScienceEng || 'N/A').trim() || 'N/A',
+                    artsSeats: String(normalized.seatsArtsHum || 'N/A').trim() || 'N/A',
+                    seatsArtsHum: String(normalized.seatsArtsHum || 'N/A').trim() || 'N/A',
+                    businessSeats: String(normalized.seatsBusiness || 'N/A').trim() || 'N/A',
+                    seatsBusiness: String(normalized.seatsBusiness || 'N/A').trim() || 'N/A',
+                    logoUrl: String(normalized.logoUrl || '').trim(),
+                    isActive: Boolean(normalized.isActive !== false),
+                    featured: Boolean(normalized.featured),
+                    featuredOrder: Number(normalized.featuredOrder || 0) || 0,
+                    categorySyncLocked: Boolean(normalized.categorySyncLocked),
+                    clusterSyncLocked: Boolean(normalized.clusterSyncLocked),
+                    verificationStatus: String(normalized.verificationStatus || 'Pending').trim() || 'Pending',
+                    remarks: String(normalized.remarks || '').trim(),
+                    slug,
+                    isArchived: false,
+                    archivedAt: null,
+                    archivedBy: null,
+                };
+
+                let universityId = existingId;
                 if (existing) {
-                    await University.updateOne({ _id: existing._id }, { $set: payload });
+                    bulkOps.push({
+                        updateOne: {
+                            filter: { _id: existing._id },
+                            update: { $set: payload },
+                        },
+                    });
                     updated += 1;
                 } else {
-                    await University.create({ ...payload, slug: buildSlug(String(payload.name || '')) });
+                    const newId = new mongoose.Types.ObjectId();
+                    universityId = String(newId);
+                    bulkOps.push({
+                        insertOne: {
+                            document: {
+                                _id: newId,
+                                ...payload,
+                            },
+                        },
+                    });
                     inserted += 1;
+                }
+
+                existingByNameShort.set(lookupKey, { _id: new mongoose.Types.ObjectId(universityId), slug });
+                if (slug) {
+                    existingBySlug.set(slug.toLowerCase(), { _id: new mongoose.Types.ObjectId(universityId), slug });
+                }
+
+                if (clusterDoc) {
+                    const current = clusterAssignments.get(String(clusterDoc._id)) || [];
+                    current.push(universityId);
+                    clusterAssignments.set(String(clusterDoc._id), current);
+                } else {
+                    clearClusterAssignments.push(universityId);
                 }
             } catch (err: unknown) {
                 const reason = err instanceof Error ? err.message : 'Unknown commit error';
@@ -383,8 +617,28 @@ export async function adminCommitUniversityImport(req: Request, res: Response): 
             }
         }
 
+        if (bulkOps.length > 0) {
+            await University.bulkWrite(bulkOps as Parameters<typeof University.bulkWrite>[0]);
+        }
+
+        if (clearClusterAssignments.length > 0) {
+            await syncManualClusterMembership(clearClusterAssignments, null);
+        }
+        for (const [clusterId, universityIds] of clusterAssignments.entries()) {
+            await syncManualClusterMembership(Array.from(new Set(universityIds)), clusterId);
+        }
+
+        await reconcileUniversityClusterAssignments(actorId);
+
         job.failedRows = failedRows;
-        job.commitSummary = { inserted, updated, failed: failedRows.length };
+        job.commitSummary = {
+            inserted,
+            updated,
+            failed: failedRows.length,
+            createdCategories: createdCategoryNames.size,
+            createdClusters: createdClusterNames.size,
+            failedRowCount: failedRows.length,
+        };
         job.status = failedRows.length > 0 ? 'failed' : 'committed';
         await job.save();
 
@@ -396,8 +650,11 @@ export async function adminCommitUniversityImport(req: Request, res: Response): 
         res.json({
             importJobId: String(job._id),
             commitSummary: job.commitSummary,
+            createdCategories: createdCategoryNames.size,
+            createdClusters: createdClusterNames.size,
             failedRows: failedRows.slice(0, 200),
             failedRowCount: failedRows.length,
+            warnings: Array.from(warnings),
             message: `Import completed (${mode}). inserted=${inserted}, updated=${updated}, failed=${failedRows.length}`,
         });
     } catch (err) {
@@ -414,6 +671,8 @@ export async function adminDownloadUniversityImportTemplate(req: Request, res: R
             clusterGroup: 'GST-Science&Tech',
             name: 'Dhaka Example University',
             shortForm: 'DEU',
+            shortDescription: 'A sample public university for template preview.',
+            description: 'This row demonstrates the full import/export schema for universities.',
             establishedYear: 1995,
             address: 'Dhaka, Bangladesh',
             contactNumber: '01700000000',
@@ -431,6 +690,14 @@ export async function adminDownloadUniversityImportTemplate(req: Request, res: R
             examDateBusiness: '2026-07-12',
             examCenters: 'Dhaka - BUET Campus | Chattogram - CUET Campus',
             logoUrl: 'https://exampleuniversity.edu/logo.png',
+            isActive: 'true',
+            featured: 'false',
+            featuredOrder: 0,
+            categorySyncLocked: 'false',
+            clusterSyncLocked: 'false',
+            verificationStatus: 'Pending',
+            remarks: '',
+            slug: 'dhaka-example-university',
         };
         const blankRow: Record<string, string> = TEMPLATE_HEADERS.reduce((acc, key) => ({ ...acc, [key]: '' }), {});
 
@@ -467,6 +734,8 @@ export async function adminGetUniversityImportJob(req: Request, res: Response): 
             sourceFileName: job.sourceFileName,
             headers: job.headers,
             sampleRows: (job.sampleRows || []).slice(0, 20),
+            mapping: job.mapping || {},
+            defaults: job.defaults || {},
             validationSummary: job.validationSummary || null,
             commitSummary: job.commitSummary || null,
             failedRows: (job.failedRows || []).slice(0, 200),

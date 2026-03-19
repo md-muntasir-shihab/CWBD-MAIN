@@ -3,6 +3,7 @@ import ExamResult from '../models/ExamResult';
 import ExamSession from '../models/ExamSession';
 import StudentProfile from '../models/StudentProfile';
 import User from '../models/User';
+import UserSubscription from '../models/UserSubscription';
 
 export type ExamCardMetrics = {
     examId: string;
@@ -122,10 +123,36 @@ export async function getExamCardMetrics(exams: ExamAccessSource[]): Promise<Map
 
     const activeStudentIdSet = new Set<string>();
     const planToStudents = new Map<string, Set<string>>();
+    const activeStudentIds = (activeStudents as Array<Record<string, unknown>>)
+        .map((user) => normalizeId(user._id))
+        .filter(Boolean);
+    const activeSubscriptions = activeStudentIds.length > 0
+        ? await UserSubscription.find({
+            userId: { $in: toObjectIds(activeStudentIds) },
+            status: 'active',
+            expiresAtUTC: { $gt: new Date() },
+        })
+            .populate('planId', 'code')
+            .select('userId planId')
+            .lean()
+        : [];
+    const studentsWithCanonicalPlans = new Set<string>();
+    for (const subscription of activeSubscriptions as Array<Record<string, unknown>>) {
+        const studentId = normalizeId(subscription.userId);
+        const plan = (subscription.planId as Record<string, unknown> | undefined) || {};
+        const planCode = String(plan.code || '').trim().toLowerCase();
+        if (!studentId || !planCode) continue;
+        studentsWithCanonicalPlans.add(studentId);
+        if (!planToStudents.has(planCode)) {
+            planToStudents.set(planCode, new Set<string>());
+        }
+        planToStudents.get(planCode)?.add(studentId);
+    }
     for (const user of activeStudents as Array<Record<string, unknown>>) {
         const studentId = normalizeId(user._id);
         if (!studentId) continue;
         activeStudentIdSet.add(studentId);
+        if (studentsWithCanonicalPlans.has(studentId)) continue;
         const planCode = getStudentPlanCode(user);
         if (!planCode) continue;
         if (!planToStudents.has(planCode)) {

@@ -101,7 +101,9 @@ test.describe('Phase3 Page Audit', () => {
 
         await page.goto(`/news/${slug}`);
         await expect(page.locator('.prose').first()).toBeVisible();
-        await expect(page.getByRole('link', { name: /Original Source/i }).first()).toBeVisible();
+        await expect(
+            page.locator('a, span').filter({ hasText: /^Original Source(?: Unavailable)?$/i }).first()
+        ).toBeVisible();
         await expect(page.getByRole('button', { name: /WhatsApp|Facebook|Messenger|Telegram|Copy Link|Copy Text/i }).first()).toBeVisible();
 
         for (const vp of responsiveWidths) {

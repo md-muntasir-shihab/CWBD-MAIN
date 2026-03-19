@@ -3,14 +3,26 @@ import { useQueryClient } from '@tanstack/react-query';
 import { getHomeStreamUrl } from '../services/api';
 import { queryKeys } from '../lib/queryKeys';
 
-const FALLBACK_POLL_MS = 30000;
+const HOME_REFRESH_POLL_MS = 10000;
 
-export default function useHomeLiveUpdates(): void {
+export default function useHomeLiveUpdates(enabled = true): void {
     const queryClient = useQueryClient();
-    const fallbackTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
+        if (!enabled) {
+            if (refreshTimerRef.current) {
+                clearInterval(refreshTimerRef.current);
+                refreshTimerRef.current = null;
+            }
+            if (reconnectTimerRef.current) {
+                clearTimeout(reconnectTimerRef.current);
+                reconnectTimerRef.current = null;
+            }
+            return;
+        }
+
         let source: EventSource | null = null;
         let disposed = false;
 
@@ -27,15 +39,15 @@ export default function useHomeLiveUpdates(): void {
             queryClient.invalidateQueries({ queryKey: ['home-clusters-featured'] }).catch(() => undefined);
         };
 
-        const startFallbackPoll = () => {
-            if (fallbackTimerRef.current) return;
-            fallbackTimerRef.current = setInterval(() => invalidate(), FALLBACK_POLL_MS);
+        const startRefreshPoll = () => {
+            if (refreshTimerRef.current) return;
+            refreshTimerRef.current = setInterval(() => invalidate(), HOME_REFRESH_POLL_MS);
         };
 
-        const stopFallbackPoll = () => {
-            if (!fallbackTimerRef.current) return;
-            clearInterval(fallbackTimerRef.current);
-            fallbackTimerRef.current = null;
+        const stopRefreshPoll = () => {
+            if (!refreshTimerRef.current) return;
+            clearInterval(refreshTimerRef.current);
+            refreshTimerRef.current = null;
         };
 
         const clearReconnect = () => {
@@ -44,12 +56,21 @@ export default function useHomeLiveUpdates(): void {
             reconnectTimerRef.current = null;
         };
 
+        const closeSource = () => {
+            if (!source) return;
+            source.close();
+            source = null;
+        };
+
+        const teardown = () => {
+            closeSource();
+            stopRefreshPoll();
+            clearReconnect();
+        };
+
         const connect = () => {
             if (disposed) return;
-            if (source) {
-                source.close();
-                source = null;
-            }
+            closeSource();
             source = new EventSource(getHomeStreamUrl(), { withCredentials: true });
 
             source.addEventListener('home-updated', invalidate);
@@ -57,17 +78,13 @@ export default function useHomeLiveUpdates(): void {
             source.addEventListener('cluster-updated', invalidate);
             source.addEventListener('banner-updated', invalidate);
             source.addEventListener('news-updated', invalidate);
-            source.addEventListener('ping', () => {
-                stopFallbackPoll();
-            });
+            source.addEventListener('ping', invalidate);
             source.onopen = () => {
-                stopFallbackPoll();
                 clearReconnect();
             };
 
             source.onerror = () => {
                 if (disposed) return;
-                startFallbackPoll();
                 if (!reconnectTimerRef.current) {
                     reconnectTimerRef.current = setTimeout(() => {
                         reconnectTimerRef.current = null;
@@ -77,13 +94,21 @@ export default function useHomeLiveUpdates(): void {
             };
         };
 
+        startRefreshPoll();
         connect();
+
+        const handlePageHide = () => {
+            teardown();
+        };
+
+        window.addEventListener('pagehide', handlePageHide);
+        window.addEventListener('beforeunload', handlePageHide);
 
         return () => {
             disposed = true;
-            if (source) source.close();
-            stopFallbackPoll();
-            clearReconnect();
+            window.removeEventListener('pagehide', handlePageHide);
+            window.removeEventListener('beforeunload', handlePageHide);
+            teardown();
         };
-    }, [queryClient]);
+    }, [enabled, queryClient]);
 }

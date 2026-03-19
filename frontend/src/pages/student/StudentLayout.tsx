@@ -7,8 +7,9 @@ import {
     Home,
     LifeBuoy,
     MenuSquare,
-    NotebookText,
     UserRound,
+    LogOut,
+    NotebookText,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import GlobalAlertGate from '../../components/student/GlobalAlertGate';
@@ -51,7 +52,7 @@ function isActivePath(currentPath: string, targetPath: string): boolean {
 }
 
 export default function StudentLayout() {
-    const { isAuthenticated, isLoading, user } = useAuth();
+    const { isAuthenticated, isLoading, user, logout } = useAuth();
     const location = useLocation();
 
     if (isLoading) {
@@ -107,6 +108,14 @@ export default function StudentLayout() {
                                 {activeItem?.label || 'Dashboard'}
                             </p>
                         </div>
+                        <button
+                            onClick={() => logout()}
+                            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 transition"
+                            title="Logout"
+                        >
+                            <LogOut className="w-4 h-4" />
+                            <span className="hidden sm:inline">Logout</span>
+                        </button>
                     </header>
                     <Outlet />
                 </main>

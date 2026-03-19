@@ -79,7 +79,7 @@ export const ADMIN_NAV = [
             { id: 'student-settings', label: 'Student Settings', icon: SlidersHorizontal, route: '/__cw_admin__/student-management/settings' },
         ]
     },
-    { id: 'subscription-plans', label: 'Subscription Plans', icon: CreditCard, route: '/__cw_admin__/subscription-plans' },
+    { id: 'subscription-plans', label: 'Subscription Plans', icon: CreditCard, route: '/__cw_admin__/subscriptions/plans' },
     { id: 'subscriptions-v2', label: 'Subscriptions', icon: SubCard, route: '/__cw_admin__/subscriptions-v2' },
 
     { type: 'header', label: 'System' },

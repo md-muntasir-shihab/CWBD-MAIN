@@ -16,6 +16,9 @@ export interface IUniversityImportCommitSummary {
     inserted: number;
     updated: number;
     failed: number;
+    createdCategories?: number;
+    createdClusters?: number;
+    failedRowCount?: number;
 }
 
 export interface IUniversityImportJob extends Document {
@@ -65,6 +68,9 @@ const UniversityImportJobSchema = new Schema<IUniversityImportJob>({
         inserted: { type: Number, default: 0 },
         updated: { type: Number, default: 0 },
         failed: { type: Number, default: 0 },
+        createdCategories: { type: Number, default: 0 },
+        createdClusters: { type: Number, default: 0 },
+        failedRowCount: { type: Number, default: 0 },
     },
     failedRows: { type: [UniversityImportRowErrorSchema], default: [] },
 }, { timestamps: true });

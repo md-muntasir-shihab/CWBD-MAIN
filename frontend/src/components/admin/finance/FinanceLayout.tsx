@@ -30,7 +30,12 @@ const activeCls =
 
 export default function FinanceLayout() {
     return (
-        <AdminGuardShell title="Finance Center" description="Manage transactions, invoices, budgets, and financial operations.">
+        <AdminGuardShell
+            title="Finance Center"
+            description="Manage transactions, invoices, budgets, and financial operations."
+            allowedRoles={['superadmin', 'admin', 'moderator', 'finance_agent']}
+            requiredLegacyPermission="canManageFinance"
+        >
         <div className="space-y-4">
             {/* Horizontal tab strip */}
             <nav className="hide-scrollbar flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1.5 dark:border-slate-700 dark:bg-slate-900">

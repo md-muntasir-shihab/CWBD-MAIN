@@ -17,6 +17,7 @@ import NotificationSettings, { INotificationSettings } from '../models/Notificat
 import StudentGroup from '../models/StudentGroup';
 import StudentProfile from '../models/StudentProfile';
 import User from '../models/User';
+import UserSubscription from '../models/UserSubscription';
 import FinanceSettings from '../models/FinanceSettings';
 import FinanceTransaction from '../models/FinanceTransaction';
 import AuditLog from '../models/AuditLog';
@@ -163,6 +164,9 @@ export async function resolveAudience(
 async function resolveDynamicGroupUserIds(
     rules: Record<string, unknown>,
 ): Promise<mongoose.Types.ObjectId[]> {
+    const planCodes = Array.isArray(rules.planCodes)
+        ? rules.planCodes.map((value) => String(value || '').trim().toLowerCase()).filter(Boolean)
+        : [];
     const filter: Record<string, unknown> = { status: { $ne: 'deleted' } };
     if (Array.isArray(rules.batches) && rules.batches.length)
         filter.hsc_batch = { $in: rules.batches };
@@ -173,19 +177,53 @@ async function resolveDynamicGroupUserIds(
     if (Array.isArray(rules.statuses) && rules.statuses.length)
         filter.status = { $in: rules.statuses };
     const profiles = await StudentProfile.find(filter).select('user_id').lean();
-    return profiles.map((p) => p.user_id as mongoose.Types.ObjectId);
+    const userIds = profiles.map((p) => p.user_id as mongoose.Types.ObjectId);
+    return filterUserIdsByActivePlanCodes(userIds, planCodes);
 }
 
 async function resolveFilterUserIds(
     filters: Record<string, unknown>,
 ): Promise<mongoose.Types.ObjectId[]> {
+    const planCodes = Array.isArray(filters.planCodes)
+        ? filters.planCodes.map((value) => String(value || '').trim().toLowerCase()).filter(Boolean)
+        : [];
     const filter: Record<string, unknown> = { status: { $ne: 'deleted' } };
     if (filters.batches) filter.hsc_batch = { $in: filters.batches };
     if (filters.sscBatches) filter.ssc_batch = { $in: filters.sscBatches };
     if (filters.departments) filter.department = { $in: filters.departments };
     if (filters.statuses) filter.status = { $in: filters.statuses };
     const profiles = await StudentProfile.find(filter).select('user_id').lean();
-    return profiles.map((p) => p.user_id as mongoose.Types.ObjectId);
+    const userIds = profiles.map((p) => p.user_id as mongoose.Types.ObjectId);
+    return filterUserIdsByActivePlanCodes(userIds, planCodes);
+}
+
+async function filterUserIdsByActivePlanCodes(
+    userIds: mongoose.Types.ObjectId[],
+    planCodes: string[],
+): Promise<mongoose.Types.ObjectId[]> {
+    const normalizedPlanCodes = Array.from(new Set(planCodes.map((value) => value.trim().toLowerCase()).filter(Boolean)));
+    if (!userIds.length || !normalizedPlanCodes.length) {
+        return userIds;
+    }
+
+    const subscriptions = await UserSubscription.find({
+        userId: { $in: userIds },
+        status: 'active',
+        expiresAtUTC: { $gt: new Date() },
+    })
+        .populate('planId', 'code')
+        .select('userId planId')
+        .lean();
+
+    const allowedUserIds = new Set<string>();
+    for (const subscription of subscriptions as Array<Record<string, unknown>>) {
+        const plan = (subscription.planId as Record<string, unknown> | undefined) || {};
+        const planCode = String(plan.code || '').trim().toLowerCase();
+        if (!planCode || !normalizedPlanCodes.includes(planCode)) continue;
+        allowedUserIds.add(String(subscription.userId || ''));
+    }
+
+    return userIds.filter((userId) => allowedUserIds.has(String(userId)));
 }
 
 /* ================================================================

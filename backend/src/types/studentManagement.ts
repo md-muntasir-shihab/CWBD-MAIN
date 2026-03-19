@@ -155,6 +155,16 @@ export interface AdminStudentUnifiedPayload {
   exams: {
     totalAttempted: number;
     upcomingCount: number;
+    identity?: {
+      serialId?: string;
+      rollNumber?: string;
+      registrationNumber?: string;
+      admitCardNumber?: string;
+      examCenter?: string;
+      latestResultSummary?: string;
+      lastSyncAt?: string;
+      lastSyncSource?: string;
+    };
     recentResults: Array<{
       _id: string;
       examTitle?: string;
@@ -163,6 +173,18 @@ export interface AdminStudentUnifiedPayload {
       totalMarks: number;
       submittedAt: string;
       status: string;
+      source?: string;
+      examCenter?: string;
+      syncStatus?: string;
+    }>;
+    syncHistory?: Array<{
+      _id: string;
+      examTitle?: string;
+      source: string;
+      status: string;
+      syncMode: string;
+      changedFields: string[];
+      createdAt: string;
     }>;
   };
 

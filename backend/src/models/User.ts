@@ -60,10 +60,15 @@ export interface IUser extends Document {
     subscription?: {
         plan?: string;
         planCode?: string;
+        planId?: mongoose.Types.ObjectId;
+        planSlug?: string;
         planName?: string;
         isActive?: boolean;
         startDate?: Date;
         expiryDate?: Date;
+        ctaLabel?: string;
+        ctaUrl?: string;
+        ctaMode?: 'contact' | 'request_payment' | 'internal' | 'external';
         assignedBy?: mongoose.Types.ObjectId;
         assignedAt?: Date;
     };
@@ -146,10 +151,19 @@ const UserSchema = new Schema<IUser>(
         subscription: {
             plan: { type: String, trim: true },
             planCode: { type: String, trim: true },
+            planId: { type: Schema.Types.ObjectId, ref: 'SubscriptionPlan', default: null },
+            planSlug: { type: String, trim: true },
             planName: { type: String, trim: true },
             isActive: { type: Boolean, default: false },
             startDate: { type: Date },
             expiryDate: { type: Date },
+            ctaLabel: { type: String, trim: true },
+            ctaUrl: { type: String, trim: true },
+            ctaMode: {
+                type: String,
+                enum: ['contact', 'request_payment', 'internal', 'external', null],
+                default: null,
+            },
             assignedBy: { type: Schema.Types.ObjectId, ref: 'User' },
             assignedAt: { type: Date },
         },

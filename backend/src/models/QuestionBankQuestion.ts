@@ -117,7 +117,7 @@ const QuestionBankQuestionSchema = new Schema<IQuestionBankQuestion>(
         createdByAdminId: { type: String, default: '' },
         updatedByAdminId: { type: String, default: '' },
 
-        contentHash: { type: String, default: '', index: true },
+        contentHash: { type: String, default: '' },
         versionNo: { type: Number, default: 1 },
         parentQuestionId: {
             type: Schema.Types.ObjectId,

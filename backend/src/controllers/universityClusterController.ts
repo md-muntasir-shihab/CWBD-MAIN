@@ -5,6 +5,12 @@ import University from '../models/University';
 import UniversityCluster from '../models/UniversityCluster';
 import UniversityCategory from '../models/UniversityCategory';
 import { broadcastHomeStreamEvent } from '../realtime/homeStream';
+import {
+    backfillUniversityTaxonomyIfNeeded,
+    normalizeExamCenters,
+    reconcileUniversityClusterAssignments,
+    syncUniversityClusterSharedConfig,
+} from '../services/universitySyncService';
 
 function normalizeClusterSlug(name: string, fallbackSlug?: string): string {
     const slug = slugify(name || fallbackSlug || '', { lower: true, strict: true });
@@ -48,120 +54,44 @@ function toOptionalObjectId(value: string | undefined): mongoose.Types.ObjectId 
     return mongoose.Types.ObjectId.isValid(value) ? new mongoose.Types.ObjectId(value) : null;
 }
 
-function buildClusterDatePatch(
-    clusterDates: Record<string, unknown>,
-    overrideSource: Record<string, unknown> | undefined,
-): Record<string, unknown> {
-    const override = overrideSource || {};
-    const update: Record<string, unknown> = {};
-
-    if (!override.applicationStartDate && clusterDates.applicationStartDate) {
-        update.applicationStartDate = clusterDates.applicationStartDate;
-    }
-    if (!override.applicationEndDate && clusterDates.applicationEndDate) {
-        update.applicationEndDate = clusterDates.applicationEndDate;
-    }
-    if (!override.scienceExamDate && clusterDates.scienceExamDate) {
-        update.scienceExamDate = clusterDates.scienceExamDate;
-    }
-    if (!override.artsExamDate && clusterDates.artsExamDate) {
-        update.artsExamDate = clusterDates.artsExamDate;
-    }
-    if (!override.businessExamDate && clusterDates.commerceExamDate) {
-        update.businessExamDate = clusterDates.commerceExamDate;
-    }
-    return update;
+function parseOptionalDate(value: unknown): Date | null {
+    if (value === undefined || value === null || value === '') return null;
+    const parsed = new Date(String(value));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-async function resolveClusterMembersInternal(clusterId: string): Promise<mongoose.Types.ObjectId[]> {
-    const cluster = await UniversityCluster.findById(clusterId);
-    if (!cluster) return [];
-    const manualIds = uniqueObjectIds(cluster.memberUniversityIds || []);
-
-    const categoryRuleIds = normalizeCategoryIds(
-        (cluster as unknown as { categoryRuleIds?: unknown[] }).categoryRuleIds || [],
-    );
-    const ruleNamesFromIds = categoryRuleIds.length > 0
-        ? await UniversityCategory.find({ _id: { $in: categoryRuleIds }, isActive: true }).select('name').lean()
-        : [];
-    const legacyRuleNames = normalizeCategories(cluster.categoryRules || []);
-    const categoryNames = Array.from(
-        new Set([
-            ...legacyRuleNames,
-            ...ruleNamesFromIds.map((item) => String(item.name || '').trim()).filter(Boolean),
-        ]),
-    );
-
-    const suggestedUniversities = categoryNames.length > 0
-        ? await University.find({
-            isArchived: { $ne: true },
-            category: { $in: categoryNames },
-        }).select('_id').lean()
-        : [];
-
-    // Manual priority: final assigned members come only from manual list.
-    const effective = uniqueObjectIds([...manualIds]);
-
-    const toDetach = await University.find({
-        clusterId: cluster._id,
-        _id: { $nin: effective },
-    }).select('_id').lean();
-
-    if (toDetach.length > 0) {
-        await University.updateMany(
-            { _id: { $in: toDetach.map((item) => item._id) } },
-            { $set: { clusterId: null, clusterName: '', clusterGroup: '', clusterCount: 0 } },
-        );
-    }
-
-    if (effective.length > 0) {
-        await University.updateMany(
-            { _id: { $in: effective } },
-            { $set: { clusterId: cluster._id, clusterName: cluster.name, clusterGroup: cluster.name, clusterCount: effective.length } },
-        );
-    }
-
-    cluster.memberUniversityIds = effective;
-    await cluster.save();
-
-    return uniqueObjectIds([
-        ...effective,
-        ...suggestedUniversities.map((item) => item._id),
-    ]);
+function normalizeClusterDates(payload: Record<string, unknown>) {
+    const source = (payload.dates && typeof payload.dates === 'object')
+        ? (payload.dates as Record<string, unknown>)
+        : payload;
+    return {
+        applicationStartDate: parseOptionalDate(source.applicationStartDate),
+        applicationEndDate: parseOptionalDate(source.applicationEndDate),
+        scienceExamDate: String(source.scienceExamDate || '').trim(),
+        commerceExamDate: String(source.commerceExamDate || source.businessExamDate || '').trim(),
+        artsExamDate: String(source.artsExamDate || '').trim(),
+        admissionWebsite: String(source.admissionWebsite || source.admissionUrl || '').trim(),
+        examCenters: normalizeExamCenters(source.examCenters),
+    };
 }
 
-async function syncClusterDatesInternal(clusterId: string): Promise<{ synced: number; skipped: number }> {
-    const cluster = await UniversityCluster.findById(clusterId);
-    if (!cluster) return { synced: 0, skipped: 0 };
+function toIso(value: unknown): string {
+    if (!value) return '';
+    const parsed = new Date(String(value));
+    return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString();
+}
 
-    const members = await University.find({
-        clusterId: cluster._id,
-        isArchived: { $ne: true },
-    });
-
-    let synced = 0;
-    let skipped = 0;
-    for (const member of members) {
-        if (member.clusterSyncLocked) {
-            skipped += 1;
-            continue;
-        }
-
-        const update = buildClusterDatePatch(
-            (cluster.dates || {}) as Record<string, unknown>,
-            member.clusterDateOverrides as unknown as Record<string, unknown>,
-        );
-        if (Object.keys(update).length === 0) continue;
-        Object.assign(member, update);
-        await member.save();
-        synced += 1;
-    }
-
-    return { synced, skipped };
+function findNearestUpcomingDate(values: unknown[], now: Date): string {
+    return values
+        .map((value) => (value ? new Date(String(value)) : null))
+        .filter((item): item is Date => Boolean(item) && !Number.isNaN(item!.getTime()) && item!.getTime() >= now.getTime())
+        .sort((a, b) => a.getTime() - b.getTime())[0]
+        ?.toISOString() || '';
 }
 
 export async function adminGetUniversityClusters(req: Request, res: Response): Promise<void> {
     try {
+        await backfillUniversityTaxonomyIfNeeded();
         const status = String(req.query.status || 'all').toLowerCase();
         const filter: Record<string, unknown> = {};
         if (status === 'active') filter.isActive = true;
@@ -208,7 +138,7 @@ export async function adminCreateUniversityCluster(req: Request, res: Response):
             memberUniversityIds: uniqueObjectIds(payload.memberUniversityIds || []),
             categoryRules: normalizeCategories(payload.categoryRules || []),
             categoryRuleIds: normalizeCategoryIds(payload.categoryRuleIds || []),
-            dates: payload.dates || {},
+            dates: normalizeClusterDates(payload),
             syncPolicy: 'inherit_with_override',
             homeVisible: Boolean(payload.homeVisible),
             homeOrder: Number(payload.homeOrder || 0),
@@ -216,8 +146,11 @@ export async function adminCreateUniversityCluster(req: Request, res: Response):
             updatedBy: (req as Request & { user?: { _id?: string } }).user?._id || null,
         });
 
-        const members = await resolveClusterMembersInternal(String(cluster._id));
-        const syncResult = await syncClusterDatesInternal(String(cluster._id));
+        const resolution = await reconcileUniversityClusterAssignments((req as Request & { user?: { _id?: string } }).user?._id || null);
+        const syncResult = await syncUniversityClusterSharedConfig(
+            String(cluster._id),
+            (req as Request & { user?: { _id?: string } }).user?._id || null,
+        );
 
         broadcastHomeStreamEvent({
             type: 'cluster-updated',
@@ -226,8 +159,9 @@ export async function adminCreateUniversityCluster(req: Request, res: Response):
 
         res.status(201).json({
             cluster,
-            memberCount: members.length,
+            memberCount: resolution.clusterMemberCounts[String(cluster._id)] || 0,
             dateSync: syncResult,
+            resolution,
             message: 'Cluster created successfully.',
         });
     } catch (err) {
@@ -238,6 +172,7 @@ export async function adminCreateUniversityCluster(req: Request, res: Response):
 
 export async function adminGetUniversityClusterById(req: Request, res: Response): Promise<void> {
     try {
+        await backfillUniversityTaxonomyIfNeeded();
         const cluster = await UniversityCluster.findById(req.params.id).lean();
         if (!cluster) {
             res.status(404).json({ message: 'Cluster not found.' });
@@ -246,13 +181,17 @@ export async function adminGetUniversityClusterById(req: Request, res: Response)
         const members = await University.find({ _id: { $in: cluster.memberUniversityIds || [] } })
             .select('_id name shortForm category')
             .lean();
+        const effectiveMembers = await University.find({ clusterId: cluster._id, isArchived: { $ne: true } })
+            .select('_id name shortForm category')
+            .sort({ name: 1 })
+            .lean();
         const categoryRuleIds = normalizeCategoryIds(
             (cluster as unknown as { categoryRuleIds?: unknown[] }).categoryRuleIds || [],
         );
         const ruleCategories = categoryRuleIds.length > 0
             ? await UniversityCategory.find({ _id: { $in: categoryRuleIds } }).select('_id name labelBn').lean()
             : [];
-        res.json({ cluster, members, ruleCategories });
+        res.json({ cluster, members, effectiveMembers, ruleCategories });
     } catch (err) {
         console.error('adminGetUniversityClusterById error:', err);
         res.status(500).json({ message: 'Failed to load cluster.' });
@@ -286,15 +225,18 @@ export async function adminUpdateUniversityCluster(req: Request, res: Response):
         if (payload.categoryRuleIds !== undefined) {
             (cluster as unknown as { categoryRuleIds?: mongoose.Types.ObjectId[] }).categoryRuleIds = normalizeCategoryIds(payload.categoryRuleIds);
         }
-        if (payload.dates) cluster.dates = payload.dates;
+        if (payload.dates || payload.examCenters) cluster.dates = normalizeClusterDates(payload);
         if (payload.homeVisible !== undefined) cluster.homeVisible = Boolean(payload.homeVisible);
         if (payload.homeOrder !== undefined) cluster.homeOrder = Number(payload.homeOrder || 0);
         cluster.updatedBy = toOptionalObjectId((req as Request & { user?: { _id?: string } }).user?._id);
 
         await cluster.save();
 
-        const members = await resolveClusterMembersInternal(String(cluster._id));
-        const syncResult = await syncClusterDatesInternal(String(cluster._id));
+        const resolution = await reconcileUniversityClusterAssignments((req as Request & { user?: { _id?: string } }).user?._id || null);
+        const syncResult = await syncUniversityClusterSharedConfig(
+            String(cluster._id),
+            (req as Request & { user?: { _id?: string } }).user?._id || null,
+        );
 
         broadcastHomeStreamEvent({
             type: 'cluster-updated',
@@ -303,8 +245,9 @@ export async function adminUpdateUniversityCluster(req: Request, res: Response):
 
         res.json({
             cluster,
-            memberCount: members.length,
+            memberCount: resolution.clusterMemberCounts[String(cluster._id)] || 0,
             dateSync: syncResult,
+            resolution,
             message: 'Cluster updated successfully.',
         });
     } catch (err) {
@@ -322,12 +265,13 @@ export async function adminResolveUniversityClusterMembers(req: Request, res: Re
             return;
         }
 
-        const resolvedMembers = await resolveClusterMembersInternal(clusterId);
-        const manualSet = new Set((cluster.memberUniversityIds || []).map((item: unknown) => String(item)));
-        const manualMembers = resolvedMembers.filter((item) => manualSet.has(String(item)));
-        const suggestedMembers = resolvedMembers.filter((item) => !manualSet.has(String(item)));
-        const manualMemberIds = manualMembers.map((item) => String(item));
-        const suggestedMemberIds = suggestedMembers.map((item) => String(item));
+        const resolution = await reconcileUniversityClusterAssignments((req as Request & { user?: { _id?: string } }).user?._id || null);
+        const manualMemberIds = uniqueObjectIds(cluster.memberUniversityIds || []).map((item) => String(item));
+        const effectiveMembers = await University.find({ clusterId: cluster._id, isArchived: { $ne: true } })
+            .select('_id')
+            .lean();
+        const effectiveMemberIds = effectiveMembers.map((item) => String(item._id));
+        const suggestedMemberIds = effectiveMemberIds.filter((id) => !manualMemberIds.includes(id));
 
         broadcastHomeStreamEvent({
             type: 'cluster-updated',
@@ -335,14 +279,15 @@ export async function adminResolveUniversityClusterMembers(req: Request, res: Re
         });
 
         res.json({
-            memberCount: manualMemberIds.length,
+            memberCount: effectiveMemberIds.length,
             manualMembers: manualMemberIds,
             suggestedMembers: suggestedMemberIds,
-            effectiveMembers: manualMemberIds,
+            effectiveMembers: effectiveMemberIds,
             manualMembersCount: manualMemberIds.length,
             suggestedMembersCount: suggestedMemberIds.length,
-            effectiveMembersCount: manualMemberIds.length,
-            message: 'Cluster members resolved with manual-priority policy.',
+            effectiveMembersCount: effectiveMemberIds.length,
+            warnings: resolution.warnings.filter((item) => item.clusterIds.includes(clusterId)),
+            message: 'Cluster members resolved with manual-wins policy.',
         });
     } catch (err) {
         console.error('adminResolveUniversityClusterMembers error:', err);
@@ -360,12 +305,15 @@ export async function adminSyncUniversityClusterDates(req: Request, res: Respons
         }
 
         if (req.body?.dates) {
-            cluster.dates = req.body.dates;
+            cluster.dates = normalizeClusterDates(req.body);
             cluster.updatedBy = toOptionalObjectId((req as Request & { user?: { _id?: string } }).user?._id);
             await cluster.save();
         }
 
-        const result = await syncClusterDatesInternal(clusterId);
+        const result = await syncUniversityClusterSharedConfig(
+            clusterId,
+            (req as Request & { user?: { _id?: string } }).user?._id || null,
+        );
         broadcastHomeStreamEvent({
             type: 'cluster-updated',
             meta: { action: 'sync-dates', clusterId, ...result },
@@ -390,23 +338,14 @@ export async function adminDeleteUniversityCluster(req: Request, res: Response):
         cluster.updatedBy = toOptionalObjectId((req as Request & { user?: { _id?: string } }).user?._id);
         await cluster.save();
 
-        await University.updateMany(
-            { clusterId: cluster._id },
-            {
-                $set: {
-                    clusterId: null,
-                    clusterName: '',
-                    clusterCount: 0,
-                },
-            },
-        );
+        const resolution = await reconcileUniversityClusterAssignments((req as Request & { user?: { _id?: string } }).user?._id || null);
 
         broadcastHomeStreamEvent({
             type: 'cluster-updated',
             meta: { action: 'deactivate', clusterId },
         });
 
-        res.json({ message: 'Cluster deactivated successfully.' });
+        res.json({ message: 'Cluster deactivated successfully.', resolution });
     } catch (err) {
         console.error('adminDeleteUniversityCluster error:', err);
         res.status(500).json({ message: 'Failed to deactivate cluster.' });
@@ -415,8 +354,10 @@ export async function adminDeleteUniversityCluster(req: Request, res: Response):
 
 export async function getFeaturedUniversityClusters(req: Request, res: Response): Promise<void> {
     try {
+        await backfillUniversityTaxonomyIfNeeded();
         const limit = Math.min(20, Math.max(1, Number(req.query.limit || 8)));
         const clusters = await UniversityCluster.find({ isActive: true, homeVisible: true })
+            .select('name slug description homeOrder dates')
             .sort({ homeOrder: 1, name: 1 })
             .limit(limit)
             .lean();
@@ -443,6 +384,7 @@ export async function getFeaturedUniversityClusters(req: Request, res: Response)
 
 export async function getPublicUniversityClusterMembers(req: Request, res: Response): Promise<void> {
     try {
+        await backfillUniversityTaxonomyIfNeeded();
         const slug = String(req.params.slug || '').trim();
         const page = Math.max(1, Number(req.query.page || 1));
         const limit = Math.min(48, Math.max(1, Number(req.query.limit || 12)));
@@ -455,14 +397,64 @@ export async function getPublicUniversityClusterMembers(req: Request, res: Respo
 
         const filter = { clusterId: cluster._id, isArchived: { $ne: true }, isActive: true };
         const total = await University.countDocuments(filter);
+        const allMembers = await University.find(filter)
+            .select('category applicationStart applicationStartDate applicationEnd applicationEndDate scienceExamDate examDateScience artsExamDate examDateArts businessExamDate examDateBusiness admissionWebsite admissionUrl examCenters')
+            .lean();
         const universities = await University.find(filter)
             .sort({ featured: -1, featuredOrder: 1, name: 1 })
             .skip((page - 1) * limit)
             .limit(limit)
             .lean();
 
+        const categories = Array.from(new Set(allMembers.map((item) => String(item.category || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+        const now = new Date();
+        const memberStartDates = allMembers.map((item) => (
+            (item as { applicationStartDate?: unknown; applicationStart?: unknown }).applicationStartDate
+            || (item as { applicationStartDate?: unknown; applicationStart?: unknown }).applicationStart
+        ));
+        const memberEndDates = allMembers.map((item) => (
+            (item as { applicationEndDate?: unknown; applicationEnd?: unknown }).applicationEndDate
+            || (item as { applicationEndDate?: unknown; applicationEnd?: unknown }).applicationEnd
+        ));
+        const memberScienceDates = allMembers.map((item) => (
+            (item as { scienceExamDate?: unknown; examDateScience?: unknown }).scienceExamDate
+            || (item as { scienceExamDate?: unknown; examDateScience?: unknown }).examDateScience
+        ));
+        const memberArtsDates = allMembers.map((item) => (
+            (item as { artsExamDate?: unknown; examDateArts?: unknown }).artsExamDate
+            || (item as { artsExamDate?: unknown; examDateArts?: unknown }).examDateArts
+        ));
+        const memberBusinessDates = allMembers.map((item) => (
+            (item as { businessExamDate?: unknown; examDateBusiness?: unknown }).businessExamDate
+            || (item as { businessExamDate?: unknown; examDateBusiness?: unknown }).examDateBusiness
+        ));
+        const memberAdmissionWebsite = allMembers.find((item) => {
+            const row = item as { admissionWebsite?: unknown; admissionUrl?: unknown };
+            return row.admissionWebsite || row.admissionUrl;
+        }) as { admissionWebsite?: unknown; admissionUrl?: unknown } | undefined;
+        const nearestDeadline = findNearestUpcomingDate(memberEndDates, now);
+        const nearestExam = findNearestUpcomingDate([...memberScienceDates, ...memberArtsDates, ...memberBusinessDates], now);
+        const clusterDates = (cluster as { dates?: Record<string, unknown> }).dates || {};
+        const examCentersPreview = Array.from(new Set(
+            allMembers.flatMap((item) => Array.isArray(item.examCenters) ? item.examCenters.map((center) => String(center?.city || '').trim()) : [])
+                .filter(Boolean),
+        )).slice(0, 6);
+
         res.json({
             cluster,
+            summary: {
+                memberCount: total,
+                categories,
+                nearestDeadline,
+                nearestExam,
+                applicationStartDate: toIso(clusterDates.applicationStartDate) || findNearestUpcomingDate(memberStartDates, new Date(0)),
+                applicationEndDate: toIso(clusterDates.applicationEndDate) || findNearestUpcomingDate(memberEndDates, new Date(0)) || nearestDeadline,
+                scienceExamDate: toIso(clusterDates.scienceExamDate) || findNearestUpcomingDate(memberScienceDates, now),
+                artsExamDate: toIso(clusterDates.artsExamDate) || findNearestUpcomingDate(memberArtsDates, now),
+                businessExamDate: toIso(clusterDates.commerceExamDate || clusterDates.businessExamDate) || findNearestUpcomingDate(memberBusinessDates, now),
+                admissionWebsite: String(clusterDates.admissionWebsite || memberAdmissionWebsite?.admissionWebsite || memberAdmissionWebsite?.admissionUrl || '').trim(),
+                examCentersPreview,
+            },
             universities,
             pagination: {
                 total,

@@ -83,6 +83,7 @@ const INITIAL_FORM: FormState = {
 export default function NotificationTestSendPage() {
   return (
     <AdminGuardShell
+      requiredModule="notifications"
       title="Test Send — SMS & Email"
       description="Send test messages to verify delivery, preview templates, and estimate costs before launching campaigns. যেকোনো ক্যাম্পেইন লঞ্চের আগে এখানে টেস্ট করুন।"
     >

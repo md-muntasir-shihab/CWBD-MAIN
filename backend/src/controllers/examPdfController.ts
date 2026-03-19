@@ -7,6 +7,33 @@ import ExamSession from "../models/ExamSession";
 import { ExamModel } from "../models/exam.model";
 import { ExamQuestionModel } from "../models/examQuestion.model";
 import { AnswerModel } from "../models/answer.model";
+import { getEligibilitySummary } from "./examController";
+
+type PdfExamContext = {
+  kind: "modern" | "legacy";
+  examId: string;
+  rawExam: Record<string, unknown>;
+  title: string;
+  subject: string;
+  category: string;
+  durationMinutes: number;
+  isPublished: boolean;
+  solutionReleaseRule: string;
+  solutionsEnabled: boolean;
+  examWindowEndUTC: Date | null;
+  resultPublishAtUTC: Date | null;
+};
+
+type PdfQuestionRow = {
+  id: string;
+  orderIndex: number;
+  questionText: string;
+  questionImageUrl: string;
+  options: Array<{ key: string; text: string }>;
+  correctKey: string;
+  explanationText: string;
+  explanationImageUrl: string;
+};
 
 type PdfExamContext = {
   kind: "modern" | "legacy";
@@ -105,6 +132,7 @@ async function resolveExamContext(examId: string): Promise<PdfExamContext | null
     return {
       kind: "modern",
       examId,
+      rawExam: modernExam as Record<string, unknown>,
       title: safeText(modernExam.title) || "Exam",
       subject: safeText(modernExam.subject) || "N/A",
       category: safeText(modernExam.examCategory) || "N/A",
@@ -123,6 +151,7 @@ async function resolveExamContext(examId: string): Promise<PdfExamContext | null
   return {
     kind: "legacy",
     examId,
+    rawExam: legacyExam as Record<string, unknown>,
     title: safeText(legacyExam.title) || "Exam",
     subject: safeText(legacyExam.subject) || "N/A",
     category: safeText((legacyExam as any).examCategory) || "N/A",
@@ -255,6 +284,64 @@ function solutionsLocked(context: PdfExamContext, now = new Date()): boolean {
   return false;
 }
 
+async function requireStudentExamEligibility(
+  req: Request,
+  res: Response,
+  context: PdfExamContext,
+  options: {
+    requireProfileComplete?: boolean;
+    requireLiveWindow?: boolean;
+    requireRemainingAttempts?: boolean;
+  } = {},
+): Promise<Awaited<ReturnType<typeof getEligibilitySummary>> | null> {
+  const authReq = req as AuthRequest;
+  const studentId = String(authReq.user?._id || authReq.user?.id || "").trim();
+  if (!studentId) {
+    res.status(401).json({ message: "Authentication required" });
+    return null;
+  }
+
+  const eligibility = await getEligibilitySummary(context.rawExam, studentId);
+  if (!eligibility.accessAllowed) {
+    res.status(403).json({
+      message: "You are not allowed to access this exam document.",
+      eligibility,
+    });
+    return null;
+  }
+  if (eligibility.paymentRequired && !eligibility.paymentCleared) {
+    res.status(402).json({
+      message: "Payment pending. Please complete your payment to access this exam document.",
+      paymentPending: true,
+      eligibility,
+    });
+    return null;
+  }
+  if (options.requireProfileComplete && !eligibility.profileComplete) {
+    res.status(403).json({
+      message: "Profile completion is required before accessing this exam document.",
+      eligibility,
+    });
+    return null;
+  }
+  if (options.requireLiveWindow && !eligibility.windowOpen) {
+    res.status(403).json({
+      message: "This exam document is not available outside the exam window.",
+      eligibility,
+    });
+    return null;
+  }
+  if (options.requireRemainingAttempts && eligibility.attemptsLeft <= 0) {
+    res.status(403).json({
+      message: "Maximum attempt limit reached for this exam.",
+      eligibility,
+    });
+    return null;
+  }
+
+  return eligibility;
+}
+
 export async function generateQuestionsPdf(req: Request, res: Response): Promise<void> {
   try {
     const context = await resolveExamContext(String(req.params.examId || ""));
@@ -264,6 +351,14 @@ export async function generateQuestionsPdf(req: Request, res: Response): Promise
     }
     if (!context.isPublished) {
       res.status(403).json({ message: "Exam not published" });
+      return;
+    }
+    const eligibility = await requireStudentExamEligibility(req, res, context, {
+      requireProfileComplete: true,
+      requireLiveWindow: true,
+      requireRemainingAttempts: true,
+    });
+    if (!eligibility) {
       return;
     }
 
@@ -307,6 +402,10 @@ export async function generateSolutionsPdf(req: Request, res: Response): Promise
     }
     if (solutionsLocked(context)) {
       res.status(403).json({ message: "Solutions not released yet" });
+      return;
+    }
+    const eligibility = await requireStudentExamEligibility(req, res, context);
+    if (!eligibility) {
       return;
     }
 

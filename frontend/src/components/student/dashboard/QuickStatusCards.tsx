@@ -8,7 +8,7 @@ interface Props {
 
 const cards = [
     { key: 'profileScore', label: 'Profile', icon: Users, fmt: (v: number) => `${v}%`, color: 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10' },
-    { key: 'subscriptionStatus', label: 'Subscription', icon: CreditCard, fmt: (v: string) => v === 'active' ? 'Active' : 'Expired', color: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10', warn: (v: string) => v !== 'active' },
+    { key: 'subscriptionStatus', label: 'My Subscription', icon: CreditCard, fmt: (v: string) => v === 'active' ? 'Active' : 'Expired', color: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10', warn: (v: string) => v !== 'active' },
     { key: 'paymentStatus', label: 'Payment', icon: CreditCard, fmt: (v: string) => v === 'paid' ? 'Paid' : 'Pending', color: 'text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-500/10', warn: (v: string) => v !== 'paid' },
     { key: 'upcomingExamsCount', label: 'Upcoming', icon: Clock, fmt: (v: number) => String(v), color: 'text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-500/10' },
     { key: 'completedExamsCount', label: 'Completed', icon: FileCheck, fmt: (v: number) => String(v), color: 'text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-500/10' },

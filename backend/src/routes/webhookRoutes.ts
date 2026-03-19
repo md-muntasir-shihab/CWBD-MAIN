@@ -1,13 +1,12 @@
 import { Request, Response, Router } from 'express';
 import crypto from 'crypto';
 import ManualPayment from '../models/ManualPayment';
-import User from '../models/User';
-import SubscriptionPlan from '../models/SubscriptionPlan';
 import PaymentWebhookEvent from '../models/PaymentWebhookEvent';
 import { broadcastFinanceEvent } from '../realtime/financeStream';
 import { getPanicSettings } from '../services/securityCenterService';
 import { logger } from '../utils/logger';
 import { createIncomeFromPayment } from '../services/financeCenterService';
+import { activateSubscriptionFromPayment, recomputeStudentDueLedger } from '../services/subscriptionLifecycleService';
 
 const router = Router();
 
@@ -153,26 +152,8 @@ router.post('/sslcommerz/ipn', async (req: Request, res: Response) => {
             payment.date = new Date();
             await payment.save();
 
-            // Sync subscription
             if (payment.entryType === 'subscription' && payment.subscriptionPlanId) {
-                const plan = await SubscriptionPlan.findById(payment.subscriptionPlanId);
-                if (plan) {
-                    const expiryDate = new Date();
-                    expiryDate.setDate(expiryDate.getDate() + plan.durationDays);
-                    await User.findByIdAndUpdate(payment.studentId, {
-                        $set: {
-                            subscription: {
-                                plan: String(plan._id),
-                                planCode: plan.code,
-                                planName: plan.name,
-                                isActive: true,
-                                startDate: new Date(),
-                                expiryDate,
-                                assignedAt: new Date(),
-                            },
-                        },
-                    });
-                }
+                await activateSubscriptionFromPayment(payment, String(payment.recordedBy || payment.studentId));
             }
 
             webhookEvent.status = 'processed';
@@ -208,6 +189,14 @@ router.post('/sslcommerz/ipn', async (req: Request, res: Response) => {
                 });
             } catch (fcErr) {
                 logger.error('[Webhook] Finance auto-post failed', req, { tran_id, error: String(fcErr) });
+            }
+
+            if (payment.entryType === 'subscription') {
+                await recomputeStudentDueLedger(
+                    String(payment.studentId),
+                    String(payment.recordedBy || payment.studentId),
+                    `Subscription payment settled via webhook ${tran_id}`
+                );
             }
         } else if (status === 'FAILED' || status === 'CANCELLED') {
             payment.status = 'failed';

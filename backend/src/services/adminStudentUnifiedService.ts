@@ -8,8 +8,10 @@ import User from '../models/User';
 import StudentProfile from '../models/StudentProfile';
 import UserSubscription from '../models/UserSubscription';
 import { PaymentModel } from '../models/payment.model';
+import ManualPayment from '../models/ManualPayment';
 import FinanceTransaction from '../models/FinanceTransaction';
 import ExamResult from '../models/ExamResult';
+import ExamProfileSyncLog from '../models/ExamProfileSyncLog';
 import NotificationDeliveryLog from '../models/NotificationDeliveryLog';
 import SupportTicket from '../models/SupportTicket';
 import StudentContactTimeline from '../models/StudentContactTimeline';
@@ -38,19 +40,21 @@ export async function getUnifiedStudentDetail(
   if (!user || user.role !== 'student') return null;
 
   // Parallel aggregation of all related data
-  const [
-    profile,
-    activeSub,
+    const [
+        profile,
+        activeSub,
     subHistory,
-    payments,
+    legacyPayments,
+    manualPayments,
     financeTxns,
-    dueLedger,
-    examResults,
-    deliveryLogs,
+        dueLedger,
+        examResults,
+        examSyncLogs,
+        deliveryLogs,
     tickets,
     timelineEntries,
     groupMemberships,
-  ] = await Promise.all([
+    ] = await Promise.all([
     StudentProfile.findOne({ user_id: user._id }).lean(),
     UserSubscription.findOne({ userId: user._id, status: 'active' })
       .populate('planId', 'name code durationDays')
@@ -64,14 +68,23 @@ export async function getUnifiedStudentDetail(
       .sort({ createdAt: -1 })
       .limit(20)
       .lean(),
+    ManualPayment.find({ studentId: user._id })
+      .sort({ date: -1, createdAt: -1 })
+      .limit(20)
+      .lean(),
     FinanceTransaction.find({ studentId: user._id, isDeleted: { $ne: true } })
       .sort({ dateUTC: -1 })
       .limit(15)
       .lean(),
     StudentDueLedger.findOne({ studentId: user._id }).lean(),
     ExamResult.find({ student: user._id })
-      .populate('exam', 'title')
+      .populate('exam', 'title deliveryMode')
       .sort({ submittedAt: -1 })
+      .limit(10)
+      .lean(),
+    ExamProfileSyncLog.find({ studentId: user._id })
+      .populate('examId', 'title deliveryMode')
+      .sort({ createdAt: -1 })
       .limit(10)
       .lean(),
     NotificationDeliveryLog.find({ studentId: user._id })
@@ -109,10 +122,36 @@ export async function getUnifiedStudentDetail(
   }
 
   // ─── Build payment section ─────────────────────────────────────────────
+  const payments = [
+    ...legacyPayments.map((payment) => {
+      const row = payment as Record<string, unknown>;
+      return {
+        _id: String(row._id),
+        amountBDT: Number(row.amountBDT) || 0,
+        method: String(row.method || 'manual'),
+        status: String(row.status || 'pending'),
+        paidAt: row.paidAt ? new Date(String(row.paidAt)).toISOString() : undefined,
+        createdAt: row.createdAt ? new Date(String(row.createdAt)).toISOString() : '',
+      };
+    }),
+    ...manualPayments.map((payment) => {
+      const row = payment as Record<string, unknown>;
+      return {
+        _id: String(row._id),
+        amountBDT: Number(row.amount) || 0,
+        method: String(row.method || 'manual'),
+        status: String(row.status || 'pending'),
+        paidAt: row.paidAt ? new Date(String(row.paidAt)).toISOString() : undefined,
+        createdAt: row.createdAt
+          ? new Date(String(row.createdAt)).toISOString()
+          : (row.date ? new Date(String(row.date)).toISOString() : ''),
+      };
+    }),
+  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const totalPaid = payments
-    .filter((p) => (p as Record<string, unknown>).status === 'paid')
-    .reduce((sum, p) => sum + (Number((p as Record<string, unknown>).amountBDT) || 0), 0);
-  const pendingCount = payments.filter((p) => (p as Record<string, unknown>).status === 'pending').length;
+    .filter((p) => p.status === 'paid')
+    .reduce((sum, p) => sum + p.amountBDT, 0);
+  const pendingCount = payments.filter((p) => p.status === 'pending').length;
 
   // ─── Build finance section ─────────────────────────────────────────────
   const totalIncome = financeTxns
@@ -199,17 +238,7 @@ export async function getUnifiedStudentDetail(
     payments: {
       totalPaid,
       pendingCount,
-      recentPayments: payments.slice(0, 10).map((p) => {
-        const r = p as Record<string, unknown>;
-        return {
-          _id: String(r._id),
-          amountBDT: Number(r.amountBDT) || 0,
-          method: String(r.method || 'manual'),
-          status: String(r.status || 'pending'),
-          paidAt: r.paidAt ? new Date(r.paidAt as string).toISOString() : undefined,
-          createdAt: r.createdAt ? new Date(r.createdAt as string).toISOString() : '',
-        };
-      }),
+      recentPayments: payments.slice(0, 10),
     },
 
     finance: {
@@ -230,6 +259,28 @@ export async function getUnifiedStudentDetail(
     exams: {
       totalAttempted: examResults.length,
       upcomingCount: 0, // will be enriched in Phase 2
+      identity: profile
+        ? {
+            serialId: (profile as Record<string, unknown>).examIdentity && typeof (profile as Record<string, unknown>).examIdentity === 'object'
+              ? ((profile as Record<string, unknown>).examIdentity as Record<string, unknown>).serialId as string | undefined
+              : undefined,
+            rollNumber: (profile as Record<string, unknown>).examIdentity && typeof (profile as Record<string, unknown>).examIdentity === 'object'
+              ? ((profile as Record<string, unknown>).examIdentity as Record<string, unknown>).rollNumber as string | undefined
+              : undefined,
+            registrationNumber: (profile as Record<string, unknown>).examIdentity && typeof (profile as Record<string, unknown>).examIdentity === 'object'
+              ? ((profile as Record<string, unknown>).examIdentity as Record<string, unknown>).registrationNumber as string | undefined
+              : undefined,
+            admitCardNumber: (profile as Record<string, unknown>).examIdentity && typeof (profile as Record<string, unknown>).examIdentity === 'object'
+              ? ((profile as Record<string, unknown>).examIdentity as Record<string, unknown>).admitCardNumber as string | undefined
+              : undefined,
+            examCenter: (profile as Record<string, unknown>).examIdentity && typeof (profile as Record<string, unknown>).examIdentity === 'object'
+              ? ((profile as Record<string, unknown>).examIdentity as Record<string, unknown>).examCenter as string | undefined
+              : undefined,
+            latestResultSummary: (profile as Record<string, unknown>).latestExamResultSummary as string | undefined,
+            lastSyncAt: profile.examDataLastSyncAt?.toISOString(),
+            lastSyncSource: (profile as Record<string, unknown>).examDataLastSyncSource as string | undefined,
+          }
+        : undefined,
       recentResults: examResults.slice(0, 8).map((r) => {
         const exam = r.exam as unknown as Record<string, unknown> | null;
         return {
@@ -240,6 +291,21 @@ export async function getUnifiedStudentDetail(
           totalMarks: r.totalMarks ?? 0,
           submittedAt: r.submittedAt?.toISOString() ?? '',
           status: r.status ?? 'submitted',
+          source: (r as Record<string, unknown>).sourceType as string | undefined,
+          examCenter: (r as Record<string, unknown>).examCenterName as string | undefined,
+          syncStatus: (r as Record<string, unknown>).syncStatus as string | undefined,
+        };
+      }),
+      syncHistory: examSyncLogs.slice(0, 8).map((log) => {
+        const exam = log.examId as unknown as Record<string, unknown> | null;
+        return {
+          _id: String(log._id),
+          examTitle: exam?.title as string | undefined,
+          source: log.source,
+          status: log.status,
+          syncMode: log.syncMode,
+          changedFields: log.changedFields || [],
+          createdAt: log.createdAt.toISOString(),
         };
       }),
     },

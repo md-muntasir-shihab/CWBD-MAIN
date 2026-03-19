@@ -553,8 +553,8 @@ export default function ResourcesPanel() {
                                 <div className="space-y-1">
                                     <p className="text-[11px] text-slate-400 flex items-center gap-1"><Tag className="w-3 h-3" /> Tags</p>
                                     <div className="flex flex-wrap gap-1.5">
-                                        {resource.tags.map((tag) => (
-                                            <span key={tag} className="px-2 py-0.5 rounded-full text-[10px] bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                                        {resource.tags.map((tag, index) => (
+                                            <span key={`${resource._id}-${tag}-${index}`} className="px-2 py-0.5 rounded-full text-[10px] bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
                                                 {tag}
                                             </span>
                                         ))}

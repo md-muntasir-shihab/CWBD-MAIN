@@ -177,6 +177,8 @@ export interface ApiUniversity {
     shortForm: string;
     category: string;
     clusterGroup?: string;
+    clusterName?: string;
+    clusterCount?: number;
     clusterId?: string | { _id?: string; name?: string } | null;
     established?: number;
     establishedYear?: number;
@@ -202,6 +204,8 @@ export interface ApiUniversity {
     isActive: boolean;
     featured?: boolean;
     featuredOrder?: number;
+    categorySyncLocked?: boolean;
+    clusterSyncLocked?: boolean;
     verificationStatus?: string;
     remarks?: string;
     applicationStart?: string;
@@ -333,29 +337,74 @@ export interface AdminStudentGroup {
 }
 
 export interface AdminSubscriptionPlan {
+    id?: string;
     _id: string;
     code: string;
+    slug: string;
     name: string;
+    shortTitle?: string;
+    shortLabel?: string;
+    tagline?: string;
     type: 'free' | 'paid';
+    planType?: 'free' | 'paid' | 'custom' | 'enterprise';
     priceBDT: number;
+    oldPrice?: number | null;
+    currency?: string;
+    billingCycle?: 'monthly' | 'yearly' | 'custom' | 'one_time';
     durationDays: number;
+    durationMonths?: number | null;
     durationValue: number;
     durationUnit: 'days' | 'months';
+    durationLabel?: string;
+    validityLabel?: string;
     price: number;
+    priceLabel?: string;
+    isFree?: boolean;
+    isPaid?: boolean;
     bannerImageUrl?: string | null;
     shortDescription?: string;
+    fullDescription?: string;
     description?: string;
     features: string[];
+    visibleFeatures?: string[];
+    fullFeatures?: string[];
+    excludedFeatures?: string[];
     tags?: string[];
     includedModules: string[];
+    recommendedFor?: string;
+    comparisonNote?: string;
+    supportLevel?: 'basic' | 'priority' | 'premium' | 'enterprise';
+    accessScope?: string;
+    renewalNotes?: string;
+    policyNote?: string;
+    faqItems?: Array<{ question: string; answer: string }>;
+    themeKey?: 'basic' | 'standard' | 'premium' | 'enterprise' | 'custom';
+    badgeText?: string;
+    highlightText?: string;
+    allowsExams?: boolean;
+    allowsPremiumResources?: boolean;
+    allowsSMSUpdates?: boolean;
+    allowsEmailUpdates?: boolean;
+    allowsGuardianAlerts?: boolean;
+    allowsSpecialGroups?: boolean;
+    dashboardPrivileges?: string[];
+    maxAttempts?: number | null;
     enabled?: boolean;
     isActive: boolean;
+    isArchived?: boolean;
     isFeatured?: boolean;
+    showOnHome?: boolean;
+    showOnPricingPage?: boolean;
     displayOrder?: number;
     priority: number;
     sortOrder: number;
+    ctaLabel?: string;
+    ctaUrl?: string;
+    ctaMode?: 'contact' | 'request_payment' | 'internal' | 'external';
     contactCtaLabel?: string;
     contactCtaUrl?: string;
+    createdByAdminId?: string | null;
+    updatedByAdminId?: string | null;
     createdAt?: string;
     updatedAt?: string;
 }
@@ -364,22 +413,70 @@ export type SubscriptionPlanPublic = AdminSubscriptionPlan;
 
 export interface UserSubscriptionStatus {
     status: 'active' | 'expired' | 'pending' | 'none' | 'suspended';
+    rawStatus?: 'active' | 'expired' | 'pending' | 'none' | 'suspended';
     planName?: string;
     expiresAtUTC?: string | null;
     daysLeft?: number | null;
     planId?: string | null;
+    planSlug?: string | null;
+    planCode?: string | null;
     isActive?: boolean;
     startAtUTC?: string | null;
+    ctaLabel?: string;
+    ctaUrl?: string;
+    ctaMode?: 'contact' | 'request_payment' | 'internal' | 'external';
+    plan?: SubscriptionPlanPublic | null;
     subscription?: Record<string, unknown>;
 }
 
 export interface SubscriptionPlansPublicSettings {
     pageTitle?: string;
     pageSubtitle?: string;
+    heroEyebrow?: string;
+    heroNote?: string;
     headerBannerUrl?: string | null;
     defaultPlanBannerUrl?: string | null;
     currencyLabel?: string;
     showFeaturedFirst?: boolean;
+    allowFreePlans?: boolean;
+    comparisonEnabled?: boolean;
+    comparisonTitle?: string;
+    comparisonSubtitle?: string;
+    comparisonRows?: Array<{ key: string; label: string }>;
+    pageFaqEnabled?: boolean;
+    pageFaqTitle?: string;
+    pageFaqItems?: Array<{ question: string; answer: string }>;
+    sectionToggles?: {
+        detailsDrawer?: boolean;
+        comparisonTable?: boolean;
+        faqBlock?: boolean;
+        homePreview?: boolean;
+    };
+    defaultCtaMode?: 'contact' | 'request_payment' | 'internal' | 'external';
+}
+
+export interface HomeSubscriptionPlansResponse {
+    items: SubscriptionPlanPublic[];
+    settings?: SubscriptionPlansPublicSettings;
+    banner: {
+        enabled: boolean;
+        title: string;
+        subtitle: string;
+        loginMessage: string;
+        noPlanMessage: string;
+        activePlanMessage: string;
+        bannerImageUrl?: string | null;
+        primaryCTA: { label: string; url: string };
+        secondaryCTA: { label: string; url: string };
+        showPlanCards: boolean;
+        planIdsToShow: string[];
+    };
+    state: {
+        loggedIn: boolean;
+        hasActivePlan: boolean;
+        expiryDate: string | null;
+        reason: string;
+    };
 }
 
 export interface SubscriptionAssignmentPayload {
@@ -697,6 +794,7 @@ export interface ApiUniversityCardPreview {
     shortForm: string;
     slug: string;
     category: string;
+    clusterId?: string;
     clusterGroup?: string;
     contactNumber: string;
     established: number | null;
@@ -723,6 +821,39 @@ export interface ApiUniversityCardPreview {
     logoUrl: string;
     badgeText?: string;
     featured?: boolean;
+}
+
+export interface ApiClusterCardPreview {
+    id: string;
+    slug: string;
+    name: string;
+    description?: string;
+    memberCount: number;
+    categories: string[];
+    applicationStartDate: string;
+    applicationEndDate: string;
+    scienceExamDate: string;
+    artsExamDate: string;
+    businessExamDate: string;
+    admissionWebsite: string;
+    nearestDeadline: string;
+    nearestExam: string;
+    examCentersPreview: string[];
+    homeVisible?: boolean;
+    homeOrder?: number;
+}
+
+export interface ApiCategoryCardPreview {
+    id: string;
+    slug: string;
+    name: string;
+    badgeText?: string;
+    memberCount: number;
+    clusterGroups: string[];
+    nearestDeadline: string;
+    nearestExam: string;
+    examCentersPreview: string[];
+    homeOrder?: number;
 }
 
 
@@ -783,8 +914,14 @@ export interface HomeApiResponse {
         clusterGroups: string[];
     }>;
     featuredUniversities?: ApiUniversityCardPreview[];
+    featuredCategories?: ApiCategoryCardPreview[];
+    featuredClusters?: ApiClusterCardPreview[];
     deadlineUniversities?: ApiUniversityCardPreview[];
+    deadlineCategories?: ApiCategoryCardPreview[];
+    deadlineClusters?: ApiClusterCardPreview[];
     upcomingExamUniversities?: ApiUniversityCardPreview[];
+    upcomingExamCategories?: ApiCategoryCardPreview[];
+    upcomingExamClusters?: ApiClusterCardPreview[];
     uniSettings?: {
         enableClusterFilterOnHome: boolean;
         defaultCategory: string;
@@ -1676,8 +1813,15 @@ export interface StudentDashboardProfileSection {
     missingFields: string[];
     subscription: {
         isActive: boolean;
+        planId?: string;
+        planSlug?: string;
+        planCode?: string;
         planName: string;
         expiryDate: string | null;
+        daysLeft?: number | null;
+        ctaLabel?: string;
+        ctaUrl?: string;
+        ctaMode?: 'contact' | 'request_payment' | 'internal' | 'external';
     };
     groupRank: number | null;
     profile: {
@@ -2076,8 +2220,15 @@ export interface StudentDashboardFullResponse {
     quickStatus: DashboardQuickStatus;
     subscription: {
         isActive: boolean;
+        planId?: string;
+        planSlug?: string;
+        planCode?: string;
         planName: string;
         expiryDate: string | null;
+        daysLeft?: number | null;
+        ctaLabel?: string;
+        ctaUrl?: string;
+        ctaMode?: 'contact' | 'request_payment' | 'internal' | 'external';
     };
     payments: DashboardPaymentSummary;
     alerts: {
@@ -2382,6 +2533,8 @@ export const getPublicSubscriptionPlans = () =>
     api.get<{ items: SubscriptionPlanPublic[]; settings?: SubscriptionPlansPublicSettings; lastUpdatedAt?: string }>('/subscription-plans');
 export const getPublicSubscriptionPlanById = (id: string) =>
     api.get<{ item: SubscriptionPlanPublic }>(`/subscription-plans/${id}`);
+export const getHomeSubscriptionPlans = () =>
+    api.get<HomeSubscriptionPlansResponse>('/home/subscription-plans');
 export const getMySubscriptionStatus = () =>
     api.get<UserSubscriptionStatus>('/subscriptions/me');
 export const requestSubscriptionPayment = (
@@ -2448,6 +2601,7 @@ export const markStudentMeNotificationsRead = (ids?: string[]) =>
 export const getStudentMeResources = (params: { category?: string; q?: string } = {}) =>
     api.get<StudentHubResourcesResponse>('/students/me/resources', { params });
 export const getStudentNotices = () => api.get<{ items: StudentNoticeItem[] }>('/student/notices');
+export const getStudentSupportEligibility = () => api.get<StudentSupportEligibility>('/student/support/eligibility');
 export const getStudentSupportTickets = () => api.get<{ items: StudentSupportTicketItem[] }>('/student/support-tickets');
 export const getStudentSupportTicket = (id: string) =>
     api.get<{ item: StudentSupportTicketItem }>(`/student/support-tickets/${id}`);
@@ -2510,11 +2664,21 @@ export const adminUpdateUniversity = (id: string, data: Partial<ApiUniversity>) 
 export const adminDeleteUniversity = (id: string) =>
     api.delete(`/${ADMIN_PATH}/universities/${id}`);
 
-export const adminBulkDeleteUniversities = (ids: string[], mode: 'soft' | 'hard' = 'soft') =>
-    api.post(`/${ADMIN_PATH}/universities/bulk-delete`, { ids, mode });
+export type AdminBulkTargetOptions = {
+    ids?: string[];
+    applyToFiltered?: boolean;
+    filter?: Record<string, unknown>;
+};
 
-export const adminBulkUpdateUniversities = (ids: string[], updates: Record<string, unknown>) =>
-    api.patch(`/${ADMIN_PATH}/universities/bulk-update`, { ids, updates });
+export const adminBulkDeleteUniversities = (
+    target: string[] | AdminBulkTargetOptions,
+    mode: 'soft' | 'hard' = 'soft',
+) => api.post(`/${ADMIN_PATH}/universities/bulk-delete`, Array.isArray(target) ? { ids: target, mode } : { ...target, mode });
+
+export const adminBulkUpdateUniversities = (
+    target: string[] | AdminBulkTargetOptions,
+    updates: Record<string, unknown>,
+) => api.patch(`/${ADMIN_PATH}/universities/bulk-update`, Array.isArray(target) ? { ids: target, updates } : { ...target, updates });
 
 export const adminToggleUniversityStatus = (id: string) =>
     api.patch(`/${ADMIN_PATH}/universities/${id}/toggle-status`);
@@ -2538,6 +2702,20 @@ export interface AdminUniversityCategoryItem {
     isActive: boolean;
     homeHighlight: boolean;
     homeOrder: number;
+    sharedConfig?: {
+        applicationStartDate?: string | null;
+        applicationEndDate?: string | null;
+        scienceExamDate?: string;
+        artsExamDate?: string;
+        businessExamDate?: string;
+        examCenters?: ApiExamCenter[] | string;
+    };
+    syncMeta?: {
+        lastSyncedAt?: string | null;
+        lastSyncedBy?: string | null;
+        lastSyncedCount?: number;
+        skippedCount?: number;
+    };
     count?: number;
 }
 
@@ -2547,6 +2725,8 @@ export const adminCreateUniversityCategory = (data: Partial<AdminUniversityCateg
     api.post<{ category: AdminUniversityCategoryItem; message: string }>(`/${ADMIN_PATH}/university-categories`, data);
 export const adminUpdateUniversityCategory = (id: string, data: Partial<AdminUniversityCategoryItem>) =>
     api.put<{ category: AdminUniversityCategoryItem; message: string }>(`/${ADMIN_PATH}/university-categories/${id}`, data);
+export const adminSyncUniversityCategoryConfig = (id: string, data: Partial<AdminUniversityCategoryItem> = {}) =>
+    api.post<{ category: AdminUniversityCategoryItem; syncResult: { synced: number; skipped: number }; message: string }>(`/${ADMIN_PATH}/university-categories/${id}/sync-config`, data);
 export const adminToggleUniversityCategory = (id: string) =>
     api.patch<{ category: AdminUniversityCategoryItem; message: string }>(`/${ADMIN_PATH}/university-categories/${id}/toggle`);
 export const adminDeleteUniversityCategory = (id: string) =>
@@ -2569,14 +2749,36 @@ export interface AdminUniversityCluster {
         applicationStartDate?: string;
         applicationEndDate?: string;
         scienceExamDate?: string;
+        businessExamDate?: string;
         commerceExamDate?: string;
         artsExamDate?: string;
+        admissionWebsite?: string;
+        examCenters?: ApiExamCenter[] | string;
     };
     syncPolicy: 'inherit_with_override';
     homeVisible: boolean;
     homeOrder: number;
+    resolution?: {
+        warnings?: Array<{
+            universityId: string;
+            universityName: string;
+            winnerClusterName: string;
+            clusterNames: string[];
+            reason: string;
+        }>;
+    };
     createdAt: string;
     updatedAt: string;
+}
+
+export interface StudentSupportEligibility {
+    allowed: boolean;
+    reason?: 'not_student' | 'no_active_subscription' | 'expired_subscription' | 'support_not_included_in_plan';
+    planCode: string;
+    planName: string;
+    supportLevel: string;
+    status: 'active' | 'inactive' | 'expired' | 'missing';
+    expiresAtUTC: string | null;
 }
 
 export const adminGetUniversityClusters = (params: Record<string, string | number> = {}) =>
@@ -2584,13 +2786,34 @@ export const adminGetUniversityClusters = (params: Record<string, string | numbe
 export const adminCreateUniversityCluster = (data: Partial<AdminUniversityCluster>) =>
     api.post(`/${ADMIN_PATH}/university-clusters`, data);
 export const adminGetUniversityClusterById = (id: string) =>
-    api.get(`/${ADMIN_PATH}/university-clusters/${id}`);
+    api.get<{
+        cluster: AdminUniversityCluster;
+        members: Array<{ _id: string; name: string; shortForm?: string; category?: string }>;
+        effectiveMembers: Array<{ _id: string; name: string; shortForm?: string; category?: string }>;
+        ruleCategories: Array<{ _id: string; name: string; labelBn?: string }>;
+    }>(`/${ADMIN_PATH}/university-clusters/${id}`);
 export const adminUpdateUniversityCluster = (id: string, data: Partial<AdminUniversityCluster>) =>
     api.put(`/${ADMIN_PATH}/university-clusters/${id}`, data);
 export const adminResolveUniversityClusterMembers = (id: string) =>
-    api.post(`/${ADMIN_PATH}/university-clusters/${id}/members/resolve`);
+    api.post<{
+        memberCount: number;
+        manualMembers: string[];
+        suggestedMembers: string[];
+        effectiveMembers: string[];
+        manualMembersCount: number;
+        suggestedMembersCount: number;
+        effectiveMembersCount: number;
+        warnings: Array<{
+            universityId: string;
+            universityName: string;
+            winnerClusterName: string;
+            clusterNames: string[];
+            reason: string;
+        }>;
+        message: string;
+    }>(`/${ADMIN_PATH}/university-clusters/${id}/members/resolve`);
 export const adminSyncUniversityClusterDates = (id: string, dates?: Record<string, unknown>) =>
-    api.patch(`/${ADMIN_PATH}/university-clusters/${id}/sync-dates`, dates ? { dates } : {});
+    api.patch<{ synced: number; skipped: number; message: string }>(`/${ADMIN_PATH}/university-clusters/${id}/sync-dates`, dates ? { dates } : {});
 export const adminDeleteUniversityCluster = (id: string) =>
     api.delete(`/${ADMIN_PATH}/university-clusters/${id}`);
 
@@ -2601,6 +2824,15 @@ export interface FeaturedUniversityCluster {
     description?: string;
     homeOrder?: number;
     memberCount: number;
+    dates?: {
+        applicationStartDate?: string;
+        applicationEndDate?: string;
+        scienceExamDate?: string;
+        businessExamDate?: string;
+        commerceExamDate?: string;
+        artsExamDate?: string;
+        admissionWebsite?: string;
+    };
 }
 
 export const getFeaturedHomeClusters = (params: Record<string, string | number> = {}) =>
@@ -2609,7 +2841,24 @@ export const getFeaturedHomeClusters = (params: Record<string, string | number> 
 export const getHomeClusterMembers = (
     slug: string,
     params: Record<string, string | number> = {},
-) => api.get<{ cluster: FeaturedUniversityCluster; universities: ApiUniversity[]; pagination: { total: number; page: number; limit: number; pages: number } }>(
+) => api.get<{
+    cluster: FeaturedUniversityCluster;
+    summary: {
+        memberCount: number;
+        categories: string[];
+        applicationStartDate: string;
+        applicationEndDate: string;
+        scienceExamDate: string;
+        artsExamDate: string;
+        businessExamDate: string;
+        admissionWebsite: string;
+        nearestDeadline: string;
+        nearestExam: string;
+        examCentersPreview: string[];
+    };
+    universities: ApiUniversity[];
+    pagination: { total: number; page: number; limit: number; pages: number };
+}>(
     `/home/clusters/${slug}/members`,
     { params },
 );
@@ -2619,6 +2868,41 @@ export interface AdminUniversityImportInitResponse {
     headers: string[];
     sampleRows: Record<string, unknown>[];
     targetFields: string[];
+    suggestedMapping?: Record<string, string>;
+}
+
+export interface AdminUniversityImportValidationResponse {
+    importJobId: string;
+    validationSummary?: {
+        totalRows: number;
+        validRows: number;
+        invalidRows: number;
+    } | null;
+    failedRows?: Array<{ rowNumber: number; reason: string; payload?: Record<string, unknown> }>;
+    failedRowCount?: number;
+    warnings?: string[];
+    duplicates?: {
+        inFile: number[];
+        inDatabase: number[];
+    };
+}
+
+export interface AdminUniversityImportCommitResponse {
+    importJobId: string;
+    commitSummary?: {
+        inserted: number;
+        updated: number;
+        failed: number;
+        createdCategories?: number;
+        createdClusters?: number;
+        failedRowCount?: number;
+    } | null;
+    createdCategories?: number;
+    createdClusters?: number;
+    failedRows?: Array<{ rowNumber: number; reason: string; payload?: Record<string, unknown> }>;
+    failedRowCount?: number;
+    warnings?: string[];
+    message?: string;
 }
 
 export const adminInitUniversityImport = (file: File) => {
@@ -2631,7 +2915,7 @@ export const adminValidateUniversityImport = (
     jobId: string,
     mapping: Record<string, string>,
     defaults: Record<string, unknown> = {},
-) => api.post(`/${ADMIN_PATH}/universities/import/${jobId}/validate`, { mapping, defaults });
+) => api.post<AdminUniversityImportValidationResponse>(`/${ADMIN_PATH}/universities/import/${jobId}/validate`, { mapping, defaults });
 
 export const adminCommitUniversityImport = (jobId: string) =>
     api.post(`/${ADMIN_PATH}/universities/import/${jobId}/commit`);
@@ -2639,10 +2923,19 @@ export const adminCommitUniversityImport = (jobId: string) =>
 export const adminCommitUniversityImportWithMode = (
     jobId: string,
     mode: 'create-only' | 'update-existing' = 'update-existing',
-) => api.post(`/${ADMIN_PATH}/universities/import/${jobId}/commit`, { mode });
+) => api.post<AdminUniversityImportCommitResponse>(`/${ADMIN_PATH}/universities/import/${jobId}/commit`, { mode });
 
 export const adminGetUniversityImportJob = (jobId: string) =>
-    api.get(`/${ADMIN_PATH}/universities/import/${jobId}`);
+    api.get<AdminUniversityImportValidationResponse & AdminUniversityImportCommitResponse & {
+        status?: string;
+        sourceFileName?: string;
+        headers?: string[];
+        sampleRows?: Record<string, unknown>[];
+        mapping?: Record<string, string>;
+        defaults?: Record<string, unknown>;
+        createdAt?: string;
+        updatedAt?: string;
+    }>(`/${ADMIN_PATH}/universities/import/${jobId}`);
 
 export const adminDownloadUniversityImportErrors = (jobId: string) =>
     api.get(`/${ADMIN_PATH}/universities/import/${jobId}/errors.csv`, { responseType: 'blob' });
@@ -3070,6 +3363,8 @@ export const adminGetSubscriptionPlans = () =>
     api.get<{ items: AdminSubscriptionPlan[]; lastUpdatedAt: string }>(`/${ADMIN_PATH}/subscription-plans`);
 export const adminGetSubscriptionPlanById = (id: string) =>
     api.get<{ item: AdminSubscriptionPlan }>(`/${ADMIN_PATH}/subscription-plans/${id}`);
+export const adminGetSubscriptionSettings = () =>
+    api.get<{ settings: SubscriptionPlansPublicSettings }>(`/${ADMIN_PATH}/subscription-settings`);
 
 export const adminCreateSubscriptionPlan = (data: Partial<AdminSubscriptionPlan>) =>
     api.post<{ item: AdminSubscriptionPlan }>(`/${ADMIN_PATH}/subscription-plans`, data);
@@ -3077,14 +3372,23 @@ export const adminCreateSubscriptionPlan = (data: Partial<AdminSubscriptionPlan>
 export const adminUpdateSubscriptionPlan = (id: string, data: Partial<AdminSubscriptionPlan>) =>
     api.put<{ item: AdminSubscriptionPlan }>(`/${ADMIN_PATH}/subscription-plans/${id}`, data);
 
+export const adminDuplicateSubscriptionPlan = (id: string) =>
+    api.post<{ item: AdminSubscriptionPlan; message: string }>(`/${ADMIN_PATH}/subscription-plans/${id}/duplicate`);
+
 export const adminDeleteSubscriptionPlan = (id: string) =>
-    api.delete<{ message: string }>(`/${ADMIN_PATH}/subscription-plans/${id}`);
+    api.delete<{ message: string; item?: AdminSubscriptionPlan }>(`/${ADMIN_PATH}/subscription-plans/${id}`);
 
 export const adminToggleSubscriptionPlan = (id: string) =>
     api.patch<{ item: AdminSubscriptionPlan }>(`/${ADMIN_PATH}/subscription-plans/${id}/toggle`);
 
+export const adminToggleSubscriptionPlanFeatured = (id: string) =>
+    api.put<{ item: AdminSubscriptionPlan }>(`/${ADMIN_PATH}/subscription-plans/${id}/toggle-featured`);
+
 export const adminReorderSubscriptionPlans = (order: string[]) =>
     api.put<{ message: string }>(`/${ADMIN_PATH}/subscription-plans/reorder`, { order });
+
+export const adminUpdateSubscriptionSettings = (data: SubscriptionPlansPublicSettings) =>
+    api.put<{ settings: SubscriptionPlansPublicSettings; message: string }>(`/${ADMIN_PATH}/subscription-settings`, data);
 
 export const adminAssignSubscriptionPlan = (payload: SubscriptionAssignmentPayload) =>
     api.post<{ message: string; item: Record<string, unknown> }>(`/${ADMIN_PATH}/subscriptions/assign`, payload);
@@ -4090,15 +4394,39 @@ export const adminBulkImportUniversities = (data: FormData) =>
     });
 export const adminExportExamResults = (examId: string) =>
     api.get(`/${ADMIN_PATH}/exams/${examId}/export`, { responseType: 'blob' });
-export const adminDownloadExamResultImportTemplate = (examId: string, format: 'csv' | 'xlsx' = 'xlsx') =>
+export const adminDownloadExamResultImportTemplate = (
+    examId: string,
+    format: 'csv' | 'xlsx' = 'xlsx',
+    mode: 'internal' | 'external' = 'internal',
+) =>
     api.get(`/${ADMIN_PATH}/exams/${examId}/results/import-template`, {
-        params: { format },
+        params: { format, mode },
         responseType: 'blob',
     });
 export const adminImportExamResultsFile = (examId: string, file: File) => {
     const formData = new FormData();
     formData.append('file', file);
     return api.post(`/${ADMIN_PATH}/exams/${examId}/results/import`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+    });
+};
+export const adminImportExternalExamResultsFile = (
+    examId: string,
+    file: File,
+    options: {
+        mapping?: Record<string, string>;
+        syncProfileMode?: 'none' | 'fill_missing_only' | 'overwrite_mapped_fields';
+    } = {},
+) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (options.mapping && Object.keys(options.mapping).length > 0) {
+        formData.append('mapping', JSON.stringify(options.mapping));
+    }
+    if (options.syncProfileMode) {
+        formData.append('syncProfileMode', options.syncProfileMode);
+    }
+    return api.post(`/${ADMIN_PATH}/exams/${examId}/results/import-external`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
     });
 };
@@ -4182,6 +4510,7 @@ export const startExam = (id: string) => api.post<{
     questions: ApiQuestion[];
     redirect?: boolean;
     externalExamUrl?: string;
+    externalAttemptRef?: string;
     serverNow?: string;
     serverOffsetMs?: number;
     resultPublishMode?: 'immediate' | 'manual' | 'scheduled';

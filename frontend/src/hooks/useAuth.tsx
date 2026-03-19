@@ -14,6 +14,8 @@ interface User {
         canManageStudents: boolean;
         canViewReports: boolean;
         canDeleteData: boolean;
+        canManageFinance?: boolean;
+        canManagePlans?: boolean;
     };
     redirectTo?: string;
     profile_completion_percentage?: number;
@@ -215,6 +217,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             source = null;
         };
 
+        const teardownStreams = () => {
+            closeSource();
+            stopPolling();
+            if (reconnectId !== null) {
+                window.clearTimeout(reconnectId);
+                reconnectId = null;
+            }
+        };
+
         const connectSse = () => {
             if (stopped) return;
             closeSource();
@@ -246,11 +257,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         connectSse();
 
+        const handlePageHide = () => {
+            teardownStreams();
+        };
+
+        window.addEventListener('pagehide', handlePageHide);
+        window.addEventListener('beforeunload', handlePageHide);
+
         return () => {
             stopped = true;
-            closeSource();
-            stopPolling();
-            if (reconnectId !== null) window.clearTimeout(reconnectId);
+            window.removeEventListener('pagehide', handlePageHide);
+            window.removeEventListener('beforeunload', handlePageHide);
+            teardownStreams();
         };
     }, [token, user?._id, triggerForcedLogout]);
 

@@ -28,7 +28,7 @@ export interface INotificationDeliveryLog extends Document {
 
 const NotificationDeliveryLogSchema = new Schema<INotificationDeliveryLog>(
     {
-        jobId: { type: Schema.Types.ObjectId, ref: 'NotificationJob', required: true, index: true },
+        jobId: { type: Schema.Types.ObjectId, ref: 'NotificationJob', required: true },
         campaignId: { type: Schema.Types.ObjectId, ref: 'NotificationJob', default: null },
         studentId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
         guardianTargeted: { type: Boolean, default: false },
@@ -44,7 +44,6 @@ const NotificationDeliveryLogSchema = new Schema<INotificationDeliveryLog>(
             enum: ['sent', 'failed', 'queued'],
             required: true,
             default: 'queued',
-            index: true,
         },
         providerMessageId: { type: String, trim: true },
         errorMessage: { type: String },

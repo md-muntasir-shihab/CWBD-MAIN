@@ -10,11 +10,14 @@ import StudentDueLedger from '../models/StudentDueLedger';
 import Notification from '../models/Notification';
 import Resource from '../models/Resource';
 import StudentNotificationRead from '../models/StudentNotificationRead';
+import UserSubscription from '../models/UserSubscription';
 import {
     getExamHistoryAndProgress,
     getStudentDashboardHeader,
     getUpcomingExamCards,
 } from '../services/studentDashboardService';
+import { getCanonicalSubscriptionSnapshot } from '../services/subscriptionAccessService';
+import { getExternalExamAttemptCount } from '../services/externalExamAttemptService';
 import { computeStudentProfileScore } from '../services/studentProfileScoreService';
 import { getSecurityConfig } from '../services/securityConfigService';
 
@@ -190,13 +193,21 @@ export async function getStudentMeExamById(req: AuthRequest, res: Response): Pro
             return;
         }
 
-        const [exam, user, profile, dueLedger, resultCount, myResult] = await Promise.all([
+        const [exam, user, profile, dueLedger, resultCount, externalAttemptCount, myResult, activeSubscription] = await Promise.all([
             Exam.findById(examId).lean(),
             User.findById(studentId).select('subscription').lean(),
             StudentProfile.findOne({ user_id: studentId }).lean(),
             StudentDueLedger.findOne({ studentId }).lean(),
             ExamResult.countDocuments({ exam: examId, student: studentId }),
+            getExternalExamAttemptCount(examId, studentId),
             ExamResult.findOne({ exam: examId, student: studentId }).sort({ submittedAt: -1 }).lean(),
+            UserSubscription.findOne({
+                userId: studentId,
+                status: 'active',
+                expiresAtUTC: { $gt: new Date() },
+            })
+                .populate('planId', 'code')
+                .lean(),
         ]);
 
         if (!exam) {
@@ -216,22 +227,32 @@ export async function getStudentMeExamById(req: AuthRequest, res: Response): Pro
             : {};
         const requiredUserIds = normalizeObjectIdArray(accessControl.allowedUserIds);
         const requiredGroupIds = normalizeObjectIdArray(accessControl.allowedGroupIds);
+        const visibilityMode = String((exam as Record<string, unknown>).visibilityMode || 'all_students');
+        const targetGroupIds = normalizeObjectIdArray((exam as Record<string, unknown>).targetGroupIds || []);
         const requiredPlanCodes = Array.isArray(accessControl.allowedPlanCodes)
             ? (accessControl.allowedPlanCodes as unknown[]).map((item) => String(item || '').toLowerCase()).filter(Boolean)
             : [];
+        const persistedSubscription = (user?.subscription as Record<string, unknown> | undefined) || {};
+        const activePlan = (activeSubscription?.planId as unknown as Record<string, unknown> | null) || null;
         const studentGroupIds = normalizeObjectIdArray((profile as Record<string, unknown> | null)?.groupIds || []);
-        const subscriptionRequired = Boolean((exam as Record<string, unknown>).subscriptionRequired) || requiredPlanCodes.length > 0;
+        const subscriptionRequired = Boolean((exam as Record<string, unknown>).subscriptionRequired)
+            || Boolean((exam as Record<string, unknown>).requiresActiveSubscription)
+            || visibilityMode === 'subscription_only'
+            || requiredPlanCodes.length > 0;
         const studentPlanCode = String(
-            (user?.subscription as Record<string, unknown> | undefined)?.planCode ||
-            (user?.subscription as Record<string, unknown> | undefined)?.plan ||
+            activePlan?.code ||
+            persistedSubscription.planCode ||
+            persistedSubscription.plan ||
             ''
         ).toLowerCase();
-        const subscriptionExpiryRaw = (user?.subscription as Record<string, unknown> | undefined)?.expiryDate;
+        const subscriptionExpiryRaw = activeSubscription?.expiresAtUTC || persistedSubscription.expiryDate;
         const subscriptionExpiryTime = subscriptionExpiryRaw ? new Date(String(subscriptionExpiryRaw)).getTime() : 0;
         const subscriptionActive = Boolean(
-            (user?.subscription as Record<string, unknown> | undefined)?.isActive &&
+            activeSubscription || (
+            persistedSubscription.isActive &&
             Number.isFinite(subscriptionExpiryTime) &&
             subscriptionExpiryTime > Date.now()
+            )
         );
         const planEligible = requiredPlanCodes.length === 0 || requiredPlanCodes.includes(studentPlanCode);
         const subscriptionEligible = !subscriptionRequired || subscriptionActive;
@@ -240,13 +261,17 @@ export async function getStudentMeExamById(req: AuthRequest, res: Response): Pro
         const paymentPaid = !paymentRequired || pendingDue <= 0;
         const examWindowOpen = new Date(exam.startDate).getTime() <= Date.now() && Date.now() <= new Date(exam.endDate).getTime();
         const attemptLimit = Number(exam.attemptLimit || 1);
-        const attemptsLeft = Math.max(0, attemptLimit - Number(resultCount || 0));
+        const attemptsUsed = Math.max(Number(resultCount || 0), Number(externalAttemptCount || 0));
+        const attemptsLeft = Math.max(0, attemptLimit - attemptsUsed);
         const userEligible = requiredUserIds.length === 0 || requiredUserIds.includes(studentId);
         const groupEligible = requiredGroupIds.length === 0 || hasAnyIntersection(requiredGroupIds, studentGroupIds);
+        const visibilityGroupEligible = !((visibilityMode === 'group_only' || visibilityMode === 'custom')
+            && targetGroupIds.length > 0
+            && !hasAnyIntersection(targetGroupIds, studentGroupIds));
         const assignedEligible = String(exam.accessMode || 'all') !== 'specific'
             || (Array.isArray(exam.allowedUsers) && exam.allowedUsers.some((id) => String(id) === studentId));
 
-        if (!userEligible || !groupEligible || !assignedEligible) {
+        if (!userEligible || !groupEligible || !visibilityGroupEligible || !assignedEligible) {
             res.status(403).json({
                 message: 'You are not assigned to this exam.',
                 eligibility: {
@@ -254,7 +279,7 @@ export async function getStudentMeExamById(req: AuthRequest, res: Response): Pro
                     checks: {
                         access: {
                             userRestricted: requiredUserIds.length > 0,
-                            groupRestricted: requiredGroupIds.length > 0,
+                            groupRestricted: requiredGroupIds.length > 0 || targetGroupIds.length > 0,
                             passed: false,
                         },
                     },
@@ -269,6 +294,7 @@ export async function getStudentMeExamById(req: AuthRequest, res: Response): Pro
             planEligible &&
             userEligible &&
             groupEligible &&
+            visibilityGroupEligible &&
             assignedEligible &&
             paymentPaid &&
             examWindowOpen &&
@@ -279,7 +305,7 @@ export async function getStudentMeExamById(req: AuthRequest, res: Response): Pro
         res.json({
             exam: {
                 ...exam,
-                attemptsUsed: Number(resultCount || 0),
+                attemptsUsed,
                 attemptsLeft,
             },
             eligibility: {
@@ -307,8 +333,8 @@ export async function getStudentMeExamById(req: AuthRequest, res: Response): Pro
                     },
                     access: {
                         userRestricted: requiredUserIds.length > 0,
-                        groupRestricted: requiredGroupIds.length > 0,
-                        passed: userEligible && groupEligible && assignedEligible,
+                        groupRestricted: requiredGroupIds.length > 0 || targetGroupIds.length > 0,
+                        passed: userEligible && groupEligible && visibilityGroupEligible && assignedEligible,
                     },
                     examWindow: {
                         passed: examWindowOpen,
@@ -590,7 +616,11 @@ export async function getStudentMeResources(req: AuthRequest, res: Response): Pr
 
         const category = String(req.query.category || '').trim();
         const q = String(req.query.q || '').trim();
-        const filter: Record<string, unknown> = { isPublic: true };
+        const subscriptionSnapshot = await getCanonicalSubscriptionSnapshot(studentId);
+        const filter: Record<string, unknown> = {};
+        if (subscriptionSnapshot.allowsPremiumResources !== true) {
+            filter.isPublic = true;
+        }
         if (category && category.toLowerCase() !== 'all') filter.category = category;
         if (q) {
             const regex = new RegExp(q, 'i');

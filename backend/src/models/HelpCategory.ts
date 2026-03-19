@@ -25,7 +25,6 @@ const HelpCategorySchema = new Schema<IHelpCategory>(
     { timestamps: true, collection: 'help_categories' },
 );
 
-HelpCategorySchema.index({ slug: 1 }, { unique: true });
 HelpCategorySchema.index({ isActive: 1, displayOrder: 1 });
 
 export default mongoose.model<IHelpCategory>('HelpCategory', HelpCategorySchema);

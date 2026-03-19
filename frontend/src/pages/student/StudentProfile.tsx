@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect } from 'react';
-import { User, Upload, Save, Loader2, AlertCircle, Lock } from 'lucide-react';
+import { User, Upload, Save, Loader2, AlertCircle, Lock, BookOpen, Clock3, FileText, Hash, MapPin } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { changePassword, getStudentProfile, updateStudentProfile, uploadStudentDocument } from '../../services/api';
 import AchievementPopupCard from '../../components/ui/AchievementPopupCard';
@@ -205,6 +205,7 @@ export default function StudentProfile() {
 
     const completion = profile?.profile_completion || 0;
     const mySubscription = mySubscriptionQuery.data;
+    const examData = profile?.exam_data;
 
     return (
         <div className="w-full max-w-5xl space-y-6 sm:space-y-8">
@@ -258,6 +259,77 @@ export default function StudentProfile() {
                     </div>
                 )}
             </div>
+
+            {examData && (
+                <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+                    <div className="p-6 border-b border-slate-200 dark:border-slate-700">
+                        <h2 className="text-lg font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+                            <BookOpen className="w-5 h-5 text-indigo-500" />
+                            Exam Data & Records
+                        </h2>
+                        <p className="mt-1 text-sm text-slate-500">Identity fields, synced result summary, and recent exam history.</p>
+                    </div>
+                    <div className="p-6 space-y-5">
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50">
+                                <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500"><Hash className="w-3.5 h-3.5" />Serial ID</p>
+                                <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">{examData.identity?.serialId || '-'}</p>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50">
+                                <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500"><Hash className="w-3.5 h-3.5" />Roll / Registration</p>
+                                <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">{examData.identity?.rollNumber || '-'}</p>
+                                <p className="mt-1 text-xs text-slate-500">{examData.identity?.registrationNumber || 'No registration synced yet'}</p>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/50">
+                                <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500"><MapPin className="w-3.5 h-3.5" />Exam Center</p>
+                                <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">{examData.identity?.examCenter || '-'}</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+                            <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
+                                <p className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white"><FileText className="w-4 h-4 text-indigo-500" />Latest Result Summary</p>
+                                <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">{examData.latestResultSummary || 'No result summary available yet.'}</p>
+                                <div className="mt-4 flex flex-wrap gap-3 text-xs text-slate-500">
+                                    <span className="inline-flex items-center gap-1"><Clock3 className="w-3.5 h-3.5" />Last sync: {examData.lastSyncAt ? new Date(examData.lastSyncAt).toLocaleString() : 'Never'}</span>
+                                    <span>Source: {examData.lastSyncSource || 'n/a'}</span>
+                                </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
+                                <p className="text-sm font-semibold text-slate-900 dark:text-white">Recent Sync Logs</p>
+                                <div className="mt-3 space-y-2">
+                                    {(examData.syncLogs || []).slice(0, 4).map((log: any) => (
+                                        <div key={String(log._id || `${log.source}-${log.createdAt || ''}`)} className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900/50">
+                                            <p className="text-sm font-medium text-slate-800 dark:text-white">{log.source || 'sync'}</p>
+                                            <p className="mt-1 text-xs text-slate-500">{log.status || 'unknown'} · {log.syncMode || 'default'}</p>
+                                        </div>
+                                    ))}
+                                    {(!examData.syncLogs || examData.syncLogs.length === 0) && (
+                                        <p className="text-sm text-slate-500">No sync logs yet.</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <p className="text-sm font-semibold text-slate-900 dark:text-white">Recent Exam History</p>
+                            <div className="mt-3 grid gap-3 md:grid-cols-2">
+                                {(examData.history || []).slice(0, 6).map((item: any) => (
+                                    <div key={String(item.examId || item.examSlug || item.examTitle || Math.random())} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                                        <p className="text-sm font-semibold text-slate-900 dark:text-white">{item.examTitle || 'Exam'}</p>
+                                        <p className="mt-1 text-xs text-slate-500">{item.resultStatus || item.examStatus || 'status pending'} · {item.source || 'sync'}</p>
+                                        <p className="mt-2 text-xs text-slate-500">{item.examCenter || examData.identity?.examCenter || 'No center recorded'}</p>
+                                    </div>
+                                ))}
+                                {(!examData.history || examData.history.length === 0) && (
+                                    <div className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-slate-700">No exam history has been synced yet.</div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                 {/* Main Form */}

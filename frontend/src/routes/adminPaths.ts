@@ -6,15 +6,31 @@ import {
     FolderOpen, ScrollText, BookOpen,
     Users, UserCog, ClipboardList, Bell,
     CreditCard, Wallet, LifeBuoy, Mail, Shield, BarChart3,
-    User, Rss, Layers, Archive, Sparkles, Copy, Upload,
+    User, Rss, Layers, Archive, Sparkles, Copy, Upload, Link2,
     Send, FileText, History, Database,
     UserPlus, Import, Target, MessageSquare, TrendingDown,
     FlaskConical,
     KeyRound,
     Zap,
+    HelpCircle,
 } from 'lucide-react';
 
 export type AdminMenuIcon = ComponentType<{ className?: string }>;
+export type AdminAllowedRole =
+    | 'superadmin'
+    | 'admin'
+    | 'moderator'
+    | 'editor'
+    | 'viewer'
+    | 'support_agent'
+    | 'finance_agent';
+export type AdminLegacyPermission =
+    | 'canEditExams'
+    | 'canManageStudents'
+    | 'canViewReports'
+    | 'canDeleteData'
+    | 'canManageFinance'
+    | 'canManagePlans';
 
 export const ADMIN_PATHS = {
     dashboard: ADMIN_DASHBOARD,
@@ -26,6 +42,13 @@ export const ADMIN_PATHS = {
     universities: adminUi('universities'),
     news: adminUi('news'),
     exams: adminUi('exams'),
+    examsExternal: `${adminUi('exams')}?tab=external`,
+    examsInternal: `${adminUi('exams')}?tab=internal`,
+    examsImports: `${adminUi('exams')}?tab=imports`,
+    examsTemplates: `${adminUi('exams')}?tab=templates`,
+    examsCenters: `${adminUi('exams')}?tab=centers`,
+    examsSyncLogs: `${adminUi('exams')}?tab=sync-logs`,
+    examsSettings: `${adminUi('exams')}?tab=settings`,
     questionBank: adminUi('question-bank'),
     questionBankNew: adminUi('question-bank/new'),
     questionBankEdit: adminUi('question-bank/edit'),
@@ -55,7 +78,7 @@ export const ADMIN_PATHS = {
     studentMgmtSettings: adminUi('student-management/settings'),
     studentMgmtDetail: adminUi('student-management/students'),  // /:id suffix added by router
     subscriptionsV2: adminUi('subscriptions-v2'),
-    subscriptionPlans: adminUi('subscription-plans'),
+    subscriptionPlans: adminUi('subscriptions/plans'),
     payments: adminUi('payments'),
     financeCenter: adminUi('finance'),
     financeDashboard: adminUi('finance/dashboard'),
@@ -73,6 +96,7 @@ export const ADMIN_PATHS = {
     resources: adminUi('resources'),
     resourceSettings: adminUi('settings/resource-settings'),
     supportCenter: adminUi('support-center'),
+    helpCenterAdmin: adminUi('help-center'),
     contact: adminUi('contact'),
     notifications: adminUi('settings/notifications'),
     reports: adminUi('reports'),
@@ -112,6 +136,8 @@ export type AdminMenuItem = {
     path: string;
     icon?: AdminMenuIcon;
     module?: string;
+    allowedRoles?: AdminAllowedRole[];
+    requiredLegacyPermission?: AdminLegacyPermission;
     matchPrefixes?: string[];
     children?: { key: string; label: string; path: string; icon?: AdminMenuIcon }[];
 };
@@ -127,7 +153,7 @@ export const ADMIN_MENU_ITEMS: AdminMenuItem[] = [
         label: 'Website Control',
         path: ADMIN_PATHS.homeControl,
         icon: Globe,
-        module: 'home_settings',
+        module: 'home_control',
         matchPrefixes: [
             adminUi('settings/home-control'),
             adminUi('settings/banner-manager'),
@@ -185,7 +211,18 @@ export const ADMIN_MENU_ITEMS: AdminMenuItem[] = [
         path: ADMIN_PATHS.exams,
         icon: BookOpen,
         module: 'exams',
+        allowedRoles: ['superadmin', 'admin', 'moderator', 'editor'],
         matchPrefixes: [adminUi('exams')],
+        children: [
+            { key: 'exam-all', label: 'All Exams', path: ADMIN_PATHS.exams, icon: BookOpen },
+            { key: 'exam-external', label: 'External Exams', path: ADMIN_PATHS.examsExternal, icon: Link2 },
+            { key: 'exam-internal', label: 'Internal Exams', path: ADMIN_PATHS.examsInternal, icon: Layers },
+            { key: 'exam-imports', label: 'Imports', path: ADMIN_PATHS.examsImports, icon: Upload },
+            { key: 'exam-templates', label: 'Templates', path: ADMIN_PATHS.examsTemplates, icon: FileText },
+            { key: 'exam-centers', label: 'Exam Centers', path: ADMIN_PATHS.examsCenters, icon: Target },
+            { key: 'exam-sync', label: 'Sync Logs', path: ADMIN_PATHS.examsSyncLogs, icon: History },
+            { key: 'exam-settings', label: 'Exam Settings', path: ADMIN_PATHS.examsSettings, icon: Settings },
+        ],
     },
 
     // 6. Question Bank
@@ -213,7 +250,7 @@ export const ADMIN_MENU_ITEMS: AdminMenuItem[] = [
         label: 'Student Management',
         path: ADMIN_PATHS.studentMgmtList,
         icon: Users,
-        module: 'student_management',
+        module: 'students_groups',
         matchPrefixes: [
             adminUi('student-management'),
             adminUi('students'),
@@ -232,7 +269,7 @@ export const ADMIN_MENU_ITEMS: AdminMenuItem[] = [
             { key: 'stu-crm', label: 'CRM Timeline', path: ADMIN_PATHS.studentMgmtCrmTimeline, icon: MessageSquare },
             { key: 'stu-weak', label: 'Weak Topics', path: ADMIN_PATHS.studentMgmtWeakTopics, icon: TrendingDown },
             { key: 'stu-profile-requests', label: 'Profile Requests', path: ADMIN_PATHS.studentMgmtProfileRequests, icon: ClipboardList },
-            { key: 'stu-notif', label: 'Notification Center', path: ADMIN_PATHS.notificationCenter, icon: Bell },
+            { key: 'stu-notif', label: 'Actionable Alerts', path: ADMIN_PATHS.notificationCenter, icon: Bell },
             { key: 'stu-settings', label: 'Settings', path: ADMIN_PATHS.studentMgmtSettings, icon: Settings },
         ],
     },
@@ -243,8 +280,10 @@ export const ADMIN_MENU_ITEMS: AdminMenuItem[] = [
         label: 'Subscription & Payments',
         path: ADMIN_PATHS.subscriptionPlans,
         icon: CreditCard,
-        module: 'subscriptions',
-        matchPrefixes: [adminUi('subscription-plans'), adminUi('subscriptions-v2')],
+        module: 'subscription_plans',
+        allowedRoles: ['superadmin', 'admin', 'moderator'],
+        requiredLegacyPermission: 'canManagePlans',
+        matchPrefixes: [adminUi('subscriptions/plans'), adminUi('subscription-plans'), adminUi('subscriptions-v2')],
         children: [
             { key: 'sub-plans', label: 'Subscription Plans', path: ADMIN_PATHS.subscriptionPlans, icon: CreditCard },
             { key: 'sub-v2', label: 'Subscriptions', path: ADMIN_PATHS.subscriptionsV2, icon: CreditCard },
@@ -271,14 +310,13 @@ export const ADMIN_MENU_ITEMS: AdminMenuItem[] = [
         label: 'Support & Communication',
         path: ADMIN_PATHS.supportCenter,
         icon: LifeBuoy,
-        module: 'support',
-        matchPrefixes: [adminUi('support-center'), adminUi('contact'), adminUi('settings/notifications'), adminUi('notifications/test-send'), adminUi('notifications/triggers')],
+        module: 'support_center',
+        matchPrefixes: [adminUi('support-center'), adminUi('help-center'), adminUi('contact'), adminUi('settings/notifications')],
         children: [
             { key: 'sup-center', label: 'Support Center', path: ADMIN_PATHS.supportCenter, icon: LifeBuoy },
+            { key: 'sup-help', label: 'Help Center', path: ADMIN_PATHS.helpCenterAdmin, icon: HelpCircle },
             { key: 'sup-contact', label: 'Contact Messages', path: ADMIN_PATHS.contact, icon: Mail },
-            { key: 'sup-notif', label: 'Notifications', path: ADMIN_PATHS.notifications, icon: Bell },
-            { key: 'sup-test-send', label: 'Test Send', path: ADMIN_PATHS.notificationTestSend, icon: FlaskConical },
-            { key: 'sup-triggers', label: 'Auto Triggers', path: ADMIN_PATHS.notificationTriggers, icon: Zap },
+            { key: 'sup-notif', label: 'Notification Settings', path: ADMIN_PATHS.notifications, icon: Bell },
         ],
     },
 
@@ -288,13 +326,15 @@ export const ADMIN_MENU_ITEMS: AdminMenuItem[] = [
         label: 'Campaign Platform',
         path: ADMIN_PATHS.campaignsDashboard,
         icon: Send,
-        module: 'campaigns',
-        matchPrefixes: [adminUi('campaigns')],
+        module: 'notifications',
+        matchPrefixes: [adminUi('campaigns'), adminUi('notifications/test-send'), adminUi('notifications/triggers')],
         children: [
             { key: 'cmp-dash', label: 'Dashboard', path: ADMIN_PATHS.campaignsDashboard, icon: LayoutDashboard },
             { key: 'cmp-list', label: 'All Campaigns', path: ADMIN_PATHS.campaignsList, icon: ScrollText },
             { key: 'cmp-new', label: 'New Campaign', path: ADMIN_PATHS.campaignsNew, icon: Send },
             { key: 'cmp-templates', label: 'Templates', path: ADMIN_PATHS.campaignsTemplates, icon: FileText },
+            { key: 'cmp-test-send', label: 'Test Send', path: ADMIN_PATHS.notificationTestSend, icon: FlaskConical },
+            { key: 'cmp-triggers', label: 'Auto Triggers', path: ADMIN_PATHS.notificationTriggers, icon: Zap },
             { key: 'cmp-logs', label: 'Delivery Logs', path: ADMIN_PATHS.campaignsLogs, icon: ScrollText },
             { key: 'cmp-settings', label: 'Settings', path: ADMIN_PATHS.campaignsSettings, icon: Settings },
         ],
@@ -306,7 +346,7 @@ export const ADMIN_MENU_ITEMS: AdminMenuItem[] = [
         label: 'Data Hub',
         path: ADMIN_PATHS.dataHub,
         icon: Database,
-        module: 'data_hub',
+        module: 'reports_analytics',
         matchPrefixes: [adminUi('data-hub')],
         children: [
             { key: 'dh-export', label: 'Export Center', path: ADMIN_PATHS.dataHub, icon: Upload },
@@ -320,7 +360,9 @@ export const ADMIN_MENU_ITEMS: AdminMenuItem[] = [
         label: 'Finance Center',
         path: ADMIN_PATHS.financeDashboard,
         icon: Wallet,
-        module: 'finance',
+        module: 'finance_center',
+        allowedRoles: ['superadmin', 'admin', 'moderator', 'finance_agent'],
+        requiredLegacyPermission: 'canManageFinance',
         matchPrefixes: [adminUi('finance'), adminUi('payments')],
         children: [
             { key: 'fc-dashboard', label: 'Dashboard', path: ADMIN_PATHS.financeDashboard, icon: LayoutDashboard },
@@ -390,6 +432,7 @@ export const LEGACY_ADMIN_PATH_REDIRECTS: Record<string, string> = {
     [adminUi('users')]: ADMIN_PATHS.adminProfile,
     [adminUi('exports')]: ADMIN_PATHS.reports,
     [adminUi('payments')]: ADMIN_PATHS.financeTransactions,
+    [adminUi('subscription-plans')]: ADMIN_PATHS.subscriptionPlans,
     [adminUi('password')]: ADMIN_PATHS.adminProfile,
     [adminUi('security')]: ADMIN_PATHS.securityCenter,
     [adminUi('audit')]: ADMIN_PATHS.systemLogs,

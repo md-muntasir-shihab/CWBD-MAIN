@@ -4,6 +4,7 @@ import StudentContactTimeline from '../models/StudentContactTimeline';
 import AuditLog from '../models/AuditLog';
 import { AuthRequest } from '../middlewares/auth';
 import { getClientIp } from '../utils/requestMeta';
+import { addSystemTimelineEvent } from '../services/studentTimelineService';
 
 /* ── helpers ── */
 
@@ -121,19 +122,4 @@ export async function adminGetTimelineSummary(req: AuthRequest, res: Response): 
    UTILITY — add system event programmatically
    ═══════════════════════════════════════════════════════════ */
 
-export async function addSystemTimelineEvent(
-    studentId: mongoose.Types.ObjectId,
-    type: string,
-    content: string,
-    metadata?: Record<string, unknown>,
-    linkedId?: mongoose.Types.ObjectId,
-): Promise<void> {
-    await StudentContactTimeline.create({
-        studentId,
-        type,
-        content,
-        linkedId,
-        sourceType: 'system',
-        metadata,
-    });
-}
+export { addSystemTimelineEvent };

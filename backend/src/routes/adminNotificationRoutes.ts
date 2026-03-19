@@ -43,7 +43,7 @@ import {
 type AuthRequest = Request;
 
 const router = Router();
-const adminAuth = [authenticate, authorize('superadmin', 'admin', 'moderator')];
+const adminAuth = [authenticate, authorize('superadmin', 'admin', 'moderator', 'editor', 'viewer', 'support_agent', 'finance_agent')];
 
 /* ────────────────────────────────────────────────────────────────
    Campaign management

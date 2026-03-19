@@ -15,6 +15,7 @@ import { addFinanceStreamClient, broadcastFinanceEvent } from '../realtime/finan
 import { getRuntimeSettingsSnapshot } from '../services/runtimeSettingsService';
 import { getClientIp } from '../utils/requestMeta';
 import { createIncomeFromPayment } from '../services/financeCenterService';
+import { activateSubscriptionFromPayment, recomputeStudentDueLedger } from '../services/subscriptionLifecycleService';
 
 type DateRange = { from?: Date; to?: Date };
 
@@ -128,26 +129,7 @@ async function settleSuccessfulPayment(
     actorId: mongoose.Types.ObjectId | null,
 ): Promise<void> {
     if (payment.entryType === 'subscription' && payment.subscriptionPlanId) {
-        const plan = await SubscriptionPlan.findById(payment.subscriptionPlanId);
-        if (plan) {
-            const expiryDate = new Date();
-            expiryDate.setDate(expiryDate.getDate() + plan.durationDays);
-
-            await User.findByIdAndUpdate(payment.studentId, {
-                $set: {
-                    subscription: {
-                        plan: String(plan._id),
-                        planCode: plan.code,
-                        planName: plan.name,
-                        isActive: true,
-                        startDate: new Date(),
-                        expiryDate,
-                        assignedBy: actorId || payment.recordedBy || null,
-                        assignedAt: new Date(),
-                    },
-                },
-            });
-        }
+        await activateSubscriptionFromPayment(payment, actorId ? String(actorId) : String(payment.recordedBy || payment.studentId));
     }
 
     if (payment.entryType === 'due_settlement' || payment.entryType === 'subscription' || payment.entryType === 'exam_fee') {
@@ -188,6 +170,14 @@ async function settleSuccessfulPayment(
         });
     } catch (fcErr) {
         console.error('[settleSuccessfulPayment] Finance auto-post failed:', fcErr);
+    }
+
+    if (payment.entryType === 'subscription') {
+        await recomputeStudentDueLedger(
+            String(payment.studentId),
+            actorId ? String(actorId) : String(payment.recordedBy || payment.studentId),
+            `Subscription payment settled ${String(payment._id)}`
+        );
     }
 }
 
@@ -1134,7 +1124,7 @@ export async function adminGetFinanceTestBoard(req: AuthRequest, res: Response):
                 { $match: { entryType: 'subscription' } },
                 {
                     $lookup: {
-                        from: 'subscription_plans',
+                        from: 'subscriptionplans',
                         localField: 'subscriptionPlanId',
                         foreignField: '_id',
                         as: 'plan',
