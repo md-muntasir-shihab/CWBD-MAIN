@@ -25,6 +25,7 @@ const Notification_1 = __importDefault(require("../models/Notification"));
 const Resource_1 = __importDefault(require("../models/Resource"));
 const StudentNotificationRead_1 = __importDefault(require("../models/StudentNotificationRead"));
 const studentDashboardService_1 = require("../services/studentDashboardService");
+const externalExamAttemptService_1 = require("../services/externalExamAttemptService");
 const studentProfileScoreService_1 = require("../services/studentProfileScoreService");
 const securityConfigService_1 = require("../services/securityConfigService");
 function ensureStudent(req, res) {
@@ -173,12 +174,13 @@ async function getStudentMeExamById(req, res) {
             res.status(400).json({ message: 'Invalid exam id' });
             return;
         }
-        const [exam, user, profile, dueLedger, resultCount, myResult] = await Promise.all([
+        const [exam, user, profile, dueLedger, resultCount, externalAttemptCount, myResult] = await Promise.all([
             Exam_1.default.findById(examId).lean(),
             User_1.default.findById(studentId).select('subscription').lean(),
             StudentProfile_1.default.findOne({ user_id: studentId }).lean(),
             StudentDueLedger_1.default.findOne({ studentId }).lean(),
             ExamResult_1.default.countDocuments({ exam: examId, student: studentId }),
+            (0, externalExamAttemptService_1.getExternalExamAttemptCount)(examId, studentId),
             ExamResult_1.default.findOne({ exam: examId, student: studentId }).sort({ submittedAt: -1 }).lean(),
         ]);
         if (!exam) {
@@ -192,11 +194,16 @@ async function getStudentMeExamById(req, res) {
             : {};
         const requiredUserIds = normalizeObjectIdArray(accessControl.allowedUserIds);
         const requiredGroupIds = normalizeObjectIdArray(accessControl.allowedGroupIds);
+        const visibilityMode = String(exam.visibilityMode || 'all_students');
+        const targetGroupIds = normalizeObjectIdArray(exam.targetGroupIds || []);
         const requiredPlanCodes = Array.isArray(accessControl.allowedPlanCodes)
             ? accessControl.allowedPlanCodes.map((item) => String(item || '').toLowerCase()).filter(Boolean)
             : [];
         const studentGroupIds = normalizeObjectIdArray(profile?.groupIds || []);
-        const subscriptionRequired = Boolean(exam.subscriptionRequired) || requiredPlanCodes.length > 0;
+        const subscriptionRequired = Boolean(exam.subscriptionRequired)
+            || Boolean(exam.requiresActiveSubscription)
+            || visibilityMode === 'subscription_only'
+            || requiredPlanCodes.length > 0;
         const studentPlanCode = String(user?.subscription?.planCode ||
             user?.subscription?.plan ||
             '').toLowerCase();
@@ -212,12 +219,16 @@ async function getStudentMeExamById(req, res) {
         const paymentPaid = !paymentRequired || pendingDue <= 0;
         const examWindowOpen = new Date(exam.startDate).getTime() <= Date.now() && Date.now() <= new Date(exam.endDate).getTime();
         const attemptLimit = Number(exam.attemptLimit || 1);
-        const attemptsLeft = Math.max(0, attemptLimit - Number(resultCount || 0));
+        const attemptsUsed = Math.max(Number(resultCount || 0), Number(externalAttemptCount || 0));
+        const attemptsLeft = Math.max(0, attemptLimit - attemptsUsed);
         const userEligible = requiredUserIds.length === 0 || requiredUserIds.includes(studentId);
         const groupEligible = requiredGroupIds.length === 0 || hasAnyIntersection(requiredGroupIds, studentGroupIds);
+        const visibilityGroupEligible = !((visibilityMode === 'group_only' || visibilityMode === 'custom')
+            && targetGroupIds.length > 0
+            && !hasAnyIntersection(targetGroupIds, studentGroupIds));
         const assignedEligible = String(exam.accessMode || 'all') !== 'specific'
             || (Array.isArray(exam.allowedUsers) && exam.allowedUsers.some((id) => String(id) === studentId));
-        if (!userEligible || !groupEligible || !assignedEligible) {
+        if (!userEligible || !groupEligible || !visibilityGroupEligible || !assignedEligible) {
             res.status(403).json({
                 message: 'You are not assigned to this exam.',
                 eligibility: {
@@ -225,7 +236,7 @@ async function getStudentMeExamById(req, res) {
                     checks: {
                         access: {
                             userRestricted: requiredUserIds.length > 0,
-                            groupRestricted: requiredGroupIds.length > 0,
+                            groupRestricted: requiredGroupIds.length > 0 || targetGroupIds.length > 0,
                             passed: false,
                         },
                     },
@@ -238,6 +249,7 @@ async function getStudentMeExamById(req, res) {
             planEligible &&
             userEligible &&
             groupEligible &&
+            visibilityGroupEligible &&
             assignedEligible &&
             paymentPaid &&
             examWindowOpen &&
@@ -246,7 +258,7 @@ async function getStudentMeExamById(req, res) {
         res.json({
             exam: {
                 ...exam,
-                attemptsUsed: Number(resultCount || 0),
+                attemptsUsed,
                 attemptsLeft,
             },
             eligibility: {
@@ -274,8 +286,8 @@ async function getStudentMeExamById(req, res) {
                     },
                     access: {
                         userRestricted: requiredUserIds.length > 0,
-                        groupRestricted: requiredGroupIds.length > 0,
-                        passed: userEligible && groupEligible && assignedEligible,
+                        groupRestricted: requiredGroupIds.length > 0 || targetGroupIds.length > 0,
+                        passed: userEligible && groupEligible && visibilityGroupEligible && assignedEligible,
                     },
                     examWindow: {
                         passed: examWindowOpen,

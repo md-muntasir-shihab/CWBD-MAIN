@@ -1,5 +1,5 @@
 import mongoose, { Document } from 'mongoose';
-interface IExamCenter {
+export interface IExamCenter {
     city: string;
     address: string;
 }
@@ -48,6 +48,7 @@ export interface IUniversity extends Document {
         businessExamDate?: string;
     };
     clusterSyncLocked?: boolean;
+    categorySyncLocked?: boolean;
     applicationStartDate?: Date;
     applicationEndDate?: Date;
     scienceExamDate?: string;

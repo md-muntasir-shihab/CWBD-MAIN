@@ -84,6 +84,7 @@ const UniversitySchema = new mongoose_1.Schema({
     clusterCount: Number,
     clusterDateOverrides: { type: ClusterDateOverridesSchema, default: () => ({}) },
     clusterSyncLocked: { type: Boolean, default: false },
+    categorySyncLocked: { type: Boolean, default: false },
     applicationStartDate: Date,
     applicationEndDate: Date,
     scienceExamDate: { type: String, default: 'N/A' },

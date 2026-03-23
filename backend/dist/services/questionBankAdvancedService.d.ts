@@ -146,23 +146,27 @@ export declare function resolveSetQuestions(setId: string): Promise<any[] | null
 export declare function searchBankQuestionsForExam(examId: string, params: ListBankQuestionsParams): Promise<any>;
 export declare function attachBankQuestionsToExam(examId: string, bankQuestionIds: string[], adminId: string): Promise<mongoose.MergeType<mongoose.Document<unknown, {}, {
     tags: string[];
-    examId: string;
     options: mongoose.Types.DocumentArray<{
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }, mongoose.Types.Subdocument<mongoose.mongo.BSON.ObjectId, any, {
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }> & {
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }>;
+    examId: string;
+    topic?: string | null | undefined;
+    marks?: number | null | undefined;
+    negativeMarks?: number | null | undefined;
+    difficulty?: string | null | undefined;
     fromBankQuestionId?: string | null | undefined;
     orderIndex?: number | null | undefined;
     question_en?: string | null | undefined;
@@ -171,32 +175,32 @@ export declare function attachBankQuestionsToExam(examId: string, bankQuestionId
     explanation_en?: string | null | undefined;
     explanation_bn?: string | null | undefined;
     explanationImageUrl?: string | null | undefined;
-    marks?: number | null | undefined;
-    negativeMarks?: number | null | undefined;
-    topic?: string | null | undefined;
-    difficulty?: string | null | undefined;
-    correctKey?: "A" | "B" | "C" | "D" | null | undefined;
+    correctKey?: "C" | "D" | "A" | "B" | null | undefined;
 } & mongoose.DefaultTimestampProps, {}, {
     timestamps: true;
 }> & {
     tags: string[];
-    examId: string;
     options: mongoose.Types.DocumentArray<{
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }, mongoose.Types.Subdocument<mongoose.mongo.BSON.ObjectId, any, {
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }> & {
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }>;
+    examId: string;
+    topic?: string | null | undefined;
+    marks?: number | null | undefined;
+    negativeMarks?: number | null | undefined;
+    difficulty?: string | null | undefined;
     fromBankQuestionId?: string | null | undefined;
     orderIndex?: number | null | undefined;
     question_en?: string | null | undefined;
@@ -205,11 +209,7 @@ export declare function attachBankQuestionsToExam(examId: string, bankQuestionId
     explanation_en?: string | null | undefined;
     explanation_bn?: string | null | undefined;
     explanationImageUrl?: string | null | undefined;
-    marks?: number | null | undefined;
-    negativeMarks?: number | null | undefined;
-    topic?: string | null | undefined;
-    difficulty?: string | null | undefined;
-    correctKey?: "A" | "B" | "C" | "D" | null | undefined;
+    correctKey?: "C" | "D" | "A" | "B" | null | undefined;
 } & mongoose.DefaultTimestampProps & {
     _id: mongoose.Types.ObjectId;
 } & {
@@ -234,23 +234,27 @@ export declare function attachBankQuestionsToExam(examId: string, bankQuestionId
 }, "_id">>[]>;
 export declare function removeBankQuestionFromExam(examId: string, examQuestionId: string, adminId: string): Promise<(mongoose.Document<unknown, {}, {
     tags: string[];
-    examId: string;
     options: mongoose.Types.DocumentArray<{
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }, mongoose.Types.Subdocument<mongoose.mongo.BSON.ObjectId, any, {
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }> & {
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }>;
+    examId: string;
+    topic?: string | null | undefined;
+    marks?: number | null | undefined;
+    negativeMarks?: number | null | undefined;
+    difficulty?: string | null | undefined;
     fromBankQuestionId?: string | null | undefined;
     orderIndex?: number | null | undefined;
     question_en?: string | null | undefined;
@@ -259,32 +263,32 @@ export declare function removeBankQuestionFromExam(examId: string, examQuestionI
     explanation_en?: string | null | undefined;
     explanation_bn?: string | null | undefined;
     explanationImageUrl?: string | null | undefined;
-    marks?: number | null | undefined;
-    negativeMarks?: number | null | undefined;
-    topic?: string | null | undefined;
-    difficulty?: string | null | undefined;
-    correctKey?: "A" | "B" | "C" | "D" | null | undefined;
+    correctKey?: "C" | "D" | "A" | "B" | null | undefined;
 } & mongoose.DefaultTimestampProps, {}, {
     timestamps: true;
 }> & {
     tags: string[];
-    examId: string;
     options: mongoose.Types.DocumentArray<{
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }, mongoose.Types.Subdocument<mongoose.mongo.BSON.ObjectId, any, {
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }> & {
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }>;
+    examId: string;
+    topic?: string | null | undefined;
+    marks?: number | null | undefined;
+    negativeMarks?: number | null | undefined;
+    difficulty?: string | null | undefined;
     fromBankQuestionId?: string | null | undefined;
     orderIndex?: number | null | undefined;
     question_en?: string | null | undefined;
@@ -293,11 +297,7 @@ export declare function removeBankQuestionFromExam(examId: string, examQuestionI
     explanation_en?: string | null | undefined;
     explanation_bn?: string | null | undefined;
     explanationImageUrl?: string | null | undefined;
-    marks?: number | null | undefined;
-    negativeMarks?: number | null | undefined;
-    topic?: string | null | undefined;
-    difficulty?: string | null | undefined;
-    correctKey?: "A" | "B" | "C" | "D" | null | undefined;
+    correctKey?: "C" | "D" | "A" | "B" | null | undefined;
 } & mongoose.DefaultTimestampProps & {
     _id: mongoose.Types.ObjectId;
 } & {
@@ -308,23 +308,27 @@ export declare function reorderExamQuestions(examId: string, orderMap: {
     orderIndex: number;
 }[], adminId: string): Promise<(mongoose.FlattenMaps<{
     tags: string[];
-    examId: string;
     options: mongoose.Types.DocumentArray<{
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }, mongoose.Types.Subdocument<mongoose.mongo.BSON.ObjectId, any, {
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }> & {
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }>;
+    examId: string;
+    topic?: string | null | undefined;
+    marks?: number | null | undefined;
+    negativeMarks?: number | null | undefined;
+    difficulty?: string | null | undefined;
     fromBankQuestionId?: string | null | undefined;
     orderIndex?: number | null | undefined;
     question_en?: string | null | undefined;
@@ -333,11 +337,7 @@ export declare function reorderExamQuestions(examId: string, orderMap: {
     explanation_en?: string | null | undefined;
     explanation_bn?: string | null | undefined;
     explanationImageUrl?: string | null | undefined;
-    marks?: number | null | undefined;
-    negativeMarks?: number | null | undefined;
-    topic?: string | null | undefined;
-    difficulty?: string | null | undefined;
-    correctKey?: "A" | "B" | "C" | "D" | null | undefined;
+    correctKey?: "C" | "D" | "A" | "B" | null | undefined;
     createdAt: NativeDate;
     updatedAt: NativeDate;
 }> & {

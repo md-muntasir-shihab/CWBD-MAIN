@@ -1,23 +1,27 @@
 import { Schema } from "mongoose";
 export declare const ExamQuestionModel: import("mongoose").Model<{
     tags: string[];
-    examId: string;
     options: import("mongoose").Types.DocumentArray<{
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }, import("mongoose").Types.Subdocument<import("bson").ObjectId, any, {
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }> & {
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }>;
+    examId: string;
+    topic?: string | null | undefined;
+    marks?: number | null | undefined;
+    negativeMarks?: number | null | undefined;
+    difficulty?: string | null | undefined;
     fromBankQuestionId?: string | null | undefined;
     orderIndex?: number | null | undefined;
     question_en?: string | null | undefined;
@@ -26,30 +30,30 @@ export declare const ExamQuestionModel: import("mongoose").Model<{
     explanation_en?: string | null | undefined;
     explanation_bn?: string | null | undefined;
     explanationImageUrl?: string | null | undefined;
-    marks?: number | null | undefined;
-    negativeMarks?: number | null | undefined;
-    topic?: string | null | undefined;
-    difficulty?: string | null | undefined;
-    correctKey?: "A" | "B" | "C" | "D" | null | undefined;
+    correctKey?: "C" | "D" | "A" | "B" | null | undefined;
 } & import("mongoose").DefaultTimestampProps, {}, {}, {}, import("mongoose").Document<unknown, {}, {
     tags: string[];
-    examId: string;
     options: import("mongoose").Types.DocumentArray<{
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }, import("mongoose").Types.Subdocument<import("bson").ObjectId, any, {
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }> & {
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }>;
+    examId: string;
+    topic?: string | null | undefined;
+    marks?: number | null | undefined;
+    negativeMarks?: number | null | undefined;
+    difficulty?: string | null | undefined;
     fromBankQuestionId?: string | null | undefined;
     orderIndex?: number | null | undefined;
     question_en?: string | null | undefined;
@@ -58,32 +62,32 @@ export declare const ExamQuestionModel: import("mongoose").Model<{
     explanation_en?: string | null | undefined;
     explanation_bn?: string | null | undefined;
     explanationImageUrl?: string | null | undefined;
-    marks?: number | null | undefined;
-    negativeMarks?: number | null | undefined;
-    topic?: string | null | undefined;
-    difficulty?: string | null | undefined;
-    correctKey?: "A" | "B" | "C" | "D" | null | undefined;
+    correctKey?: "C" | "D" | "A" | "B" | null | undefined;
 } & import("mongoose").DefaultTimestampProps, {}, {
     timestamps: true;
 }> & {
     tags: string[];
-    examId: string;
     options: import("mongoose").Types.DocumentArray<{
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }, import("mongoose").Types.Subdocument<import("bson").ObjectId, any, {
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }> & {
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }>;
+    examId: string;
+    topic?: string | null | undefined;
+    marks?: number | null | undefined;
+    negativeMarks?: number | null | undefined;
+    difficulty?: string | null | undefined;
     fromBankQuestionId?: string | null | undefined;
     orderIndex?: number | null | undefined;
     question_en?: string | null | undefined;
@@ -92,11 +96,7 @@ export declare const ExamQuestionModel: import("mongoose").Model<{
     explanation_en?: string | null | undefined;
     explanation_bn?: string | null | undefined;
     explanationImageUrl?: string | null | undefined;
-    marks?: number | null | undefined;
-    negativeMarks?: number | null | undefined;
-    topic?: string | null | undefined;
-    difficulty?: string | null | undefined;
-    correctKey?: "A" | "B" | "C" | "D" | null | undefined;
+    correctKey?: "C" | "D" | "A" | "B" | null | undefined;
 } & import("mongoose").DefaultTimestampProps & {
     _id: import("mongoose").Types.ObjectId;
 } & {
@@ -105,23 +105,27 @@ export declare const ExamQuestionModel: import("mongoose").Model<{
     timestamps: true;
 }, {
     tags: string[];
-    examId: string;
     options: import("mongoose").Types.DocumentArray<{
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }, import("mongoose").Types.Subdocument<import("bson").ObjectId, any, {
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }> & {
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }>;
+    examId: string;
+    topic?: string | null | undefined;
+    marks?: number | null | undefined;
+    negativeMarks?: number | null | undefined;
+    difficulty?: string | null | undefined;
     fromBankQuestionId?: string | null | undefined;
     orderIndex?: number | null | undefined;
     question_en?: string | null | undefined;
@@ -130,30 +134,30 @@ export declare const ExamQuestionModel: import("mongoose").Model<{
     explanation_en?: string | null | undefined;
     explanation_bn?: string | null | undefined;
     explanationImageUrl?: string | null | undefined;
-    marks?: number | null | undefined;
-    negativeMarks?: number | null | undefined;
-    topic?: string | null | undefined;
-    difficulty?: string | null | undefined;
-    correctKey?: "A" | "B" | "C" | "D" | null | undefined;
+    correctKey?: "C" | "D" | "A" | "B" | null | undefined;
 } & import("mongoose").DefaultTimestampProps, import("mongoose").Document<unknown, {}, import("mongoose").FlatRecord<{
     tags: string[];
-    examId: string;
     options: import("mongoose").Types.DocumentArray<{
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }, import("mongoose").Types.Subdocument<import("bson").ObjectId, any, {
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }> & {
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }>;
+    examId: string;
+    topic?: string | null | undefined;
+    marks?: number | null | undefined;
+    negativeMarks?: number | null | undefined;
+    difficulty?: string | null | undefined;
     fromBankQuestionId?: string | null | undefined;
     orderIndex?: number | null | undefined;
     question_en?: string | null | undefined;
@@ -162,32 +166,32 @@ export declare const ExamQuestionModel: import("mongoose").Model<{
     explanation_en?: string | null | undefined;
     explanation_bn?: string | null | undefined;
     explanationImageUrl?: string | null | undefined;
-    marks?: number | null | undefined;
-    negativeMarks?: number | null | undefined;
-    topic?: string | null | undefined;
-    difficulty?: string | null | undefined;
-    correctKey?: "A" | "B" | "C" | "D" | null | undefined;
+    correctKey?: "C" | "D" | "A" | "B" | null | undefined;
 } & import("mongoose").DefaultTimestampProps>, {}, import("mongoose").MergeType<import("mongoose").DefaultSchemaOptions, {
     timestamps: true;
 }>> & import("mongoose").FlatRecord<{
     tags: string[];
-    examId: string;
     options: import("mongoose").Types.DocumentArray<{
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }, import("mongoose").Types.Subdocument<import("bson").ObjectId, any, {
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }> & {
         key?: string | null | undefined;
+        imageUrl?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
-        imageUrl?: string | null | undefined;
     }>;
+    examId: string;
+    topic?: string | null | undefined;
+    marks?: number | null | undefined;
+    negativeMarks?: number | null | undefined;
+    difficulty?: string | null | undefined;
     fromBankQuestionId?: string | null | undefined;
     orderIndex?: number | null | undefined;
     question_en?: string | null | undefined;
@@ -196,11 +200,7 @@ export declare const ExamQuestionModel: import("mongoose").Model<{
     explanation_en?: string | null | undefined;
     explanation_bn?: string | null | undefined;
     explanationImageUrl?: string | null | undefined;
-    marks?: number | null | undefined;
-    negativeMarks?: number | null | undefined;
-    topic?: string | null | undefined;
-    difficulty?: string | null | undefined;
-    correctKey?: "A" | "B" | "C" | "D" | null | undefined;
+    correctKey?: "C" | "D" | "A" | "B" | null | undefined;
 } & import("mongoose").DefaultTimestampProps> & {
     _id: import("mongoose").Types.ObjectId;
 } & {

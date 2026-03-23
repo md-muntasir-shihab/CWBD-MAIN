@@ -1,30 +1,30 @@
 import { Schema } from "mongoose";
 export declare const PaymentModel: import("mongoose").Model<{
     status: "pending" | "paid" | "failed" | "refunded";
+    method: "manual" | "bkash" | "nagad" | "bank" | "card";
     userId: string;
-    method: "manual" | "bkash" | "nagad" | "card" | "bank";
+    notes?: string | null | undefined;
     examId?: string | null | undefined;
-    amountBDT?: number | null | undefined;
+    paidAt?: NativeDate | null | undefined;
     transactionId?: string | null | undefined;
     reference?: string | null | undefined;
     proofFileUrl?: string | null | undefined;
     verifiedByAdminId?: string | null | undefined;
-    notes?: string | null | undefined;
-    paidAt?: NativeDate | null | undefined;
+    amountBDT?: number | null | undefined;
     planId?: string | null | undefined;
     createdAt: NativeDate;
 }, {}, {}, {}, import("mongoose").Document<unknown, {}, {
     status: "pending" | "paid" | "failed" | "refunded";
+    method: "manual" | "bkash" | "nagad" | "bank" | "card";
     userId: string;
-    method: "manual" | "bkash" | "nagad" | "card" | "bank";
+    notes?: string | null | undefined;
     examId?: string | null | undefined;
-    amountBDT?: number | null | undefined;
+    paidAt?: NativeDate | null | undefined;
     transactionId?: string | null | undefined;
     reference?: string | null | undefined;
     proofFileUrl?: string | null | undefined;
     verifiedByAdminId?: string | null | undefined;
-    notes?: string | null | undefined;
-    paidAt?: NativeDate | null | undefined;
+    amountBDT?: number | null | undefined;
     planId?: string | null | undefined;
     createdAt: NativeDate;
 }, {}, {
@@ -34,16 +34,16 @@ export declare const PaymentModel: import("mongoose").Model<{
     };
 }> & {
     status: "pending" | "paid" | "failed" | "refunded";
+    method: "manual" | "bkash" | "nagad" | "bank" | "card";
     userId: string;
-    method: "manual" | "bkash" | "nagad" | "card" | "bank";
+    notes?: string | null | undefined;
     examId?: string | null | undefined;
-    amountBDT?: number | null | undefined;
+    paidAt?: NativeDate | null | undefined;
     transactionId?: string | null | undefined;
     reference?: string | null | undefined;
     proofFileUrl?: string | null | undefined;
     verifiedByAdminId?: string | null | undefined;
-    notes?: string | null | undefined;
-    paidAt?: NativeDate | null | undefined;
+    amountBDT?: number | null | undefined;
     planId?: string | null | undefined;
     createdAt: NativeDate;
 } & {
@@ -57,30 +57,30 @@ export declare const PaymentModel: import("mongoose").Model<{
     };
 }, {
     status: "pending" | "paid" | "failed" | "refunded";
+    method: "manual" | "bkash" | "nagad" | "bank" | "card";
     userId: string;
-    method: "manual" | "bkash" | "nagad" | "card" | "bank";
+    notes?: string | null | undefined;
     examId?: string | null | undefined;
-    amountBDT?: number | null | undefined;
+    paidAt?: NativeDate | null | undefined;
     transactionId?: string | null | undefined;
     reference?: string | null | undefined;
     proofFileUrl?: string | null | undefined;
     verifiedByAdminId?: string | null | undefined;
-    notes?: string | null | undefined;
-    paidAt?: NativeDate | null | undefined;
+    amountBDT?: number | null | undefined;
     planId?: string | null | undefined;
     createdAt: NativeDate;
 }, import("mongoose").Document<unknown, {}, import("mongoose").FlatRecord<{
     status: "pending" | "paid" | "failed" | "refunded";
+    method: "manual" | "bkash" | "nagad" | "bank" | "card";
     userId: string;
-    method: "manual" | "bkash" | "nagad" | "card" | "bank";
+    notes?: string | null | undefined;
     examId?: string | null | undefined;
-    amountBDT?: number | null | undefined;
+    paidAt?: NativeDate | null | undefined;
     transactionId?: string | null | undefined;
     reference?: string | null | undefined;
     proofFileUrl?: string | null | undefined;
     verifiedByAdminId?: string | null | undefined;
-    notes?: string | null | undefined;
-    paidAt?: NativeDate | null | undefined;
+    amountBDT?: number | null | undefined;
     planId?: string | null | undefined;
     createdAt: NativeDate;
 }>, {}, import("mongoose").MergeType<import("mongoose").DefaultSchemaOptions, {
@@ -90,16 +90,16 @@ export declare const PaymentModel: import("mongoose").Model<{
     };
 }>> & import("mongoose").FlatRecord<{
     status: "pending" | "paid" | "failed" | "refunded";
+    method: "manual" | "bkash" | "nagad" | "bank" | "card";
     userId: string;
-    method: "manual" | "bkash" | "nagad" | "card" | "bank";
+    notes?: string | null | undefined;
     examId?: string | null | undefined;
-    amountBDT?: number | null | undefined;
+    paidAt?: NativeDate | null | undefined;
     transactionId?: string | null | undefined;
     reference?: string | null | undefined;
     proofFileUrl?: string | null | undefined;
     verifiedByAdminId?: string | null | undefined;
-    notes?: string | null | undefined;
-    paidAt?: NativeDate | null | undefined;
+    amountBDT?: number | null | undefined;
     planId?: string | null | undefined;
     createdAt: NativeDate;
 }> & {

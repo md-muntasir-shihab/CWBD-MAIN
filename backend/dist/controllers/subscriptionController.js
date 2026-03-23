@@ -711,10 +711,8 @@ async function adminAssignSubscription(req, res) {
             res.status(400).json({ message: 'Invalid date values' });
             return;
         }
-        const statusRaw = safeString(req.body?.status, 'active').toLowerCase();
-        const status = ['active', 'expired', 'pending', 'suspended'].includes(statusRaw)
-            ? statusRaw
-            : 'active';
+        // Always set status to 'active' for immediate plan activation
+        const status = 'active';
         const notes = safeString(req.body?.notes);
         const record = await UserSubscription_1.default.create({
             userId: user._id,
@@ -742,9 +740,8 @@ async function adminAssignSubscription(req, res) {
             const amount = Math.max(0, safeNumber(req.body?.paymentAmount, safeNumber(planDto.priceBDT, 0)));
             if (amount > 0) {
                 const paymentStatus = safeString(req.body?.paymentStatus, status === 'active' ? 'paid' : 'pending').toLowerCase();
-                const normalizedStatus = ['pending', 'paid', 'failed', 'refunded', 'rejected'].includes(paymentStatus)
-                    ? paymentStatus
-                    : (status === 'active' ? 'paid' : 'pending');
+                // Always mark payment as 'paid' if plan is active
+                const normalizedStatus = 'paid';
                 const methodRaw = safeString(req.body?.paymentMethod, 'manual').toLowerCase();
                 const method = ['bkash', 'nagad', 'rocket', 'upay', 'cash', 'manual', 'bank', 'card', 'sslcommerz'].includes(methodRaw)
                     ? methodRaw
@@ -855,7 +852,7 @@ async function adminSuspendSubscription(req, res) {
 }
 async function adminExportSubscriptions(req, res) {
     try {
-        const type = getExportType(req.query.type);
+        const type = getExportType(req.query.format ?? req.query.type);
         const statusFilter = safeString(req.query.status).toLowerCase();
         const filter = {};
         if (statusFilter && ['active', 'expired', 'pending', 'suspended'].includes(statusFilter)) {
@@ -890,7 +887,7 @@ async function adminExportSubscriptions(req, res) {
 }
 async function adminExportSubscriptionPlans(req, res) {
     try {
-        const type = getExportType(req.query.type);
+        const type = getExportType(req.query.format ?? req.query.type);
         const plans = await SubscriptionPlan_1.default.find().sort({ displayOrder: 1, sortOrder: 1, priority: 1, code: 1 }).lean();
         const exportRows = plans.map((item) => {
             const plan = planToDto(item);

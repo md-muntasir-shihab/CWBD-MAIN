@@ -54,7 +54,7 @@ export declare const getSessionQuestions: (examId: string, sessionId: string, us
     }[];
     answers: {
         questionId: string;
-        selectedKey: "A" | "B" | "C" | "D" | null | undefined;
+        selectedKey: "C" | "D" | "A" | "B" | null | undefined;
         changeCount: number;
         updatedAtUTC: NativeDate;
     }[];

@@ -1,0 +1,11 @@
+
+> campusway-backend@1.0.0 dev
+> tsx watch src/server.ts
+
+[db] MongoDB connected successfully
+[db] All critical indexes ensured
+ℹ️  INITIAL_ACCESS_INFO.txt exists — default setup already completed.
+[cron] Starting exam auto-submit worker (every minute).
+[cron] Starting modern exam auto-submit worker (every minute).
+[2026-03-15T10:26:19.462Z] [INFO] [subscriptionExpiryCron] Scheduled daily at 01:00 UTC
+[finance-cron] Recurring engine cron registered

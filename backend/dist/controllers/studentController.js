@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.uploadStudentDocument = exports.createStudentApplication = exports.getStudentApplications = exports.updateStudentProfile = exports.getStudentProfile = void 0;
+exports.uploadStudentDocument = exports.createStudentApplication = exports.getStudentApplications = exports.updateStudentProfile = exports.getStudentProfileUpdateRequestStatus = exports.getStudentProfile = void 0;
 const StudentProfile_1 = __importDefault(require("../models/StudentProfile"));
 const StudentApplication_1 = __importDefault(require("../models/StudentApplication"));
 const ProfileUpdateRequest_1 = __importDefault(require("../models/ProfileUpdateRequest"));
@@ -11,6 +11,7 @@ const studentDashboardService_1 = require("../services/studentDashboardService")
 const studentDashboardStream_1 = require("../realtime/studentDashboardStream");
 const StudentDashboardConfig_1 = __importDefault(require("../models/StudentDashboardConfig"));
 const ExamResult_1 = __importDefault(require("../models/ExamResult"));
+const adminAlertService_1 = require("../services/adminAlertService");
 const studentProfileScoreService_1 = require("../services/studentProfileScoreService");
 // Ensure the profile exists, if not create a default one
 const ensureProfile = async (userId) => {
@@ -153,6 +154,7 @@ const getStudentProfile = async (req, res) => {
         const scoreResult = (0, studentProfileScoreService_1.computeStudentProfileScore)(profile.toObject(), req.user);
         const dashboardHeader = await (0, studentDashboardService_1.getStudentDashboardHeader)(req.user._id);
         const celebration = await resolveCelebration(req.user._id);
+        const pendingRequest = await ProfileUpdateRequest_1.default.exists({ student_id: req.user._id, status: 'pending' });
         res.json({
             ...profile.toObject(),
             date_of_birth: profile.dob,
@@ -171,6 +173,7 @@ const getStudentProfile = async (req, res) => {
             overall_rank: dashboardHeader.overallRank,
             profile_completion_threshold: dashboardHeader.profileCompletionThreshold,
             profile_eligible_for_exam: dashboardHeader.isProfileEligible,
+            pendingRequest: Boolean(pendingRequest),
             celebration,
         });
     }
@@ -179,6 +182,41 @@ const getStudentProfile = async (req, res) => {
     }
 };
 exports.getStudentProfile = getStudentProfile;
+// @desc    Get latest student profile update request status
+// @route   GET /api/student/profile-update-request
+// @access  Private (Student)
+const getStudentProfileUpdateRequestStatus = async (req, res) => {
+    try {
+        if (!req.user)
+            return res.status(401).json({ message: 'Not authenticated' });
+        if (req.user.role !== 'student')
+            return res.status(403).json({ message: 'Student access only' });
+        const [pending, latestDecision] = await Promise.all([
+            ProfileUpdateRequest_1.default.findOne({ student_id: req.user._id, status: 'pending' }).sort({ createdAt: -1 }).lean(),
+            ProfileUpdateRequest_1.default.findOne({ student_id: req.user._id, status: { $in: ['approved', 'rejected'] } }).sort({ updatedAt: -1 }).lean(),
+        ]);
+        const normalize = (doc) => {
+            if (!doc)
+                return null;
+            return {
+                id: String(doc._id),
+                status: String(doc.status || ''),
+                requestedChanges: (doc.requested_changes || {}),
+                submittedAt: doc.createdAt || null,
+                reviewedAt: doc.reviewed_at || null,
+                feedback: String(doc.admin_feedback || ''),
+            };
+        };
+        res.json({
+            pendingRequest: normalize(pending),
+            latestDecision: normalize(latestDecision),
+        });
+    }
+    catch (err) {
+        res.status(500).json({ message: 'Failed to load profile update request status', error: err.message });
+    }
+};
+exports.getStudentProfileUpdateRequestStatus = getStudentProfileUpdateRequestStatus;
 // @desc    Update student profile
 // @route   PUT /api/student/profile
 // @access  Private (Student)
@@ -277,9 +315,17 @@ const updateStudentProfile = async (req, res) => {
         if (Object.keys(requestedUpdates).length > 0) {
             // Delete existing pending request if any
             await ProfileUpdateRequest_1.default.deleteMany({ student_id: req.user._id, status: 'pending' });
-            await ProfileUpdateRequest_1.default.create({
+            const request = await ProfileUpdateRequest_1.default.create({
                 student_id: req.user._id,
                 requested_changes: requestedUpdates
+            });
+            await (0, adminAlertService_1.createAdminAlert)({
+                title: 'Profile approval required',
+                message: `A student submitted ${Object.keys(requestedUpdates).length} profile change${Object.keys(requestedUpdates).length > 1 ? 's' : ''} for review.`,
+                linkUrl: `/__cw_admin__/student-management/profile-requests?requestId=${String(request._id)}`,
+                category: 'update',
+                targetRole: 'admin',
+                createdBy: req.user._id,
             });
             requestMsg = ' Some changes require admin approval and have been sent for review.';
         }

@@ -1,0 +1,228 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "CampusWay CampusWay Your Admission Gateway" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - img "CampusWay" [ref=e8]
+        - generic [ref=e9]:
+          - paragraph [ref=e10]: CampusWay
+          - paragraph [ref=e11]: Your Admission Gateway
+      - generic [ref=e12]:
+        - link "Home" [ref=e13] [cursor=pointer]:
+          - /url: /
+        - link "Universities" [ref=e14] [cursor=pointer]:
+          - /url: /universities
+        - link "Exams" [ref=e15] [cursor=pointer]:
+          - /url: /exams
+        - link "News" [ref=e16] [cursor=pointer]:
+          - /url: /news
+        - link "Resources" [ref=e17] [cursor=pointer]:
+          - /url: /resources
+        - link "Contact" [ref=e18] [cursor=pointer]:
+          - /url: /contact
+      - generic [ref=e19]:
+        - button "System theme" [ref=e20] [cursor=pointer]:
+          - img [ref=e21]
+        - link "Plans" [ref=e23] [cursor=pointer]:
+          - /url: /subscription-plans
+        - link "Login" [ref=e24] [cursor=pointer]:
+          - /url: /login
+  - main [ref=e25]:
+    - generic [ref=e27]:
+      - generic [ref=e30]:
+        - img [ref=e31]
+        - textbox "Search universities, news, exams and resources" [ref=e34]:
+          - /placeholder: Search universities, exams, news...
+      - generic [ref=e37]:
+        - generic [ref=e38]: CampusWay
+        - heading "Master Your Admission Journey" [level=1] [ref=e39]
+        - paragraph [ref=e40]: Comprehensive preparation for top universities.
+        - generic [ref=e41]:
+          - link "Get Started" [ref=e42] [cursor=pointer]:
+            - /url: /universities
+          - link "View Exams" [ref=e43] [cursor=pointer]:
+            - /url: /exam-portal
+      - generic [ref=e45]:
+        - generic [ref=e47]:
+          - generic [ref=e48]:
+            - img [ref=e50]
+            - heading "Promotions & Campaigns" [level=2] [ref=e53]
+          - paragraph [ref=e54]: Latest offers and announcements
+        - region "Content carousel" [ref=e55]:
+          - generic [ref=e58]:
+            - img "Camping" [ref=e60]
+            - generic [ref=e61]:
+              - paragraph [ref=e62]: Camping
+              - paragraph [ref=e63]: Camping Banner
+      - generic [ref=e66]:
+        - generic [ref=e67]:
+          - generic [ref=e68]:
+            - generic [ref=e69]:
+              - img [ref=e71]
+              - heading "Featured Universities" [level=2] [ref=e74]
+            - paragraph [ref=e75]: Hand-picked for you
+          - link "View all" [ref=e76] [cursor=pointer]:
+            - /url: /universities
+            - text: View all
+            - img [ref=e77]
+        - generic [ref=e79]:
+          - img [ref=e81]
+          - paragraph [ref=e84]: No featured universities match your filter
+      - generic [ref=e86]:
+        - generic [ref=e88]:
+          - generic [ref=e89]:
+            - img [ref=e91]
+            - heading "Browse by Category" [level=2] [ref=e95]
+          - paragraph [ref=e96]: Find universities that match your profile
+        - generic [ref=e97]:
+          - generic [ref=e98]:
+            - button "All" [ref=e99] [cursor=pointer]
+            - button "Individual Admission 7" [ref=e100] [cursor=pointer]:
+              - text: Individual Admission
+              - generic [ref=e101]: "7"
+            - button "Science & Technology 8" [ref=e102] [cursor=pointer]:
+              - text: Science & Technology
+              - generic [ref=e103]: "8"
+            - button "GST (General/Public) 4" [ref=e104] [cursor=pointer]:
+              - text: GST (General/Public)
+              - generic [ref=e105]: "4"
+            - button "GST (Science & Technology) 1" [ref=e106] [cursor=pointer]:
+              - text: GST (Science & Technology)
+              - generic [ref=e107]: "1"
+            - button "Medical College 4" [ref=e108] [cursor=pointer]:
+              - text: Medical College
+              - generic [ref=e109]: "4"
+            - button "AGRI Cluster 2" [ref=e110] [cursor=pointer]:
+              - text: AGRI Cluster
+              - generic [ref=e111]: "2"
+            - button "Under Army 6" [ref=e112] [cursor=pointer]:
+              - text: Under Army
+              - generic [ref=e113]: "6"
+            - button "DCU 2" [ref=e114] [cursor=pointer]:
+              - text: DCU
+              - generic [ref=e115]: "2"
+            - button "Specialized University 4" [ref=e116] [cursor=pointer]:
+              - text: Specialized University
+              - generic [ref=e117]: "4"
+            - button "Affiliate College 9" [ref=e118] [cursor=pointer]:
+              - text: Affiliate College
+              - generic [ref=e119]: "9"
+            - button "Dental College 1" [ref=e120] [cursor=pointer]:
+              - text: Dental College
+              - generic [ref=e121]: "1"
+            - button "Nursing Colleges 1" [ref=e122] [cursor=pointer]:
+              - text: Nursing Colleges
+              - generic [ref=e123]: "1"
+          - button "Scroll categories left" [ref=e124] [cursor=pointer]:
+            - img [ref=e125]
+          - button "Scroll categories right" [ref=e127] [cursor=pointer]:
+            - img [ref=e128]
+      - generic [ref=e131]:
+        - generic [ref=e132]:
+          - generic [ref=e133]:
+            - generic [ref=e134]:
+              - img [ref=e136]
+              - heading "Application Deadlines" [level=2] [ref=e140]
+            - paragraph [ref=e141]: Don't miss your chance to apply
+          - link "See all" [ref=e142] [cursor=pointer]:
+            - /url: /universities
+            - text: See all
+            - img [ref=e143]
+        - generic [ref=e145]:
+          - img [ref=e147]
+          - paragraph [ref=e151]: No upcoming deadlines in this category
+      - generic [ref=e153]:
+        - generic [ref=e154]:
+          - generic [ref=e155]:
+            - generic [ref=e156]:
+              - img [ref=e158]
+              - heading "Upcoming Exams" [level=2] [ref=e162]
+            - paragraph [ref=e163]: Prepare and plan ahead
+          - link "See all" [ref=e164] [cursor=pointer]:
+            - /url: /universities
+            - text: See all
+            - img [ref=e165]
+        - generic [ref=e167]:
+          - img [ref=e169]
+          - paragraph [ref=e173]: No upcoming exams in this category
+      - generic [ref=e176]:
+        - generic [ref=e178]:
+          - generic [ref=e179]:
+            - img [ref=e181]
+            - heading "Live Platform Stats" [level=2] [ref=e183]
+          - paragraph [ref=e184]: Updated directly from the latest database records.
+        - generic [ref=e185]:
+          - generic [ref=e186]:
+            - paragraph [ref=e187]: "49"
+            - paragraph [ref=e188]: Universities
+          - generic [ref=e189]:
+            - paragraph [ref=e190]: "0"
+            - paragraph [ref=e191]: Students
+          - generic [ref=e192]:
+            - paragraph [ref=e193]: "0"
+            - paragraph [ref=e194]: Exams
+          - generic [ref=e195]:
+            - paragraph [ref=e196]: "0"
+            - paragraph [ref=e197]: Resources
+  - contentinfo [ref=e198]:
+    - generic [ref=e200]:
+      - generic [ref=e201]:
+        - link "CampusWay CampusWay Your Admission Gateway" [ref=e202] [cursor=pointer]:
+          - /url: /
+          - img "CampusWay" [ref=e203]
+          - generic [ref=e204]:
+            - generic [ref=e205]: CampusWay
+            - text: Your Admission Gateway
+        - paragraph [ref=e206]: CampusWay helps students manage admissions, exams, and preparation in one platform.
+      - generic [ref=e207]:
+        - heading "Quick Links" [level=4] [ref=e208]
+        - list [ref=e209]:
+          - listitem [ref=e210]:
+            - link "Home" [ref=e211] [cursor=pointer]:
+              - /url: /
+              - img [ref=e212]
+              - text: Home
+          - listitem [ref=e216]:
+            - link "Universities" [ref=e217] [cursor=pointer]:
+              - /url: /universities
+              - img [ref=e218]
+              - text: Universities
+          - listitem [ref=e222]:
+            - link "Exams" [ref=e223] [cursor=pointer]:
+              - /url: /exam-portal
+              - img [ref=e224]
+              - text: Exams
+          - listitem [ref=e228]:
+            - link "Resources" [ref=e229] [cursor=pointer]:
+              - /url: /resources
+              - img [ref=e230]
+              - text: Resources
+          - listitem [ref=e234]:
+            - link "Contact" [ref=e235] [cursor=pointer]:
+              - /url: /contact
+              - img [ref=e236]
+              - text: Contact
+      - generic [ref=e240]:
+        - heading "Legal" [level=4] [ref=e241]
+        - list [ref=e242]:
+          - listitem [ref=e243]:
+            - link "Terms" [ref=e244] [cursor=pointer]:
+              - /url: /terms
+              - img [ref=e245]
+              - text: Terms
+          - listitem [ref=e249]:
+            - link "Privacy" [ref=e250] [cursor=pointer]:
+              - /url: /privacy
+              - img [ref=e251]
+              - text: Privacy
+      - generic [ref=e255]:
+        - heading "Contact" [level=4] [ref=e256]
+        - list [ref=e257]:
+          - listitem [ref=e258]: Dhaka, Bangladesh
+          - listitem [ref=e259]: +880 1XXX-XXXXXX
+          - listitem [ref=e260]: support@campusway.com
+    - paragraph [ref=e263]: © 2026 CampusWay. All rights reserved.
+```

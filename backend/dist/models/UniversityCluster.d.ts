@@ -1,10 +1,12 @@
 import mongoose, { Document } from 'mongoose';
+import type { IExamCenter } from './University';
 export interface IUniversityClusterDateConfig {
     applicationStartDate?: Date | null;
     applicationEndDate?: Date | null;
     scienceExamDate?: string;
     commerceExamDate?: string;
     artsExamDate?: string;
+    examCenters: IExamCenter[];
 }
 export interface IUniversityCluster extends Document {
     name: string;

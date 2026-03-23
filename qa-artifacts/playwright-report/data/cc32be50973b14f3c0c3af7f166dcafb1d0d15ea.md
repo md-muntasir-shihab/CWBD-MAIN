@@ -1,0 +1,104 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "CampusWay CampusWay Your Admission Gateway" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - img "CampusWay" [ref=e8]
+        - generic [ref=e9]:
+          - paragraph [ref=e10]: CampusWay
+          - paragraph [ref=e11]: Your Admission Gateway
+      - generic [ref=e12]:
+        - link "Home" [ref=e13] [cursor=pointer]:
+          - /url: /
+        - link "Universities" [ref=e14] [cursor=pointer]:
+          - /url: /universities
+        - link "Exams" [ref=e15] [cursor=pointer]:
+          - /url: /exams
+        - link "News" [ref=e16] [cursor=pointer]:
+          - /url: /news
+        - link "Resources" [ref=e17] [cursor=pointer]:
+          - /url: /resources
+        - link "Contact" [ref=e18] [cursor=pointer]:
+          - /url: /contact
+      - generic [ref=e19]:
+        - button "System theme" [ref=e20] [cursor=pointer]:
+          - img [ref=e21]
+        - link "Plans" [ref=e23] [cursor=pointer]:
+          - /url: /subscription-plans
+        - link "Login" [ref=e24] [cursor=pointer]:
+          - /url: /login
+  - main [ref=e25]:
+    - generic [ref=e26]:
+      - img [ref=e28]
+      - heading "University Not Found" [level=1] [ref=e30]
+      - paragraph [ref=e31]: The university page you're looking for doesn't exist or has been removed.
+      - generic [ref=e32]:
+        - button "Retry" [ref=e33] [cursor=pointer]:
+          - img [ref=e34]
+          - text: Retry
+        - link "Back to list" [ref=e36] [cursor=pointer]:
+          - /url: /universities
+          - img [ref=e37]
+          - text: Back to list
+  - contentinfo [ref=e39]:
+    - generic [ref=e41]:
+      - generic [ref=e42]:
+        - link "CampusWay CampusWay Your Admission Gateway" [ref=e43] [cursor=pointer]:
+          - /url: /
+          - img "CampusWay" [ref=e44]
+          - generic [ref=e45]:
+            - generic [ref=e46]: CampusWay
+            - text: Your Admission Gateway
+        - paragraph [ref=e47]: CampusWay helps students manage admissions, exams, and preparation in one platform.
+      - generic [ref=e48]:
+        - heading "Quick Links" [level=4] [ref=e49]
+        - list [ref=e50]:
+          - listitem [ref=e51]:
+            - link "Home" [ref=e52] [cursor=pointer]:
+              - /url: /
+              - img [ref=e53]
+              - text: Home
+          - listitem [ref=e57]:
+            - link "Universities" [ref=e58] [cursor=pointer]:
+              - /url: /universities
+              - img [ref=e59]
+              - text: Universities
+          - listitem [ref=e63]:
+            - link "Exams" [ref=e64] [cursor=pointer]:
+              - /url: /exam-portal
+              - img [ref=e65]
+              - text: Exams
+          - listitem [ref=e69]:
+            - link "Resources" [ref=e70] [cursor=pointer]:
+              - /url: /resources
+              - img [ref=e71]
+              - text: Resources
+          - listitem [ref=e75]:
+            - link "Contact" [ref=e76] [cursor=pointer]:
+              - /url: /contact
+              - img [ref=e77]
+              - text: Contact
+      - generic [ref=e81]:
+        - heading "Legal" [level=4] [ref=e82]
+        - list [ref=e83]:
+          - listitem [ref=e84]:
+            - link "Terms" [ref=e85] [cursor=pointer]:
+              - /url: /terms
+              - img [ref=e86]
+              - text: Terms
+          - listitem [ref=e90]:
+            - link "Privacy" [ref=e91] [cursor=pointer]:
+              - /url: /privacy
+              - img [ref=e92]
+              - text: Privacy
+      - generic [ref=e96]:
+        - heading "Contact" [level=4] [ref=e97]
+        - list [ref=e98]:
+          - listitem [ref=e99]: Dhaka, Bangladesh
+          - listitem [ref=e100]: +880 1XXX-XXXXXX
+          - listitem [ref=e101]: support@campusway.com
+    - paragraph [ref=e104]: © 2026 CampusWay. All rights reserved.
+```

@@ -104,6 +104,7 @@ const studentDashboardStream_1 = require("../realtime/studentDashboardStream");
 const homeStream_1 = require("../realtime/homeStream");
 const studentProfileScoreService_1 = require("../services/studentProfileScoreService");
 const credentialVaultService_1 = require("../services/credentialVaultService");
+const adminAlertService_1 = require("../services/adminAlertService");
 const groupMembershipService = __importStar(require("../services/groupMembershipService"));
 function normalizeRole(value, fallback = 'student') {
     const role = String(value || '').trim().toLowerCase();
@@ -1583,6 +1584,7 @@ async function adminGetUserActivity(req, res) {
 }
 async function adminExportStudents(req, res) {
     try {
+        const format = String(req.query.format || req.query.type || 'xlsx').trim().toLowerCase() === 'csv' ? 'csv' : 'xlsx';
         const { search = '', batch = '', sscBatch = '', department = '', group = '', planCode = '', status = '', daysLeft: daysLeftFilter = '', profileScoreBand = '', paymentStatus = '', startDate = '', endDate = '', } = req.query;
         const allRows = await listStudentRows();
         const searchTerm = String(search || '').trim().toLowerCase();
@@ -1675,7 +1677,21 @@ async function adminExportStudents(req, res) {
             'Days Left': row.subscription.daysLeft ?? 'N/A',
             'Expiry Date': row.subscription.expiryDate || 'N/A'
         }));
-        res.json(exportData);
+        if (format === 'csv') {
+            const sheet = XLSX.utils.json_to_sheet(exportData);
+            const csv = XLSX.utils.sheet_to_csv(sheet);
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', 'attachment; filename="students_export.csv"');
+            res.send(csv);
+            return;
+        }
+        const workbook = XLSX.utils.book_new();
+        const worksheet = XLSX.utils.json_to_sheet(exportData);
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Students');
+        const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename="students_export.xlsx"');
+        res.send(buffer);
     }
     catch (error) {
         console.error('adminExportStudents error:', error);
@@ -2608,6 +2624,8 @@ async function adminDeleteStudentGroup(req, res) {
 }
 async function adminExportStudentGroups(_req, res) {
     try {
+        const format = String(_req.query.format || _req.query.type || 'xlsx').trim().toLowerCase() === 'csv' ? 'csv' : 'xlsx';
+        const search = String(_req.query.q || '').trim().toLowerCase();
         const [groups, groupCountsRaw] = await Promise.all([
             StudentGroup_1.default.find().sort({ isActive: -1, batchTag: 1, name: 1 }).lean(),
             StudentProfile_1.default.aggregate([
@@ -2625,8 +2643,29 @@ async function adminExportStudentGroups(_req, res) {
             studentCount: countMap.get(String(group._id)) || 0,
             createdAt: group.createdAt,
             updatedAt: group.updatedAt,
-        }));
-        res.json(rows);
+        })).filter((group) => {
+            if (!search)
+                return true;
+            return [group.name, group.slug, group.batchTag, group.description]
+                .join(' ')
+                .toLowerCase()
+                .includes(search);
+        });
+        if (format === 'csv') {
+            const sheet = XLSX.utils.json_to_sheet(rows);
+            const csv = XLSX.utils.sheet_to_csv(sheet);
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', 'attachment; filename="student_groups_export.csv"');
+            res.send(csv);
+            return;
+        }
+        const workbook = XLSX.utils.book_new();
+        const worksheet = XLSX.utils.json_to_sheet(rows);
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Student Groups');
+        const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename="student_groups_export.xlsx"');
+        res.send(buffer);
     }
     catch (error) {
         console.error('adminExportStudentGroups error:', error);
@@ -2870,7 +2909,28 @@ async function adminGetProfileUpdateRequests(req, res) {
             .populate('student_id', 'username email full_name')
             .sort({ createdAt: -1 })
             .lean();
-        res.json(requests);
+        const studentIds = requests
+            .map((request) => String(request.student_id && typeof request.student_id === 'object' ? request.student_id._id : request.student_id || ''))
+            .filter((id) => mongoose_1.default.Types.ObjectId.isValid(id))
+            .map((id) => new mongoose_1.default.Types.ObjectId(id));
+        const profiles = studentIds.length > 0
+            ? await StudentProfile_1.default.find({ user_id: { $in: studentIds } }).lean()
+            : [];
+        const profileMap = new Map(profiles.map((profile) => [String(profile.user_id), profile]));
+        const items = requests.map((request) => {
+            const studentId = String(request.student_id && typeof request.student_id === 'object' ? request.student_id._id : request.student_id || '');
+            const profile = profileMap.get(studentId);
+            const requestedChanges = (request.requested_changes || {});
+            const currentValues = Object.keys(requestedChanges).reduce((acc, key) => {
+                acc[key] = profile?.[key];
+                return acc;
+            }, {});
+            return {
+                ...request,
+                currentValues,
+            };
+        });
+        res.json({ items });
     }
     catch (error) {
         console.error('adminGetProfileUpdateRequests error:', error);
@@ -2909,6 +2969,14 @@ async function adminApproveProfileUpdateRequest(req, res) {
         await request.save();
         await createAuditLog(req, 'profile_update_approved', String(request.student_id), 'student', { request_id: request._id });
         (0, studentDashboardStream_1.broadcastStudentDashboardEvent)({ type: 'profile_updated', meta: { studentId: String(request.student_id), source: 'admin_approval' } });
+        await (0, adminAlertService_1.createStudentNotification)({
+            title: 'Profile update approved',
+            message: 'Your profile update request was approved.',
+            linkUrl: '/profile',
+            category: 'update',
+            targetUserIds: [request.student_id],
+            createdBy: req.user?._id,
+        });
         res.json({ message: 'Profile update approved', profile });
     }
     catch (error) {
@@ -2932,6 +3000,14 @@ async function adminRejectProfileUpdateRequest(req, res) {
             : undefined;
         await request.save();
         await createAuditLog(req, 'profile_update_rejected', String(request.student_id), 'student', { request_id: request._id, feedback });
+        await (0, adminAlertService_1.createStudentNotification)({
+            title: 'Profile update rejected',
+            message: String(feedback || 'Your requested changes were rejected by admin.'),
+            linkUrl: '/profile',
+            category: 'update',
+            targetUserIds: [request.student_id],
+            createdBy: req.user?._id,
+        });
         res.json({ message: 'Profile update rejected' });
     }
     catch (error) {

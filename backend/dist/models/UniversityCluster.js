@@ -34,12 +34,17 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
+const ExamCenterSchema = new mongoose_1.Schema({
+    city: { type: String, required: true, trim: true },
+    address: { type: String, default: '', trim: true },
+}, { _id: false });
 const UniversityClusterDateConfigSchema = new mongoose_1.Schema({
     applicationStartDate: { type: Date, default: null },
     applicationEndDate: { type: Date, default: null },
     scienceExamDate: { type: String, default: '' },
     commerceExamDate: { type: String, default: '' },
     artsExamDate: { type: String, default: '' },
+    examCenters: { type: [ExamCenterSchema], default: [] },
 }, { _id: false });
 const UniversityClusterSchema = new mongoose_1.Schema({
     name: { type: String, required: true, trim: true },

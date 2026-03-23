@@ -25,6 +25,8 @@ export declare function saveExamAttemptAnswer(req: AuthRequest, res: Response): 
 export declare function submitExamAttempt(req: AuthRequest, res: Response): Promise<void>;
 export declare function logExamAttemptEvent(req: AuthRequest, res: Response): Promise<void>;
 export declare function getExamResult(req: AuthRequest, res: Response): Promise<void>;
+export declare function getExamAttemptResult(req: AuthRequest, res: Response): Promise<void>;
+export declare function getExamAttemptSolutions(req: AuthRequest, res: Response): Promise<void>;
 export declare function getStudentExamQuestions(req: AuthRequest, res: Response): Promise<void>;
 export declare function streamExamAttempt(req: AuthRequest, res: Response): Promise<void>;
 export declare function getExamCertificate(req: AuthRequest, res: Response): Promise<void>;

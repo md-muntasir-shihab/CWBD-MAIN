@@ -13,6 +13,9 @@ export interface IUniversityImportCommitSummary {
     inserted: number;
     updated: number;
     failed: number;
+    createdCategories?: number;
+    createdClusters?: number;
+    failedRowCount?: number;
 }
 export interface IUniversityImportJob extends Document {
     status: 'initialized' | 'validated' | 'committed' | 'failed';

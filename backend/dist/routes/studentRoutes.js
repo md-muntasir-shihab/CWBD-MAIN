@@ -15,6 +15,7 @@ router.use(auth_1.authenticate);
 const mediaController_1 = require("../controllers/mediaController");
 // Profile Routes
 router.get('/profile', studentController_1.getStudentProfile);
+router.get('/profile-update-request', studentController_1.getStudentProfileUpdateRequestStatus);
 router.put('/profile', studentController_1.updateStudentProfile);
 router.post('/profile/documents', mediaController_1.uploadMiddleware.single('file'), studentController_1.uploadStudentDocument);
 router.get('/dashboard', studentDashboardController_1.getStudentDashboardAggregateHandler);
@@ -28,6 +29,8 @@ router.get('/dashboard/stream', studentDashboardController_1.getStudentDashboard
 router.get('/notices', adminSupportController_1.studentGetNotices);
 router.post('/support-tickets', adminSupportController_1.studentCreateSupportTicket);
 router.get('/support-tickets', adminSupportController_1.studentGetSupportTickets);
+router.get('/support-tickets/:id', adminSupportController_1.studentGetSupportTicketById);
+router.post('/support-tickets/:id/reply', adminSupportController_1.studentReplySupportTicket);
 router.get('/me', studentHubController_1.getStudentMe);
 router.get('/me/exams', studentHubController_1.getStudentMeExams);
 router.get('/me/exams/:examId', studentHubController_1.getStudentMeExamById);

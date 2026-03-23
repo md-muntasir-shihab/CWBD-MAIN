@@ -83,6 +83,7 @@ const financeCenterController_1 = require("../controllers/financeCenterControlle
 const validate_1 = require("../middlewares/validate");
 const financeSchemas_1 = require("../validators/financeSchemas");
 const adminSupportController_1 = require("../controllers/adminSupportController");
+const adminAlertController_1 = require("../controllers/adminAlertController");
 const backupController_1 = require("../controllers/backupController");
 const adminUserController_1 = require("../controllers/adminUserController");
 const subscriptionController_1 = require("../controllers/subscriptionController");
@@ -356,6 +357,7 @@ router.get('/exams/:examId/analytics', (0, auth_1.authorize)('superadmin', 'admi
 router.get('/exams/:examId/export', (0, auth_1.authorize)('superadmin', 'admin'), canViewReports, adminExamController_1.adminExportExamResults);
 router.get('/exams/:id/results/import-template', (0, auth_1.authorize)('superadmin', 'admin', 'moderator', 'editor'), canViewReports, adminExamController_1.adminDownloadExamResultsImportTemplate);
 router.post('/exams/:id/results/import', (0, auth_1.authorize)('superadmin', 'admin', 'moderator'), canEditExams, upload.single('file'), adminExamController_1.adminImportExamResults);
+router.post('/exams/:id/results/import-external', (0, auth_1.authorize)('superadmin', 'admin', 'moderator'), canEditExams, upload.single('file'), adminExamController_1.adminImportExternalExamResults);
 router.get('/exams/:id/reports/export', (0, auth_1.authorize)('superadmin', 'admin', 'moderator', 'editor'), canViewReports, adminExamController_1.adminExportExamReport);
 router.get('/exams/:id/events/export', (0, auth_1.authorize)('superadmin', 'admin', 'moderator'), canViewReports, adminExamController_1.adminExportExamEvents);
 router.post('/exams/:id/preview/start', (0, auth_1.authorize)('superadmin', 'admin', 'moderator'), canEditExams, adminExamController_1.adminStartExamPreview);
@@ -415,6 +417,7 @@ router.get('/universities/categories', (0, auth_1.authorize)('superadmin', 'admi
 router.get('/university-categories', (0, auth_1.authorize)('superadmin', 'admin', 'moderator', 'editor'), universityCategoryController_1.adminGetUniversityCategoryMaster);
 router.post('/university-categories', (0, auth_1.authorize)('superadmin', 'admin', 'moderator'), universityCategoryController_1.adminCreateUniversityCategory);
 router.put('/university-categories/:id', (0, auth_1.authorize)('superadmin', 'admin', 'moderator'), universityCategoryController_1.adminUpdateUniversityCategory);
+router.post('/university-categories/:id/sync-config', (0, auth_1.authorize)('superadmin', 'admin', 'moderator'), universityCategoryController_1.adminSyncUniversityCategoryConfig);
 router.patch('/university-categories/:id/toggle', (0, auth_1.authorize)('superadmin', 'admin', 'moderator'), universityCategoryController_1.adminToggleUniversityCategory);
 router.delete('/university-categories/:id', (0, auth_1.authorize)('superadmin', 'admin'), universityCategoryController_1.adminDeleteUniversityCategory);
 router.get('/universities/export', (0, auth_1.authorize)('superadmin', 'admin', 'moderator', 'editor'), universityController_1.adminExportUniversities);
@@ -556,6 +559,7 @@ router.get('/resource-settings', (0, auth_1.authorize)('superadmin', 'admin', 'm
 router.put('/resource-settings', (0, auth_1.authorize)('superadmin', 'admin', 'moderator'), cmsController_1.adminUpdateResourceSettings);
 /* ── Contact Messages ── */
 router.get('/contact-messages', (0, auth_1.authorize)('superadmin', 'admin', 'moderator'), cmsController_1.adminGetContactMessages);
+router.patch('/contact-messages/:id', (0, auth_1.authorize)('superadmin', 'admin', 'moderator'), cmsController_1.adminUpdateContactMessage);
 router.delete('/contact-messages/:id', (0, auth_1.authorize)('superadmin', 'admin'), canDeleteData, cmsController_1.adminDeleteContactMessage);
 /* ── Banners & Config ── */
 router.get('/banners', (0, auth_1.authorize)('superadmin', 'admin', 'moderator', 'editor'), bannerController_1.adminGetBanners);
@@ -712,6 +716,8 @@ router.patch('/notices/:id/toggle', (0, auth_1.authorize)('superadmin', 'admin',
 router.get('/support-tickets', (0, auth_1.authorize)('superadmin', 'admin', 'moderator'), canManageTickets, adminSupportController_1.adminGetSupportTickets);
 router.patch('/support-tickets/:id/status', (0, auth_1.authorize)('superadmin', 'admin', 'moderator'), canManageTickets, adminSupportController_1.adminUpdateSupportTicketStatus);
 router.post('/support-tickets/:id/reply', (0, auth_1.authorize)('superadmin', 'admin', 'moderator'), canManageTickets, adminSupportController_1.adminReplySupportTicket);
+router.get('/alerts/feed', (0, auth_1.authorize)('superadmin', 'admin', 'moderator'), adminAlertController_1.adminGetActionableAlerts);
+router.post('/alerts/mark-read', (0, auth_1.authorize)('superadmin', 'admin', 'moderator'), adminAlertController_1.adminMarkActionableAlertsRead);
 /* ── Backups ── */
 router.post('/backups/run', (0, auth_1.authorize)('superadmin', 'admin'), canManageBackups, backupController_1.adminRunBackup);
 router.get('/backups', (0, auth_1.authorize)('superadmin', 'admin', 'moderator'), canManageBackups, backupController_1.adminListBackups);

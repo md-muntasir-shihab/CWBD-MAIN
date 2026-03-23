@@ -1,0 +1,95 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - navigation [ref=e5]:
+      - link "CampusWay CampusWay Your Admission Gateway" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - img "CampusWay" [ref=e8]
+        - generic [ref=e9]:
+          - paragraph [ref=e10]: CampusWay
+          - paragraph [ref=e11]: Your Admission Gateway
+      - generic [ref=e12]:
+        - link "Home" [ref=e13] [cursor=pointer]:
+          - /url: /
+        - link "Universities" [ref=e14] [cursor=pointer]:
+          - /url: /universities
+        - link "Exams" [ref=e15] [cursor=pointer]:
+          - /url: /exams
+        - link "News" [ref=e16] [cursor=pointer]:
+          - /url: /news
+        - link "Resources" [ref=e17] [cursor=pointer]:
+          - /url: /resources
+        - link "Contact" [ref=e18] [cursor=pointer]:
+          - /url: /contact
+      - generic [ref=e19]:
+        - button "System theme" [ref=e20] [cursor=pointer]:
+          - img [ref=e21]
+        - link "Plans" [ref=e23] [cursor=pointer]:
+          - /url: /subscription-plans
+        - link "Login" [ref=e24] [cursor=pointer]:
+          - /url: /login
+  - main [ref=e25]:
+    - generic [ref=e26]:
+      - paragraph [ref=e27]: Cluster not found
+      - paragraph [ref=e28]: The cluster “engineering-alliance” does not exist.
+  - contentinfo [ref=e29]:
+    - generic [ref=e31]:
+      - generic [ref=e32]:
+        - link "CampusWay CampusWay Your Admission Gateway" [ref=e33] [cursor=pointer]:
+          - /url: /
+          - img "CampusWay" [ref=e34]
+          - generic [ref=e35]:
+            - generic [ref=e36]: CampusWay
+            - text: Your Admission Gateway
+        - paragraph [ref=e37]: CampusWay helps students manage admissions, exams, and preparation in one platform.
+      - generic [ref=e38]:
+        - heading "Quick Links" [level=4] [ref=e39]
+        - list [ref=e40]:
+          - listitem [ref=e41]:
+            - link "Home" [ref=e42] [cursor=pointer]:
+              - /url: /
+              - img [ref=e43]
+              - text: Home
+          - listitem [ref=e47]:
+            - link "Universities" [ref=e48] [cursor=pointer]:
+              - /url: /universities
+              - img [ref=e49]
+              - text: Universities
+          - listitem [ref=e53]:
+            - link "Exams" [ref=e54] [cursor=pointer]:
+              - /url: /exam-portal
+              - img [ref=e55]
+              - text: Exams
+          - listitem [ref=e59]:
+            - link "Resources" [ref=e60] [cursor=pointer]:
+              - /url: /resources
+              - img [ref=e61]
+              - text: Resources
+          - listitem [ref=e65]:
+            - link "Contact" [ref=e66] [cursor=pointer]:
+              - /url: /contact
+              - img [ref=e67]
+              - text: Contact
+      - generic [ref=e71]:
+        - heading "Legal" [level=4] [ref=e72]
+        - list [ref=e73]:
+          - listitem [ref=e74]:
+            - link "Terms" [ref=e75] [cursor=pointer]:
+              - /url: /terms
+              - img [ref=e76]
+              - text: Terms
+          - listitem [ref=e80]:
+            - link "Privacy" [ref=e81] [cursor=pointer]:
+              - /url: /privacy
+              - img [ref=e82]
+              - text: Privacy
+      - generic [ref=e86]:
+        - heading "Contact" [level=4] [ref=e87]
+        - list [ref=e88]:
+          - listitem [ref=e89]: Dhaka, Bangladesh
+          - listitem [ref=e90]: +880 1XXX-XXXXXX
+          - listitem [ref=e91]: support@campusway.com
+    - paragraph [ref=e94]: © 2026 CampusWay. All rights reserved.
+```

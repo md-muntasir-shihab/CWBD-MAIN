@@ -34,6 +34,24 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
+const ExamCenterSchema = new mongoose_1.Schema({
+    city: { type: String, required: true, trim: true },
+    address: { type: String, default: '', trim: true },
+}, { _id: false });
+const SharedConfigSchema = new mongoose_1.Schema({
+    applicationStartDate: { type: Date, default: null },
+    applicationEndDate: { type: Date, default: null },
+    scienceExamDate: { type: String, default: '' },
+    artsExamDate: { type: String, default: '' },
+    businessExamDate: { type: String, default: '' },
+    examCenters: { type: [ExamCenterSchema], default: [] },
+}, { _id: false });
+const SyncMetaSchema = new mongoose_1.Schema({
+    lastSyncedAt: { type: Date, default: null },
+    lastSyncedBy: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', default: null },
+    lastSyncedCount: { type: Number, default: 0 },
+    skippedCount: { type: Number, default: 0 },
+}, { _id: false });
 const UniversityCategorySchema = new mongoose_1.Schema({
     name: { type: String, required: true, trim: true },
     slug: { type: String, required: true, trim: true, unique: true },
@@ -44,6 +62,8 @@ const UniversityCategorySchema = new mongoose_1.Schema({
     isActive: { type: Boolean, default: true },
     homeHighlight: { type: Boolean, default: false },
     homeOrder: { type: Number, default: 0 },
+    sharedConfig: { type: SharedConfigSchema, default: () => ({}) },
+    syncMeta: { type: SyncMetaSchema, default: () => ({}) },
     createdBy: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', default: null },
     updatedBy: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', default: null },
 }, { timestamps: true });

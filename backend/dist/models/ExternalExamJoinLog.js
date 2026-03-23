@@ -38,13 +38,27 @@ const ExternalExamJoinLogSchema = new mongoose_1.Schema({
     examId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Exam', required: true, index: true },
     studentId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     joinedAt: { type: Date, default: Date.now, index: true },
+    attemptNo: { type: Number, default: 1 },
+    attemptRef: { type: String, default: '', trim: true, index: true },
+    status: { type: String, enum: ['awaiting_result', 'imported'], default: 'awaiting_result' },
     sourcePanel: { type: String, default: 'exam_start' },
     registration_id_snapshot: { type: String, default: '' },
+    user_unique_id_snapshot: { type: String, default: '' },
+    username_snapshot: { type: String, default: '' },
+    email_snapshot: { type: String, default: '' },
+    phone_number_snapshot: { type: String, default: '' },
+    full_name_snapshot: { type: String, default: '' },
     groupIds_snapshot: { type: [String], default: [] },
+    externalExamUrl: { type: String, default: '' },
+    importedResultId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'ExamResult', default: null },
+    importedAt: { type: Date, default: null },
+    matchedBy: { type: String, default: '' },
     ip: { type: String, default: '' },
     userAgent: { type: String, default: '' },
 }, { timestamps: true, collection: 'external_exam_join_logs' });
 ExternalExamJoinLogSchema.index({ examId: 1, joinedAt: -1 });
 ExternalExamJoinLogSchema.index({ studentId: 1, joinedAt: -1 });
+ExternalExamJoinLogSchema.index({ examId: 1, studentId: 1, attemptNo: 1 });
+ExternalExamJoinLogSchema.index({ attemptRef: 1 }, { sparse: true });
 exports.default = mongoose_1.default.model('ExternalExamJoinLog', ExternalExamJoinLogSchema);
 //# sourceMappingURL=ExternalExamJoinLog.js.map

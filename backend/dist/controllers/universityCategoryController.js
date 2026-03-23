@@ -8,11 +8,13 @@ exports.adminCreateUniversityCategory = adminCreateUniversityCategory;
 exports.adminUpdateUniversityCategory = adminUpdateUniversityCategory;
 exports.adminToggleUniversityCategory = adminToggleUniversityCategory;
 exports.adminDeleteUniversityCategory = adminDeleteUniversityCategory;
+exports.adminSyncUniversityCategoryConfig = adminSyncUniversityCategoryConfig;
 const mongoose_1 = __importDefault(require("mongoose"));
 const slugify_1 = __importDefault(require("slugify"));
 const University_1 = __importDefault(require("../models/University"));
 const UniversityCategory_1 = __importDefault(require("../models/UniversityCategory"));
 const homeStream_1 = require("../realtime/homeStream");
+const universitySyncService_1 = require("../services/universitySyncService");
 function normalizeSlug(name, requestedSlug) {
     const source = requestedSlug || name;
     const slug = (0, slugify_1.default)(source || '', { lower: true, strict: true });
@@ -24,8 +26,28 @@ function asObjectId(value) {
         return null;
     return new mongoose_1.default.Types.ObjectId(id);
 }
+function parseOptionalDate(value) {
+    if (value === undefined || value === null || value === '')
+        return null;
+    const parsed = new Date(String(value));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+function normalizeSharedConfig(payload) {
+    const source = (payload.sharedConfig && typeof payload.sharedConfig === 'object')
+        ? payload.sharedConfig
+        : payload;
+    return {
+        applicationStartDate: parseOptionalDate(source.applicationStartDate),
+        applicationEndDate: parseOptionalDate(source.applicationEndDate),
+        scienceExamDate: String(source.scienceExamDate || '').trim(),
+        artsExamDate: String(source.artsExamDate || '').trim(),
+        businessExamDate: String(source.businessExamDate || '').trim(),
+        examCenters: (0, universitySyncService_1.normalizeExamCenters)(source.examCenters),
+    };
+}
 async function adminGetUniversityCategoryMaster(req, res) {
     try {
+        await (0, universitySyncService_1.backfillUniversityTaxonomyIfNeeded)();
         const status = String(req.query.status || 'all').toLowerCase();
         const q = String(req.query.q || '').trim();
         const filter = {};
@@ -89,6 +111,7 @@ async function adminCreateUniversityCategory(req, res) {
             isActive: payload.isActive !== false,
             homeHighlight: Boolean(payload.homeHighlight),
             homeOrder: Number(payload.homeOrder || 0),
+            sharedConfig: normalizeSharedConfig(payload),
             createdBy: asObjectId(req.user?._id),
             updatedBy: asObjectId(req.user?._id),
         });
@@ -136,6 +159,9 @@ async function adminUpdateUniversityCategory(req, res) {
             category.homeHighlight = Boolean(payload.homeHighlight);
         if (payload.homeOrder !== undefined)
             category.homeOrder = Number(payload.homeOrder || 0);
+        if (payload.sharedConfig !== undefined || payload.applicationStartDate !== undefined || payload.examCenters !== undefined) {
+            category.sharedConfig = normalizeSharedConfig(payload);
+        }
         category.updatedBy = asObjectId(req.user?._id);
         await category.save();
         (0, homeStream_1.broadcastHomeStreamEvent)({
@@ -189,6 +215,34 @@ async function adminDeleteUniversityCategory(req, res) {
     catch (err) {
         console.error('adminDeleteUniversityCategory error:', err);
         res.status(500).json({ message: 'Failed to archive category.' });
+    }
+}
+async function adminSyncUniversityCategoryConfig(req, res) {
+    try {
+        const category = await UniversityCategory_1.default.findById(req.params.id);
+        if (!category) {
+            res.status(404).json({ message: 'Category not found.' });
+            return;
+        }
+        if (req.body && (req.body.sharedConfig !== undefined || req.body.examCenters !== undefined || req.body.applicationStartDate !== undefined)) {
+            category.sharedConfig = normalizeSharedConfig(req.body || {});
+            category.updatedBy = asObjectId(req.user?._id);
+            await category.save();
+        }
+        const syncResult = await (0, universitySyncService_1.syncUniversityCategorySharedConfig)(String(category._id), req.user?._id || null);
+        (0, homeStream_1.broadcastHomeStreamEvent)({
+            type: 'category-updated',
+            meta: { action: 'sync', categoryId: String(category._id), ...syncResult },
+        });
+        res.json({
+            category,
+            syncResult,
+            message: 'Category configuration synced to universities.',
+        });
+    }
+    catch (err) {
+        console.error('adminSyncUniversityCategoryConfig error:', err);
+        res.status(500).json({ message: 'Failed to sync category configuration.' });
     }
 }
 //# sourceMappingURL=universityCategoryController.js.map

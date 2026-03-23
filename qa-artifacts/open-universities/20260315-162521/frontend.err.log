@@ -1,0 +1,17 @@
+=5295 : The term '=5295' is not recognized as the name of a cmdlet, function, script file, or operable program. Check 
+the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ ='5295'; ='http://127.0.0.1:5095'; npm.cmd run dev -- --host 127.0.0. ...
++ ~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (=5295:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+=http://127.0.0.1:5095 : The term '=http://127.0.0.1:5095' is not recognized as the name of a cmdlet, function, script 
+file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct 
+and try again.
+At line:1 char:10
++ ='5295'; ='http://127.0.0.1:5095'; npm.cmd run dev -- --host 127.0.0. ...
++          ~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (=http://127.0.0.1:5095:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 

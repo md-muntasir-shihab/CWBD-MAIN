@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getAggregatedHomeData = void 0;
 const SubscriptionPlan_1 = __importDefault(require("../models/SubscriptionPlan"));
 const University_1 = __importDefault(require("../models/University"));
+const UniversityCluster_1 = __importDefault(require("../models/UniversityCluster"));
 const Exam_1 = __importDefault(require("../models/Exam"));
 const News_1 = __importDefault(require("../models/News"));
 const Resource_1 = __importDefault(require("../models/Resource"));
@@ -17,6 +18,7 @@ const homeSettingsService_1 = require("../services/homeSettingsService");
 const UniversitySettings_1 = __importDefault(require("../models/UniversitySettings"));
 const ContentBlock_1 = __importDefault(require("../models/ContentBlock"));
 const HomeConfig_1 = __importDefault(require("../models/HomeConfig"));
+const universitySyncService_1 = require("../services/universitySyncService");
 const DAY_MS = 24 * 60 * 60 * 1000;
 function parseSeatValue(value) {
     if (value === null || value === undefined)
@@ -279,6 +281,7 @@ function mapUniversityPreviewItem(item) {
         shortForm: pickString(item.shortForm, 'N/A'),
         slug: pickString(item.slug, ''),
         category: pickString(item.category, 'Uncategorized'),
+        clusterId: pickString(item.clusterId, ''),
         clusterGroup: pickString(item.clusterGroup, ''),
         contactNumber: pickString(item.contactNumber, ''),
         established: (() => {
@@ -323,8 +326,66 @@ function sortUniversityPreviewItems(items, mode) {
     });
     return sorted;
 }
+function getNearestFutureDateIso(values, now) {
+    const nowTime = startOfDay(now).getTime();
+    const timestamps = values
+        .map((value) => parseDate(value))
+        .filter((value) => Boolean(value))
+        .map((value) => startOfDay(value).getTime())
+        .filter((value) => value >= nowTime)
+        .sort((a, b) => a - b);
+    if (timestamps.length === 0)
+        return '';
+    return new Date(timestamps[0]).toISOString();
+}
+function buildHomeClusterCards(clusters, previewItems, now) {
+    const universitiesByCluster = new Map();
+    previewItems.forEach((item) => {
+        const clusterKey = item.clusterId || item.clusterGroup;
+        if (!clusterKey)
+            return;
+        const bucket = universitiesByCluster.get(clusterKey) || [];
+        bucket.push(item);
+        universitiesByCluster.set(clusterKey, bucket);
+    });
+    const cards = [];
+    clusters.forEach((cluster) => {
+        const clusterId = String(cluster._id || '');
+        const members = universitiesByCluster.get(clusterId) || universitiesByCluster.get(String(cluster.name || '').trim()) || [];
+        if (members.length === 0)
+            return;
+        const nearestDeadline = getNearestFutureDateIso(members.map((item) => item.applicationEndDate).filter(Boolean), now);
+        const nearestExam = getNearestFutureDateIso(members.flatMap((item) => [
+            item.scienceExamDate,
+            item.artsExamDate,
+            item.businessExamDate,
+            item.examDateScience,
+            item.examDateArts,
+            item.examDateBusiness,
+        ].filter(Boolean)), now);
+        cards.push({
+            id: clusterId,
+            slug: pickString(cluster.slug, ''),
+            name: pickString(cluster.name, 'Cluster'),
+            description: pickString(cluster.description, ''),
+            memberCount: members.length,
+            categories: Array.from(new Set(members.map((item) => item.category).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+            nearestDeadline,
+            nearestExam,
+            examCentersPreview: Array.from(new Set(members.flatMap((item) => item.examCentersPreview || []))).slice(0, 6),
+            homeVisible: Boolean(cluster.homeVisible),
+            homeOrder: Number(cluster.homeOrder || 0),
+        });
+    });
+    return cards.sort((a, b) => {
+        if (a.homeOrder !== b.homeOrder)
+            return a.homeOrder - b.homeOrder;
+        return a.name.localeCompare(b.name);
+    });
+}
 const getAggregatedHomeData = async (req, res) => {
     try {
+        await (0, universitySyncService_1.backfillUniversityTaxonomyIfNeeded)();
         const now = new Date();
         const [homeSettingsDoc, rawGlobalSettings, rawSiteSettings, subscriptionBannerState, uniSettingsDoc] = await Promise.all([
             (0, homeSettingsService_1.ensureHomeSettings)(),
@@ -335,12 +396,21 @@ const getAggregatedHomeData = async (req, res) => {
         ]);
         const defaults = (0, homeSettingsService_1.getHomeSettingsDefaults)();
         const homeSettings = (0, homeSettingsService_1.mergeHomeSettings)(defaults, homeSettingsDoc.toObject());
-        const [universities, allRelevantExams, totalStudents, totalResources, totalNews, subscriptionPlansRaw, activeBanners] = await Promise.all([
+        const [universities, clusters, allRelevantExams, totalStudents, totalResources, totalNews, subscriptionPlansRaw, activeBanners] = await Promise.all([
             University_1.default.find({ isActive: true, isArchived: { $ne: true } })
-                .select('name shortForm slug category clusterGroup contactNumber established address email website admissionWebsite totalSeats scienceSeats artsSeats businessSeats applicationStartDate applicationEndDate scienceExamDate artsExamDate businessExamDate examCenters shortDescription description logoUrl')
+                .select('name shortForm slug category clusterId clusterGroup contactNumber established address email website admissionWebsite totalSeats scienceSeats artsSeats businessSeats applicationStartDate applicationEndDate scienceExamDate artsExamDate businessExamDate examCenters shortDescription description logoUrl')
                 .sort({ updatedAt: -1, createdAt: -1, _id: -1 })
                 .lean(),
-            Exam_1.default.find({ isPublished: true, status: { $in: ['live', 'scheduled'] } })
+            UniversityCluster_1.default.find({ isActive: true })
+                .select('_id slug name description homeVisible homeOrder')
+                .sort({ homeOrder: 1, name: 1 })
+                .lean(),
+            Exam_1.default.find({
+                isPublished: true,
+                isActive: { $ne: false },
+                displayOnPublicList: { $ne: false },
+                status: { $in: ['live', 'scheduled'] },
+            })
                 .select('title subject status startDate endDate duration')
                 .sort({ startDate: 1 })
                 .lean(),
@@ -455,9 +525,11 @@ const getAggregatedHomeData = async (req, res) => {
         }))
             .filter((item) => item.enabled && item.category)
             .sort((a, b) => a.order - b.order);
-        const highlightedCategories = highlightedFromUniversitySettings.length > 0
-            ? highlightedFromUniversitySettings
-            : highlightedFromHomeSettings;
+        // Home settings should be the canonical source when explicitly configured.
+        // Fall back to university settings only when home settings are empty.
+        const highlightedCategories = highlightedFromHomeSettings.length > 0
+            ? highlightedFromHomeSettings
+            : highlightedFromUniversitySettings;
         const highlightedSet = new Set(highlightedCategories.map((item) => item.category));
         const categoriesWithHighlightRaw = categories.map((item) => ({
             ...item,
@@ -499,6 +571,7 @@ const getAggregatedHomeData = async (req, res) => {
         const clusterGroups = Array.from(new Set(previewItems
             .map((item) => pickString(item.clusterGroup))
             .filter(Boolean))).sort((a, b) => a.localeCompare(b));
+        const clusterCards = buildHomeClusterCards(clusters, previewItems, now);
         // Build universityCategories array with per-category clusterGroups
         const categoryOrder = (uniSettingsDoc?.categoryOrder || []);
         const categoryOrderMap = new Map(categoryOrder.map((cat, i) => [cat, i]));
@@ -577,7 +650,15 @@ const getAggregatedHomeData = async (req, res) => {
         const nowStartTime = startOfDay(now).getTime();
         const maxDeadlineTime = nowStartTime + (deadlineWithinDays * DAY_MS);
         const maxExamTime = nowStartTime + (examWithinDaysCards * DAY_MS);
-        const deadlineUniversities = filteredPreviewItems
+        const filteredClusterCards = clusterCards.filter((cluster) => {
+            if (reqCluster && reqCluster.toLowerCase() !== 'all' && cluster.name !== reqCluster)
+                return false;
+            if (reqCategory && reqCategory.toLowerCase() !== 'all' && !cluster.categories.includes(reqCategory))
+                return false;
+            return true;
+        });
+        const filteredIndividualPreviewItems = filteredPreviewItems.filter((item) => !item.clusterGroup);
+        const deadlineUniversities = filteredIndividualPreviewItems
             .filter(item => {
             const deadline = parseDate(item.applicationEndDate);
             if (!deadline)
@@ -593,7 +674,16 @@ const getAggregatedHomeData = async (req, res) => {
             return aTime - bTime;
         })
             .slice(0, maxDeadlineCards);
-        const upcomingExamUniversities = filteredPreviewItems
+        const deadlineClusters = filteredClusterCards
+            .filter((cluster) => {
+            const deadline = parseDate(cluster.nearestDeadline);
+            if (!deadline)
+                return false;
+            const deadlineTime = startOfDay(deadline).getTime();
+            return deadlineTime >= nowStartTime && deadlineTime <= maxDeadlineTime;
+        })
+            .slice(0, maxDeadlineCards);
+        const upcomingExamUniversities = filteredIndividualPreviewItems
             .filter(item => {
             const dates = [
                 item.scienceExamDate, item.artsExamDate, item.businessExamDate,
@@ -610,6 +700,18 @@ const getAggregatedHomeData = async (req, res) => {
             });
         })
             .slice(0, maxExamCards);
+        const upcomingExamClusters = filteredClusterCards
+            .filter((cluster) => {
+            const examDate = parseDate(cluster.nearestExam);
+            if (!examDate)
+                return false;
+            const examTime = startOfDay(examDate).getTime();
+            return examTime >= nowStartTime && examTime <= maxExamTime;
+        })
+            .slice(0, maxExamCards);
+        const featuredClusters = filteredClusterCards
+            .filter((cluster) => cluster.homeVisible)
+            .slice(0, maxFeatured);
         const universityDashboardData = {
             categories: categoriesWithHighlight,
             filtersMeta: {
@@ -730,8 +832,11 @@ const getAggregatedHomeData = async (req, res) => {
         const newsPreviewItems = Array.isArray(newsPreview) ? newsPreview : [];
         const resourcePreviewItems = Array.isArray(resourcesPreview) ? resourcesPreview : [];
         const featuredUniversities = Array.isArray(featuredItems) ? featuredItems : [];
+        const featuredClusterItems = Array.isArray(featuredClusters) ? featuredClusters : [];
         const deadlineItems = Array.isArray(deadlineUniversities) ? deadlineUniversities : [];
+        const deadlineClusterItems = Array.isArray(deadlineClusters) ? deadlineClusters : [];
         const upcomingExamItems = Array.isArray(upcomingExamUniversities) ? upcomingExamUniversities : [];
+        const upcomingExamClusterItems = Array.isArray(upcomingExamClusters) ? upcomingExamClusters : [];
         const liveExamItems = Array.isArray(liveNow) ? liveNow : [];
         const upcomingOnlineExamItems = Array.isArray(upcoming) ? upcoming : [];
         const campaignBannersActive = homeAdsBanners.map(b => ({
@@ -796,8 +901,11 @@ const getAggregatedHomeData = async (req, res) => {
             universityDashboardData,
             universityCategories: categoriesSafe,
             featuredUniversities,
+            featuredClusters: featuredClusterItems,
             deadlineUniversities: deadlineItems,
+            deadlineClusters: deadlineClusterItems,
             upcomingExamUniversities: upcomingExamItems,
+            upcomingExamClusters: upcomingExamClusterItems,
             uniSettings: {
                 enableClusterFilterOnHome: uniSettingsDoc?.enableClusterFilterOnHome ?? true,
                 defaultCategory: uniSettingsDoc?.defaultCategory || homeSettings.universityDashboard.defaultCategory || 'all',

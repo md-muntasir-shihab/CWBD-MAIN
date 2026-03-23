@@ -21,10 +21,10 @@ const University_1 = __importDefault(require("../models/University"));
 const Notification_1 = __importDefault(require("../models/Notification"));
 const StudentDashboardConfig_1 = __importDefault(require("../models/StudentDashboardConfig"));
 const StudentBadge_1 = __importDefault(require("../models/StudentBadge"));
-const studentProfileScoreService_1 = require("./studentProfileScoreService");
 const StudentApplication_1 = __importDefault(require("../models/StudentApplication"));
 const StudentDueLedger_1 = __importDefault(require("../models/StudentDueLedger"));
 const examCardMetricsService_1 = require("./examCardMetricsService");
+const externalExamAttemptService_1 = require("./externalExamAttemptService");
 const securityConfigService_1 = require("./securityConfigService");
 async function ensureDashboardConfig() {
     let config = await StudentDashboardConfig_1.default.findOne().lean();
@@ -45,6 +45,29 @@ function matchFilterList(filterList, value) {
     if (list.length === 0)
         return true;
     return list.includes(normalizedValue);
+}
+function normalizeObjectIdArray(input) {
+    if (!Array.isArray(input))
+        return [];
+    return input
+        .map((item) => {
+        if (!item)
+            return '';
+        if (typeof item === 'string')
+            return item;
+        if (typeof item === 'object' && '_id' in item) {
+            return String(item._id || '');
+        }
+        return String(item);
+    })
+        .map((item) => item.trim())
+        .filter(Boolean);
+}
+function hasAnyIntersection(left, right) {
+    if (left.length === 0 || right.length === 0)
+        return false;
+    const rightSet = new Set(right);
+    return left.some((item) => rightSet.has(item));
 }
 function toStatus(startDate, endDate, attemptsLeft) {
     const now = new Date();
@@ -85,8 +108,8 @@ async function getStudentDashboardHeader(studentId) {
     if (!user || !profile) {
         throw new Error('Student not found');
     }
-    const scoreResult = (0, studentProfileScoreService_1.computeStudentProfileScore)(profile, user);
-    const completion = scoreResult.score;
+    const persistedCompletion = Number(profile.profile_completion_percentage);
+    const completion = Number.isFinite(persistedCompletion) ? persistedCompletion : 0;
     const messageTemplate = String(config?.welcomeMessageTemplate || 'স্বাগতম, {{name}}!');
     const welcomeMessage = messageTemplate
         .replace('{{name}}', String(profile.full_name || user.full_name || user.username))
@@ -208,11 +231,18 @@ async function getUpcomingExamCards(studentId) {
     const subscriptionActive = Boolean(user?.subscription?.isActive &&
         Number.isFinite(subscriptionExpiryTime) &&
         subscriptionExpiryTime > Date.now());
-    const metricsMap = await (0, examCardMetricsService_1.getExamCardMetrics)(exams);
+    const examIds = exams.map((exam) => String(exam._id || '')).filter(Boolean);
+    const [metricsMap, externalAttemptCountMap] = await Promise.all([
+        (0, examCardMetricsService_1.getExamCardMetrics)(exams),
+        (0, externalExamAttemptService_1.getExternalExamAttemptCountsForStudent)(studentId, examIds),
+    ]);
     const resultCounts = new Map();
     for (const r of results) {
         const examId = String(r.exam);
         resultCounts.set(examId, (resultCounts.get(examId) || 0) + 1);
+    }
+    for (const [examId, count] of externalAttemptCountMap.entries()) {
+        resultCounts.set(examId, Math.max(Number(resultCounts.get(examId) || 0), Number(count || 0)));
     }
     const lockedExamSet = new Set(activeSessions
         .filter((s) => Boolean(s.sessionLocked))
@@ -245,21 +275,27 @@ async function getUpcomingExamCards(studentId) {
         const accessControl = (exam.accessControl && typeof exam.accessControl === 'object')
             ? exam.accessControl
             : {};
-        const requiredUserIds = Array.isArray(accessControl.allowedUserIds)
-            ? accessControl.allowedUserIds.map((id) => String(id))
-            : [];
-        const requiredGroupIds = Array.isArray(accessControl.allowedGroupIds)
-            ? accessControl.allowedGroupIds.map((id) => String(id))
-            : [];
+        const requiredUserIds = normalizeObjectIdArray(accessControl.allowedUserIds);
+        const requiredGroupIds = normalizeObjectIdArray(accessControl.allowedGroupIds);
         const requiredPlanCodes = Array.isArray(accessControl.allowedPlanCodes)
             ? accessControl.allowedPlanCodes.map((code) => String(code).toLowerCase())
             : [];
-        const subscriptionRequired = Boolean(exam.subscriptionRequired) || requiredPlanCodes.length > 0;
+        const visibilityMode = String(exam.visibilityMode || 'all_students');
+        const targetGroupIds = normalizeObjectIdArray(exam.targetGroupIds || []);
+        const subscriptionRequired = Boolean(exam.subscriptionRequired)
+            || Boolean(exam.requiresActiveSubscription)
+            || visibilityMode === 'subscription_only'
+            || requiredPlanCodes.length > 0;
         let accessDeniedReason = '';
         if (requiredUserIds.length > 0 && !requiredUserIds.includes(String(studentId))) {
             accessDeniedReason = 'access_user_restricted';
         }
-        else if (requiredGroupIds.length > 0 && !requiredGroupIds.some((id) => studentGroupIds.includes(id))) {
+        else if (requiredGroupIds.length > 0 && !hasAnyIntersection(requiredGroupIds, studentGroupIds)) {
+            accessDeniedReason = 'access_group_restricted';
+        }
+        else if ((visibilityMode === 'group_only' || visibilityMode === 'custom')
+            && targetGroupIds.length > 0
+            && !hasAnyIntersection(targetGroupIds, studentGroupIds)) {
             accessDeniedReason = 'access_group_restricted';
         }
         else if (requiredPlanCodes.length > 0 && !requiredPlanCodes.includes(studentPlanCode)) {
@@ -278,7 +314,7 @@ async function getUpcomingExamCards(studentId) {
             !accessDeniedReason &&
             completion >= threshold &&
             attemptsLeft > 0 &&
-            (status === 'live' || (status === 'upcoming' && !!exam.externalExamUrl)));
+            status === 'live');
         cards.push({
             _id: examId,
             title: exam.title,

@@ -12,20 +12,20 @@ export declare const createTransactionSchema: z.ZodObject<{
     description: z.ZodOptional<z.ZodString>;
     status: z.ZodOptional<z.ZodEnum<{
         pending: "pending";
+        approved: "approved";
         paid: "paid";
         refunded: "refunded";
-        approved: "approved";
         cancelled: "cancelled";
     }>>;
     method: z.ZodOptional<z.ZodEnum<{
         manual: "manual";
         bkash: "bkash";
         nagad: "nagad";
-        card: "card";
-        bank: "bank";
         rocket: "rocket";
         upay: "upay";
         cash: "cash";
+        bank: "bank";
+        card: "card";
         gateway: "gateway";
     }>>;
     sourceType: z.ZodOptional<z.ZodEnum<{
@@ -63,20 +63,20 @@ export declare const updateTransactionSchema: z.ZodObject<{
     description: z.ZodOptional<z.ZodString>;
     status: z.ZodOptional<z.ZodEnum<{
         pending: "pending";
+        approved: "approved";
         paid: "paid";
         refunded: "refunded";
-        approved: "approved";
         cancelled: "cancelled";
     }>>;
     method: z.ZodOptional<z.ZodEnum<{
         manual: "manual";
         bkash: "bkash";
         nagad: "nagad";
-        card: "card";
-        bank: "bank";
         rocket: "rocket";
         upay: "upay";
         cash: "cash";
+        bank: "bank";
+        card: "card";
         gateway: "gateway";
     }>>;
     tags: z.ZodOptional<z.ZodArray<z.ZodString>>;
@@ -89,9 +89,9 @@ export declare const bulkIdsSchema: z.ZodObject<{
 export declare const createInvoiceSchema: z.ZodObject<{
     studentId: z.ZodOptional<z.ZodString>;
     purpose: z.ZodEnum<{
+        subscription: "subscription";
         custom: "custom";
         exam: "exam";
-        subscription: "subscription";
         service: "service";
     }>;
     planId: z.ZodOptional<z.ZodString>;
@@ -105,8 +105,8 @@ export declare const updateInvoiceSchema: z.ZodObject<{
     amountBDT: z.ZodOptional<z.ZodNumber>;
     paidAmountBDT: z.ZodOptional<z.ZodNumber>;
     status: z.ZodOptional<z.ZodEnum<{
-        paid: "paid";
         partial: "partial";
+        paid: "paid";
         cancelled: "cancelled";
         unpaid: "unpaid";
         overdue: "overdue";
@@ -157,20 +157,20 @@ export declare const createRecurringRuleSchema: z.ZodObject<{
         manual: "manual";
         bkash: "bkash";
         nagad: "nagad";
-        card: "card";
-        bank: "bank";
         rocket: "rocket";
         upay: "upay";
         cash: "cash";
+        bank: "bank";
+        card: "card";
         gateway: "gateway";
     }>>;
     tags: z.ZodOptional<z.ZodArray<z.ZodString>>;
     costCenterId: z.ZodOptional<z.ZodString>;
     vendorId: z.ZodOptional<z.ZodString>;
     frequency: z.ZodEnum<{
-        custom: "custom";
         weekly: "weekly";
         monthly: "monthly";
+        custom: "custom";
         yearly: "yearly";
     }>;
     dayOfMonth: z.ZodOptional<z.ZodNumber>;
@@ -193,20 +193,20 @@ export declare const updateRecurringRuleSchema: z.ZodObject<{
         manual: "manual";
         bkash: "bkash";
         nagad: "nagad";
-        card: "card";
-        bank: "bank";
         rocket: "rocket";
         upay: "upay";
         cash: "cash";
+        bank: "bank";
+        card: "card";
         gateway: "gateway";
     }>>;
     tags: z.ZodOptional<z.ZodArray<z.ZodString>>;
     costCenterId: z.ZodOptional<z.ZodString>;
     vendorId: z.ZodOptional<z.ZodString>;
     frequency: z.ZodOptional<z.ZodEnum<{
-        custom: "custom";
         weekly: "weekly";
         monthly: "monthly";
+        custom: "custom";
         yearly: "yearly";
     }>>;
     dayOfMonth: z.ZodOptional<z.ZodNumber>;
@@ -276,11 +276,11 @@ export declare const importCommitSchema: z.ZodObject<{
             manual: "manual";
             bkash: "bkash";
             nagad: "nagad";
-            card: "card";
-            bank: "bank";
             rocket: "rocket";
             upay: "upay";
             cash: "cash";
+            bank: "bank";
+            card: "card";
             gateway: "gateway";
         }>>;
         dateUTC: z.ZodOptional<z.ZodString>;

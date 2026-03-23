@@ -34,6 +34,7 @@ export declare function adminGetResourceSettings(_req: Request, res: Response): 
 export declare function adminUpdateResourceSettings(req: Request, res: Response): Promise<void>;
 export declare function adminGetContactMessages(req: Request, res: Response): Promise<void>;
 export declare function adminDeleteContactMessage(req: Request, res: Response): Promise<void>;
+export declare function adminUpdateContactMessage(req: Request, res: Response): Promise<void>;
 export declare function getSiteSettings(_req: Request, res: Response): Promise<void>;
 export declare function updateSiteSettings(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminUpdateUserRole(req: AuthRequest, res: Response): Promise<void>;

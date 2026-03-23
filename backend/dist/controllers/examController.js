@@ -17,6 +17,8 @@ exports.saveExamAttemptAnswer = saveExamAttemptAnswer;
 exports.submitExamAttempt = submitExamAttempt;
 exports.logExamAttemptEvent = logExamAttemptEvent;
 exports.getExamResult = getExamResult;
+exports.getExamAttemptResult = getExamAttemptResult;
+exports.getExamAttemptSolutions = getExamAttemptSolutions;
 exports.getStudentExamQuestions = getStudentExamQuestions;
 exports.streamExamAttempt = streamExamAttempt;
 exports.getExamCertificate = getExamCertificate;
@@ -36,12 +38,12 @@ const ExamCertificate_1 = __importDefault(require("../models/ExamCertificate"));
 const StudentDueLedger_1 = __importDefault(require("../models/StudentDueLedger"));
 const ManualPayment_1 = __importDefault(require("../models/ManualPayment"));
 const Settings_1 = __importDefault(require("../models/Settings"));
-const ExternalExamJoinLog_1 = __importDefault(require("../models/ExternalExamJoinLog"));
 const examAttemptStream_1 = require("../realtime/examAttemptStream");
 const adminLiveStream_1 = require("../realtime/adminLiveStream");
 const examCardMetricsService_1 = require("../services/examCardMetricsService");
 const securityConfigService_1 = require("../services/securityConfigService");
 const examFinalizationService_1 = require("../services/examFinalizationService");
+const externalExamAttemptService_1 = require("../services/externalExamAttemptService");
 const LEGACY_PLAN_CODE = 'legacy_free';
 const LEGACY_PLAN_NAME = 'Legacy Free Access';
 const LEGACY_SUBSCRIPTION_DAYS = 3650; // 10 years
@@ -121,6 +123,7 @@ async function getStudentExams(req, res) {
         const hasActiveSubscription = subscriptionState.allowed;
         const now = new Date();
         const exams = await Exam_1.default.find({ isPublished: true }).sort({ startDate: 1 }).lean();
+        const examIds = exams.map((exam) => String(exam._id || '')).filter(Boolean);
         const [profile, user, dueLedger] = await Promise.all([
             StudentProfile_1.default.findOne({ user_id: studentId }).select('groupIds').lean(),
             User_1.default.findById(studentId).select('subscription').lean(),
@@ -141,6 +144,7 @@ async function getStudentExams(req, res) {
                 resultMap.set(examKey, r);
             attemptCountMap.set(examKey, (attemptCountMap.get(examKey) || 0) + 1);
         }
+        const externalAttemptCountMap = await (0, externalExamAttemptService_1.getExternalExamAttemptCountsForStudent)(studentId, examIds);
         // Fetch active session if any
         const activeSessions = await ExamSession_1.default.find({
             student: studentId,
@@ -153,7 +157,7 @@ async function getStudentExams(req, res) {
             .map(e => {
             const examKey = e._id.toString();
             const result = resultMap.get(examKey);
-            const attempts = attemptCountMap.get(examKey) || 0;
+            const attempts = Math.max(Number(attemptCountMap.get(examKey) || 0), Number(externalAttemptCountMap.get(examKey) || 0));
             const accessControl = (e.accessControl && typeof e.accessControl === 'object')
                 ? e.accessControl
                 : {};
@@ -316,6 +320,7 @@ async function getPublicExamList(req, res) {
                     expiresAt: { $gt: now },
                 }).select('exam').lean(),
             ]);
+            const externalAttemptCountMap = await (0, externalExamAttemptService_1.getExternalExamAttemptCountsForStudent)(studentId, examIds);
             studentGroupIds = normalizeObjectIdArray(profile?.groupIds || []);
             pendingDueAmount = Number(dueLedger?.netDue || 0);
             studentPlanCode = String(user?.subscription?.planCode ||
@@ -331,6 +336,9 @@ async function getPublicExamList(req, res) {
                 map.set(examId, (map.get(examId) || 0) + 1);
                 return map;
             }, new Map());
+            for (const [examId, count] of externalAttemptCountMap.entries()) {
+                attemptsMap.set(examId, Math.max(Number(attemptsMap.get(examId) || 0), Number(count || 0)));
+            }
             activeSessionMap = new Set(activeSessions.map((row) => String(row.exam || '')).filter(Boolean));
         }
         const cards = exams
@@ -344,14 +352,28 @@ async function getPublicExamList(req, res) {
             const requiredUserIds = normalizeObjectIdArray(accessControl.allowedUserIds);
             const requiredGroupIds = normalizeObjectIdArray(accessControl.allowedGroupIds);
             const requiredPlanCodes = toStringArray(accessControl.allowedPlanCodes).map((code) => code.toLowerCase());
-            const subscriptionRequired = Boolean(exam.subscriptionRequired) || requiredPlanCodes.length > 0;
+            const visibilityMode = String(exam.visibilityMode || 'all_students');
+            const targetGroupIds = normalizeObjectIdArray(exam.targetGroupIds);
+            const subscriptionRequired = Boolean(exam.subscriptionRequired)
+                || Boolean(exam.requiresActiveSubscription)
+                || visibilityMode === 'subscription_only'
+                || requiredPlanCodes.length > 0;
             const paymentRequired = subscriptionRequired;
             const attemptsUsed = Number(attemptsMap.get(examId) || 0);
             const attemptLimit = Math.max(1, Number(exam.attemptLimit || 1));
             const attemptsLeft = Math.max(0, attemptLimit - attemptsUsed);
-            const specificModeDenied = (String(exam.accessMode || 'all') === 'specific' &&
+            const specificModeRestricted = String(exam.accessMode || 'all') === 'specific';
+            const specificModeDenied = (specificModeRestricted &&
                 Array.isArray(exam.allowedUsers) &&
                 !exam.allowedUsers.some((id) => String(id) === studentId));
+            const hasGroupScopedVisibility = (visibilityMode === 'group_only' || visibilityMode === 'custom') && targetGroupIds.length > 0;
+            const hiddenFromPublic = !isStudent && (specificModeRestricted ||
+                requiredUserIds.length > 0 ||
+                requiredGroupIds.length > 0 ||
+                hasGroupScopedVisibility);
+            if (hiddenFromPublic) {
+                return null;
+            }
             let lockReason = 'none';
             if (!isStudent) {
                 lockReason = 'login_required';
@@ -359,19 +381,17 @@ async function getPublicExamList(req, res) {
             else {
                 const userDenied = requiredUserIds.length > 0 && !requiredUserIds.includes(studentId);
                 const groupDenied = requiredGroupIds.length > 0 && !hasAnyIntersection(requiredGroupIds, studentGroupIds);
-                // New visibility mode check (Phase 12)
-                const visibilityMode = String(exam.visibilityMode || 'all_students');
-                const targetGroupIds = normalizeObjectIdArray(exam.targetGroupIds);
                 const visibilityGroupDenied = (visibilityMode === 'group_only' || visibilityMode === 'custom')
                     && targetGroupIds.length > 0
                     && !hasAnyIntersection(targetGroupIds, studentGroupIds);
                 const groupRestricted = userDenied || groupDenied || specificModeDenied || visibilityGroupDenied;
+                if (groupRestricted) {
+                    return null;
+                }
                 const planDenied = requiredPlanCodes.length > 0 && !requiredPlanCodes.includes(studentPlanCode);
                 const subscriptionDenied = subscriptionRequired && !hasActiveSubscription && !planDenied;
                 const paymentPending = paymentRequired && hasActiveSubscription && pendingDueAmount > 0;
-                if (groupRestricted)
-                    lockReason = 'group_restricted';
-                else if (planDenied)
+                if (planDenied)
                     lockReason = 'plan_restricted';
                 else if (subscriptionDenied || paymentPending)
                     lockReason = 'subscription_required';
@@ -420,6 +440,8 @@ async function getPublicExamList(req, res) {
                 myAttemptStatus,
             };
         })
+            .filter((card) => card !== null);
+        const filteredCards = cards
             .filter((card) => {
             if (statusFilter && card.status !== statusFilter)
                 return false;
@@ -429,7 +451,7 @@ async function getPublicExamList(req, res) {
                 return false;
             return true;
         });
-        const items = cards.slice(skip, skip + limit).map((item, idx) => ({
+        const items = filteredCards.slice(skip, skip + limit).map((item, idx) => ({
             ...item,
             serialNo: skip + idx + 1,
         }));
@@ -437,8 +459,8 @@ async function getPublicExamList(req, res) {
             items,
             page,
             limit,
-            total: cards.length,
-            pages: Math.max(1, Math.ceil(cards.length / limit)),
+            total: filteredCards.length,
+            pages: Math.max(1, Math.ceil(filteredCards.length / limit)),
             serverNow: now.toISOString(),
         });
     }
@@ -513,6 +535,7 @@ async function getExamLanding(req, res) {
             (0, examCardMetricsService_1.getExamCardMetrics)(exams),
             StudentDueLedger_1.default.findOne({ studentId }).select('netDue').lean(),
         ]);
+        const externalAttemptCountMap = await (0, externalExamAttemptService_1.getExternalExamAttemptCountsForStudent)(studentId, examIds);
         const pendingDueAmount = Number(dueLedger?.netDue || 0);
         const studentGroupIds = normalizeObjectIdArray(profile?.groupIds || []);
         const studentPlanCode = String(user?.subscription?.planCode ||
@@ -522,6 +545,9 @@ async function getExamLanding(req, res) {
         for (const result of results) {
             const examKey = String(result.exam || '');
             attemptCountByExam.set(examKey, (attemptCountByExam.get(examKey) || 0) + 1);
+        }
+        for (const [examId, count] of externalAttemptCountMap.entries()) {
+            attemptCountByExam.set(examId, Math.max(Number(attemptCountByExam.get(examId) || 0), Number(count || 0)));
         }
         const activeSessionExamIds = new Set(activeSessions.map((session) => String(session.exam || '')).filter(Boolean));
         const cards = exams
@@ -699,17 +725,19 @@ async function ensurePendingExamPaymentRecord(examId, studentId, pendingDueAmoun
 }
 async function getEligibilitySummary(exam, studentId) {
     const examId = String(exam._id || '');
-    const [subscriptionState, profile, threshold, attemptsUsed, user, dueLedger, examPayment] = await Promise.all([
+    const [subscriptionState, profile, threshold, resultAttemptsUsed, externalAttemptsUsed, user, dueLedger, examPayment] = await Promise.all([
         verifySubscription(studentId),
         StudentProfile_1.default.findOne({ user_id: studentId }).select('profile_completion_percentage groupIds').lean(),
         getProfileCompletionThreshold(),
         ExamResult_1.default.countDocuments({ exam: examId, student: studentId }),
+        (0, externalExamAttemptService_1.getExternalExamAttemptCount)(examId, studentId),
         User_1.default.findById(studentId).select('subscription').lean(),
         StudentDueLedger_1.default.findOne({ studentId }).select('netDue').lean(),
         mongoose_1.default.Types.ObjectId.isValid(examId)
             ? ManualPayment_1.default.findOne({ studentId, examId, entryType: 'exam_fee' }).sort({ createdAt: -1 }).lean()
             : Promise.resolve(null),
     ]);
+    const attemptsUsed = Math.max(Number(resultAttemptsUsed || 0), Number(externalAttemptsUsed || 0));
     const reasons = [];
     const currentProfileCompletion = Number(profile?.profile_completion_percentage || 0);
     const profileComplete = currentProfileCompletion >= threshold;
@@ -982,7 +1010,13 @@ function normalizeIncomingAnswers(input) {
             const updatedAt = updatedAtRaw ? new Date(updatedAtRaw) : undefined;
             return {
                 questionId: String(row.questionId || '').trim(),
-                selectedAnswer: row.selectedAnswer !== undefined ? String(row.selectedAnswer || '') : undefined,
+                selectedAnswer: row.selectedAnswer !== undefined
+                    ? String(row.selectedAnswer || '')
+                    : row.selectedKey !== undefined
+                        ? String(row.selectedKey || '')
+                        : row.selectedOption !== undefined
+                            ? String(row.selectedOption || '')
+                            : undefined,
                 writtenAnswerUrl: row.writtenAnswerUrl !== undefined ? String(row.writtenAnswerUrl || '') : undefined,
                 updatedAtUTC: updatedAt && !Number.isNaN(updatedAt.getTime()) ? updatedAt : undefined,
             };
@@ -1001,7 +1035,13 @@ function normalizeIncomingAnswers(input) {
             const updatedAt = updatedAtRaw ? new Date(updatedAtRaw) : undefined;
             return {
                 questionId,
-                selectedAnswer: item.selectedAnswer !== undefined ? String(item.selectedAnswer || '') : undefined,
+                selectedAnswer: item.selectedAnswer !== undefined
+                    ? String(item.selectedAnswer || '')
+                    : item.selectedKey !== undefined
+                        ? String(item.selectedKey || '')
+                        : item.selectedOption !== undefined
+                            ? String(item.selectedOption || '')
+                            : undefined,
                 writtenAnswerUrl: item.writtenAnswerUrl !== undefined ? String(item.writtenAnswerUrl || '') : undefined,
                 updatedAtUTC: updatedAt && !Number.isNaN(updatedAt.getTime()) ? updatedAt : undefined,
             };
@@ -1306,21 +1346,34 @@ async function startExam(req, res) {
         if (exam.externalExamUrl) {
             try {
                 const profileSnapshot = await StudentProfile_1.default.findOne({ user_id: studentId })
-                    .select('registration_id groupIds')
+                    .select('registration_id user_unique_id groupIds phone phone_number full_name')
                     .lean();
-                const forwardedFor = req.headers['x-forwarded-for'];
-                const ipAddress = (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor)?.split(',')[0] || req.socket.remoteAddress || '';
                 const sourcePanel = String(req.body?.sourcePanel || req.query?.source || 'exam_start').trim() || 'exam_start';
-                await ExternalExamJoinLog_1.default.create({
+                const externalAttempt = await (0, externalExamAttemptService_1.createExternalExamAttempt)({
                     examId: exam._id,
-                    studentId: new mongoose_1.default.Types.ObjectId(studentId),
-                    joinedAt: new Date(),
+                    studentId,
+                    attemptNo: eligibility.attemptsUsed + 1,
                     sourcePanel,
-                    registration_id_snapshot: String(profileSnapshot?.registration_id || ''),
-                    groupIds_snapshot: normalizeObjectIdArray(profileSnapshot?.groupIds || []),
-                    ip: String(ipAddress || ''),
-                    userAgent: String(req.headers['user-agent'] || ''),
+                    registrationIdSnapshot: String(profileSnapshot?.registration_id || ''),
+                    userUniqueIdSnapshot: String(profileSnapshot?.user_unique_id || ''),
+                    usernameSnapshot: String(user.username || ''),
+                    emailSnapshot: String(user.email || ''),
+                    phoneNumberSnapshot: String(profileSnapshot?.phone_number || profileSnapshot?.phone || ''),
+                    fullNameSnapshot: String(profileSnapshot?.full_name || user.full_name || user.username || ''),
+                    groupIdsSnapshot: normalizeObjectIdArray(profileSnapshot?.groupIds || []),
+                    ip: getRequestIp(req),
+                    userAgent: getRequestUserAgent(req),
+                    externalExamUrl: String(exam.externalExamUrl || ''),
                 });
+                res.json({
+                    redirect: true,
+                    externalExamUrl: externalAttempt.redirectUrl,
+                    externalAttemptRef: externalAttempt.attemptRef,
+                    exam: sanitizeExamForStudent(exam),
+                    serverNow: new Date().toISOString(),
+                    serverOffsetMs: 0,
+                });
+                return;
             }
             catch (logErr) {
                 console.warn('[startExam external join log]', logErr);
@@ -2158,123 +2211,243 @@ async function logExamAttemptEvent(req, res) {
         res.status(500).json({ message: 'Server error' });
     }
 }
+function normalizeOptionKey(value) {
+    const normalized = String(value || '').trim().toUpperCase();
+    if (normalized === 'A' || normalized === 'B' || normalized === 'C' || normalized === 'D') {
+        return normalized;
+    }
+    return null;
+}
+async function loadExamAttemptResultContext(params) {
+    const { studentId, examId, attemptId } = params;
+    const exam = await Exam_1.default.findById(examId).lean();
+    if (!exam) {
+        return { ok: false, statusCode: 404, message: 'Exam not found.' };
+    }
+    let attemptNo = null;
+    if (attemptId) {
+        if (!mongoose_1.default.Types.ObjectId.isValid(attemptId)) {
+            return { ok: false, statusCode: 400, message: 'Invalid exam session.' };
+        }
+        const session = await ExamSession_1.default.findOne({
+            _id: attemptId,
+            exam: examId,
+            student: studentId,
+        }).lean();
+        if (!session) {
+            return { ok: false, statusCode: 404, message: 'Exam session not found.' };
+        }
+        attemptNo = Number(session.attemptNo || 1);
+    }
+    const resultQuery = { exam: examId, student: studentId };
+    if (attemptNo !== null) {
+        resultQuery.attemptNo = attemptNo;
+    }
+    const result = await ExamResult_1.default.findOne(resultQuery).sort({ attemptNo: -1, submittedAt: -1 }).lean();
+    if (!result) {
+        return {
+            ok: false,
+            statusCode: 404,
+            message: 'No result found. You have not submitted this exam.',
+        };
+    }
+    const now = new Date();
+    const resultPublished = isExamResultPublished(exam, now);
+    const resultPublishMode = getResultPublishMode(exam);
+    const reviewSettings = (exam.reviewSettings || {
+        showQuestion: true,
+        showSelectedAnswer: true,
+        showCorrectAnswer: true,
+        showExplanation: true,
+        showSolutionImage: true,
+    });
+    const questionIds = Array.isArray(result.answers)
+        ? result.answers.map((answer) => answer.question)
+        : [];
+    const questions = await Question_1.default.find({ _id: { $in: questionIds } }).lean();
+    const qMap = new Map(questions.map((question) => [question._id.toString(), question]));
+    const rawAnswers = (Array.isArray(result.answers) ? result.answers : []).map((answer) => {
+        const question = qMap.get(String(answer.question || ''));
+        return {
+            questionId: answer.question,
+            question: question?.question,
+            questionImage: question?.questionImage,
+            optionA: question?.optionA,
+            optionB: question?.optionB,
+            optionC: question?.optionC,
+            optionD: question?.optionD,
+            correctAnswer: question?.correctAnswer,
+            correctOption: question?.correctAnswer,
+            selectedAnswer: answer.selectedAnswer,
+            selectedOption: answer.selectedAnswer,
+            isCorrect: answer.isCorrect,
+            explanation: question?.explanation,
+            solutionImage: question?.solutionImage,
+            solution: question?.solution || null,
+            section: question?.section,
+            marks: question?.marks,
+        };
+    });
+    const answers = !Boolean(reviewSettings.showQuestion)
+        ? []
+        : rawAnswers.map((answer) => {
+            const next = { ...answer };
+            if (!Boolean(reviewSettings.showSelectedAnswer)) {
+                delete next.selectedAnswer;
+                delete next.selectedOption;
+            }
+            if (!Boolean(reviewSettings.showCorrectAnswer)) {
+                delete next.correctAnswer;
+                delete next.correctOption;
+                delete next.optionA;
+                delete next.optionB;
+                delete next.optionC;
+                delete next.optionD;
+            }
+            if (!Boolean(reviewSettings.showExplanation)) {
+                delete next.explanation;
+                delete next.solution;
+            }
+            if (!Boolean(reviewSettings.showSolutionImage)) {
+                delete next.solutionImage;
+            }
+            return next;
+        });
+    const rank = await ExamResult_1.default.countDocuments({
+        exam: examId,
+        obtainedMarks: { $gt: Number(result.obtainedMarks || 0) },
+    }) + 1;
+    return {
+        ok: true,
+        exam: exam,
+        result: result,
+        resultPublished,
+        resultPublishMode,
+        reviewSettings,
+        answers,
+        rank,
+    };
+}
 async function getExamResult(req, res) {
     try {
         const studentId = req.user._id;
-        const examId = req.params.id;
-        const exam = await Exam_1.default.findById(examId).lean();
-        if (!exam) {
-            res.status(404).json({ message: 'Exam not found.' });
+        const examId = String(req.params.id || req.params.examId || '');
+        const context = await loadExamAttemptResultContext({ studentId, examId });
+        if (!context.ok) {
+            res.status(context.statusCode).json({ message: context.message });
             return;
         }
-        const result = await ExamResult_1.default.findOne({ exam: examId, student: studentId }).sort({ attemptNo: -1, submittedAt: -1 }).lean();
-        if (!result) {
-            res.status(404).json({ message: 'No result found. You have not submitted this exam.' });
-            return;
-        }
-        const now = new Date();
-        const resultPublished = isExamResultPublished(exam, now);
-        const resultPublishMode = getResultPublishMode(exam);
-        const reviewSettings = (exam.reviewSettings || {
-            showQuestion: true,
-            showSelectedAnswer: true,
-            showCorrectAnswer: true,
-            showExplanation: true,
-            showSolutionImage: true,
-        });
-        if (!resultPublished) {
+        if (!context.resultPublished) {
             res.json({
                 resultPublished: false,
-                publishDate: exam.resultPublishDate,
-                resultPublishMode,
+                publishDate: context.exam.resultPublishDate,
+                resultPublishMode: context.resultPublishMode,
                 exam: {
-                    title: exam.title,
-                    subject: exam.subject,
-                    totalMarks: exam.totalMarks,
-                    totalQuestions: exam.totalQuestions,
+                    title: context.exam.title,
+                    subject: context.exam.subject,
+                    totalMarks: context.exam.totalMarks,
+                    totalQuestions: context.exam.totalQuestions,
                 },
                 message: 'Result not published yet',
             });
             return;
         }
-        // Include solution details once published
-        const questionIds = result.answers.map((a) => a.question);
-        const questions = await Question_1.default.find({ _id: { $in: questionIds } }).lean();
-        const qMap = new Map(questions.map(q => [q._id.toString(), q]));
-        const rawAnswers = result.answers.map((a) => {
-            const q = qMap.get(a.question.toString());
-            return {
-                questionId: a.question,
-                question: q?.question,
-                questionImage: q?.questionImage,
-                optionA: q?.optionA,
-                optionB: q?.optionB,
-                optionC: q?.optionC,
-                optionD: q?.optionD,
-                correctAnswer: q?.correctAnswer,
-                correctOption: q?.correctAnswer,
-                selectedAnswer: a.selectedAnswer,
-                selectedOption: a.selectedAnswer,
-                isCorrect: a.isCorrect,
-                explanation: q?.explanation,
-                solutionImage: q?.solutionImage,
-                solution: q?.solution || null,
-                section: q?.section,
-                marks: q?.marks,
-            };
-        });
-        const answers = !Boolean(reviewSettings.showQuestion)
-            ? []
-            : rawAnswers.map((answer) => {
-                const next = { ...answer };
-                if (!Boolean(reviewSettings.showSelectedAnswer)) {
-                    delete next.selectedAnswer;
-                    delete next.selectedOption;
-                }
-                if (!Boolean(reviewSettings.showCorrectAnswer)) {
-                    delete next.correctAnswer;
-                    delete next.correctOption;
-                    delete next.optionA;
-                    delete next.optionB;
-                    delete next.optionC;
-                    delete next.optionD;
-                }
-                if (!Boolean(reviewSettings.showExplanation)) {
-                    delete next.explanation;
-                    delete next.solution;
-                }
-                if (!Boolean(reviewSettings.showSolutionImage)) {
-                    delete next.solutionImage;
-                }
-                return next;
-            });
-        // Compute rank
-        const rank = await ExamResult_1.default.countDocuments({
-            exam: examId,
-            obtainedMarks: { $gt: result.obtainedMarks },
-        }) + 1;
         res.json({
             resultPublished: true,
-            resultPublishMode,
-            reviewSettings,
+            resultPublishMode: context.resultPublishMode,
+            reviewSettings: context.reviewSettings,
             result: {
-                ...result,
-                rank,
-                answers,
-                detailedAnswers: answers, // Compatibility alias for one release
+                ...context.result,
+                rank: context.rank,
+                answers: context.answers,
+                detailedAnswers: context.answers,
             },
             exam: {
-                title: exam.title,
-                subject: exam.subject,
-                totalMarks: exam.totalMarks,
-                totalQuestions: exam.totalQuestions,
-                negativeMarking: exam.negativeMarking,
-                negativeMarkValue: exam.negativeMarkValue,
+                title: context.exam.title,
+                subject: context.exam.subject,
+                totalMarks: context.exam.totalMarks,
+                totalQuestions: context.exam.totalQuestions,
+                negativeMarking: context.exam.negativeMarking,
+                negativeMarkValue: context.exam.negativeMarkValue,
             },
         });
     }
     catch (err) {
         console.error('getExamResult error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+}
+async function getExamAttemptResult(req, res) {
+    try {
+        const studentId = req.user._id;
+        const examId = String(req.params.examId || req.params.id || '');
+        const attemptId = String(req.params.attemptId || req.params.sessionId || '').trim();
+        const context = await loadExamAttemptResultContext({ studentId, examId, attemptId });
+        if (!context.ok) {
+            res.status(context.statusCode).json({ message: context.message });
+            return;
+        }
+        const nowIso = new Date().toISOString();
+        if (!context.resultPublished) {
+            res.json({
+                status: 'locked',
+                publishAtUTC: context.exam.resultPublishDate || nowIso,
+                serverNowUTC: nowIso,
+            });
+            return;
+        }
+        res.json({
+            status: 'published',
+            obtainedMarks: Number(context.result.obtainedMarks || 0),
+            totalMarks: Number(context.result.totalMarks || context.exam.totalMarks || 0),
+            correctCount: Number(context.result.correctCount || 0),
+            wrongCount: Number(context.result.wrongCount || 0),
+            skippedCount: Number(context.result.unansweredCount || 0),
+            percentage: Number(context.result.percentage || 0),
+            rank: context.rank,
+            timeTakenSeconds: Number(context.result.timeTaken || 0),
+        });
+    }
+    catch (err) {
+        console.error('getExamAttemptResult error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+}
+async function getExamAttemptSolutions(req, res) {
+    try {
+        const studentId = req.user._id;
+        const examId = String(req.params.examId || req.params.id || '');
+        const attemptId = String(req.params.attemptId || req.params.sessionId || '').trim();
+        const context = await loadExamAttemptResultContext({ studentId, examId, attemptId });
+        if (!context.ok) {
+            res.status(context.statusCode).json({ message: context.message });
+            return;
+        }
+        const nowIso = new Date().toISOString();
+        if (!context.resultPublished) {
+            res.json({
+                status: 'locked',
+                publishAtUTC: context.exam.resultPublishDate || nowIso,
+                serverNowUTC: nowIso,
+                reason: 'Result not published yet',
+            });
+            return;
+        }
+        res.json({
+            status: 'available',
+            items: context.answers.map((answer, index) => ({
+                questionId: String(answer.questionId || answer.question || `q-${index + 1}`),
+                questionText: String(answer.question || answer.questionText || `Question ${index + 1}`),
+                selectedKey: normalizeOptionKey(answer.selectedAnswer || answer.selectedOption),
+                correctKey: normalizeOptionKey(answer.correctAnswer || answer.correctOption) || 'A',
+                explanationText: String(answer.explanation || answer.solution || '').trim() || undefined,
+                questionImageUrl: String(answer.questionImage || answer.questionImageUrl || '').trim() || undefined,
+                explanationImageUrl: String(answer.solutionImage || answer.explanationImageUrl || '').trim() || undefined,
+            })),
+        });
+    }
+    catch (err) {
+        console.error('getExamAttemptSolutions error:', err);
         res.status(500).json({ message: 'Server error' });
     }
 }

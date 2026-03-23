@@ -24,6 +24,7 @@ export declare function adminMfaConfirm(req: AuthRequest, res: Response): Promis
 export declare function adminExportExamResults(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminDownloadExamResultsImportTemplate(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminImportExamResults(req: AuthRequest, res: Response): Promise<void>;
+export declare function adminImportExternalExamResults(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminExportExamReport(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminExportExamEvents(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminStartExamPreview(req: AuthRequest, res: Response): Promise<void>;

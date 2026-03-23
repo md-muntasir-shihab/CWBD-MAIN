@@ -1,0 +1,23 @@
+
+> campusway-backend@1.0.0 dev
+> tsx watch src/server.ts
+
+[db] MongoDB connected successfully
+ℹ️  INITIAL_ACCESS_INFO.txt exists — default setup already completed.
+[cron] Starting exam auto-submit worker (every minute).
+[cron] Starting modern exam auto-submit worker (every minute).
+[2026-03-15T10:30:34.831Z] [INFO] [subscriptionExpiryCron] Scheduled daily at 01:00 UTC
+[finance-cron] Recurring engine cron registered
+[FinanceSeed] Seeded 11 default Chart-of-Account entries.
+🚀 CampusWay Backend running on port 5095
+📡 Public API: http://localhost:5095/api
+🔒 Admin API:  http://localhost:5095/api/campusway-secure-admin
+[0mGET /api/health [32m200[0m 31.767 ms - 87[0m
+[0mGET /api/universities/open-qa-broken-logo-university [32m200[0m 53.877 ms - 1988[0m
+[0mGET /api/home [32m200[0m 154.472 ms - 108075[0m
+[0mGET /api/home/clusters/engineering-alliance/members [32m200[0m 155.309 ms - 24509[0m
+[0mGET /api/universities?category=Science%20%26%20Technology&clusterGroup=Engineering%20Alliance&sort=name_desc [32m200[0m 59.179 ms - 17999[0m
+[0mGET /api/universities?category=Science%20%26%20Technology&clusterGroup=Engineering%20Alliance&sort=name_desc [32m200[0m 33.385 ms - 17999[0m
+[0mGET /api/home [32m200[0m 62.679 ms - 108075[0m
+[0mGET /api/universities/open-qa-broken-logo-university [32m200[0m 5.581 ms - 1988[0m
+[0mGET /api/home/clusters/engineering-alliance/members [32m200[0m 44.501 ms - 24509[0m

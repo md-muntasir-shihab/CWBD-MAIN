@@ -1,4 +1,19 @@
 import mongoose, { Document } from 'mongoose';
+import type { IExamCenter } from './University';
+export interface IUniversityCategorySharedConfig {
+    applicationStartDate?: Date | null;
+    applicationEndDate?: Date | null;
+    scienceExamDate?: string;
+    artsExamDate?: string;
+    businessExamDate?: string;
+    examCenters: IExamCenter[];
+}
+export interface IUniversityCategorySyncMeta {
+    lastSyncedAt?: Date | null;
+    lastSyncedBy?: mongoose.Types.ObjectId | null;
+    lastSyncedCount?: number;
+    skippedCount?: number;
+}
 export interface IUniversityCategory extends Document {
     name: string;
     slug: string;
@@ -9,6 +24,8 @@ export interface IUniversityCategory extends Document {
     isActive: boolean;
     homeHighlight: boolean;
     homeOrder: number;
+    sharedConfig: IUniversityCategorySharedConfig;
+    syncMeta: IUniversityCategorySyncMeta;
     createdBy?: mongoose.Types.ObjectId | null;
     updatedBy?: mongoose.Types.ObjectId | null;
     createdAt: Date;
