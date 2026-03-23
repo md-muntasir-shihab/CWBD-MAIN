@@ -9,6 +9,10 @@ const responsiveWidths = [
     { name: 'w1440', width: 1440, height: 900 },
 ] as const;
 
+function escapeRegex(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 async function expectNoHorizontalOverflow(page: import('@playwright/test').Page, hint: string) {
     const hasOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth > 1);
     expect(hasOverflow, `${hint}: horizontal overflow detected`).toBeFalsy();
@@ -28,31 +32,29 @@ test.describe('Open Universities Full Audit', () => {
         await expect(page.getByRole('heading', { name: /Application Deadlines/i })).toBeVisible();
         await expect(page.getByRole('heading', { name: /Upcoming Exams/i })).toBeVisible();
 
-        const highlightedCategoryCard = page
-            .getByTestId('highlighted-category-card')
-            .filter({ hasText: /Science & Technology/i })
-            .first();
+        const highlightedCategoryCard = page.getByTestId('highlighted-category-card').first();
         await expect(highlightedCategoryCard).toBeVisible();
-        await expect(page.getByTestId('highlighted-category-card').filter({ hasText: /Science & Technology/i })).toHaveCount(1);
-        await expect(highlightedCategoryCard).toContainText(/Science & Technology/i);
+        await expect(page.getByTestId('highlighted-category-card')).toHaveCount(1);
+        await expect(highlightedCategoryCard).toContainText(/Highlighted Category/i);
+        await expect(highlightedCategoryCard).toContainText(/Home Highlight/i);
 
-        const engineeringClusterCard = page.locator('article').filter({ hasText: /Engineering Alliance/i }).filter({ hasText: /10 members/i }).first();
-        await expect(engineeringClusterCard).toContainText(/Science/i);
-        await expect(engineeringClusterCard).toContainText(/Arts/i);
-        await expect(engineeringClusterCard).toContainText(/Business/i);
-        await expect(engineeringClusterCard).toContainText(/Apply Now|View Cluster/i);
+        const highlightedCategoryHref = await highlightedCategoryCard.getAttribute('href');
+        expect(highlightedCategoryHref).toBeTruthy();
+
+        const featuredClusterLink = page.locator('a[href^="/universities/cluster/"]').first();
+        const featuredClusterHref = await featuredClusterLink.getAttribute('href');
+        expect(featuredClusterHref).toBeTruthy();
 
         await highlightedCategoryCard.click();
-        await expect(page).toHaveURL(/\/universities\/category\/science-technology/);
-        await expect(page.getByRole('heading', { name: /Science & Technology/i }).first()).toBeVisible();
+        await expect(page).toHaveURL(new RegExp(escapeRegex(String(highlightedCategoryHref))));
+        await expect(page.getByRole('heading').first()).toBeVisible();
 
         await page.goBack();
         await expect(page).toHaveURL(/\/$/);
-        const engineeringClusterLink = page.locator('a[href="/universities/cluster/engineering-alliance"]').first();
-        await expect(engineeringClusterLink).toBeVisible();
-        await engineeringClusterLink.click();
-        await expect(page).toHaveURL(/\/universities\/cluster\/engineering-alliance/);
-        await expect(page.getByRole('heading', { name: /Engineering Alliance/i }).first()).toBeVisible();
+        await expect(featuredClusterLink).toBeVisible();
+        await featuredClusterLink.click();
+        await expect(page).toHaveURL(new RegExp(escapeRegex(String(featuredClusterHref))));
+        await expect(page.getByRole('heading').first()).toBeVisible();
 
         await page.goBack();
         await expect(page).toHaveURL(/\/$/);

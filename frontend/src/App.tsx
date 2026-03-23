@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from './hooks/useTheme';
@@ -226,7 +226,11 @@ function RouteScrollReset() {
     const location = useLocation();
     const previousRouteRef = useRef({ pathname: location.pathname, search: location.search });
 
-    useEffect(() => {
+    useLayoutEffect(() => {
+        if ('scrollRestoration' in window.history) {
+            window.history.scrollRestoration = 'manual';
+        }
+
         const previousRoute = previousRouteRef.current;
         const routeChanged = previousRoute.pathname !== location.pathname || previousRoute.search !== location.search;
         previousRouteRef.current = { pathname: location.pathname, search: location.search };
@@ -244,7 +248,27 @@ function RouteScrollReset() {
             }
         }
 
-        window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+        const resetScroll = () => {
+            const scrollingElement = document.scrollingElement;
+            if (scrollingElement) {
+                scrollingElement.scrollTop = 0;
+                scrollingElement.scrollLeft = 0;
+            }
+            document.documentElement.scrollTop = 0;
+            document.documentElement.scrollLeft = 0;
+            document.body.scrollTop = 0;
+            document.body.scrollLeft = 0;
+            window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+        };
+
+        resetScroll();
+        const frame = window.requestAnimationFrame(resetScroll);
+        const timers = [50, 140, 260, 420, 700, 1000, 1600, 2200].map((delay) => window.setTimeout(resetScroll, delay));
+
+        return () => {
+            window.cancelAnimationFrame(frame);
+            timers.forEach((timer) => window.clearTimeout(timer));
+        };
     }, [location.hash, location.pathname, location.search]);
 
     return null;
@@ -279,7 +303,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
         link.href = favicon;
     }, [path, settings]);
 
-    if (isFullScreen) return <><ForceLogoutModal />{children}</>;
+    if (isFullScreen) return <><RouteScrollReset /><ForceLogoutModal />{children}</>;
     
     return (
         <div className="min-h-screen flex flex-col bg-transparent transition-colors duration-300">
