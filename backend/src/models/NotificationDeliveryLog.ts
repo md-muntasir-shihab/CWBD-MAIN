@@ -9,10 +9,15 @@ export interface INotificationDeliveryLog extends Document {
     guardianTargeted: boolean;
     channel: 'sms' | 'email';
     providerUsed: string;
+    templateKey?: string;
+    templateId?: mongoose.Types.ObjectId;
     to: string;
     status: DeliveryLogStatus;
     providerMessageId?: string;
     errorMessage?: string;
+    originModule?: 'campaign' | 'news' | 'notice' | 'trigger';
+    originEntityId?: string;
+    originAction?: string;
     sentAtUTC?: Date;
     costAmount: number;
     retryCount: number;
@@ -38,6 +43,8 @@ const NotificationDeliveryLogSchema = new Schema<INotificationDeliveryLog>(
             required: true,
         },
         providerUsed: { type: String, required: true, trim: true },
+        templateKey: { type: String, trim: true, default: '' },
+        templateId: { type: Schema.Types.ObjectId, ref: 'NotificationTemplate', default: null },
         to: { type: String, required: true, trim: true },
         status: {
             type: String,
@@ -47,6 +54,9 @@ const NotificationDeliveryLogSchema = new Schema<INotificationDeliveryLog>(
         },
         providerMessageId: { type: String, trim: true },
         errorMessage: { type: String },
+        originModule: { type: String, enum: ['campaign', 'news', 'notice', 'trigger'], default: 'campaign', index: true },
+        originEntityId: { type: String, trim: true, default: '' },
+        originAction: { type: String, trim: true, default: '' },
         sentAtUTC: { type: Date },
         costAmount: { type: Number, default: 0, min: 0 },
         retryCount: { type: Number, default: 0, min: 0 },
@@ -63,5 +73,6 @@ const NotificationDeliveryLogSchema = new Schema<INotificationDeliveryLog>(
 NotificationDeliveryLogSchema.index({ studentId: 1, sentAtUTC: -1 });
 NotificationDeliveryLogSchema.index({ jobId: 1 });
 NotificationDeliveryLogSchema.index({ status: 1 });
+NotificationDeliveryLogSchema.index({ originModule: 1, originEntityId: 1, createdAt: -1 });
 
 export default mongoose.model<INotificationDeliveryLog>('NotificationDeliveryLog', NotificationDeliveryLogSchema);

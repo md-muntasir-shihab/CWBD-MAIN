@@ -8,6 +8,7 @@ const express_1 = require("express");
 const json2csv_1 = require("json2csv");
 const exceljs_1 = __importDefault(require("exceljs"));
 const auth_1 = require("../../middlewares/auth");
+const sensitiveAction_1 = require("../../middlewares/sensitiveAction");
 const exam_model_1 = require("../../models/exam.model");
 const examQuestion_model_1 = require("../../models/examQuestion.model");
 const examSession_model_1 = require("../../models/examSession.model");
@@ -16,15 +17,25 @@ const result_model_1 = require("../../models/result.model");
 const user_model_1 = require("../../models/user.model");
 exports.adminExamRoutes = (0, express_1.Router)();
 exports.adminExamRoutes.use(auth_1.requireAuth, (0, auth_1.requireRole)("admin", "moderator", "editor", "chairman"));
+const requireDestructiveStepUp = (moduleName, actionName) => (0, sensitiveAction_1.requireSensitiveAction)({
+    actionKey: 'data.destructive_change',
+    moduleName,
+    actionName,
+});
+const requireSensitiveExportStepUp = (moduleName, actionName) => (0, sensitiveAction_1.requireSensitiveAction)({
+    actionKey: 'students.export',
+    moduleName,
+    actionName,
+});
 exports.adminExamRoutes.get("/exams", async (_req, res) => res.json(await exam_model_1.ExamModel.find().sort({ createdAt: -1 })));
 exports.adminExamRoutes.post("/exams", async (req, res) => res.json(await exam_model_1.ExamModel.create(req.body)));
 exports.adminExamRoutes.get("/exams/:id", async (req, res) => res.json(await exam_model_1.ExamModel.findById(req.params.id)));
 exports.adminExamRoutes.put("/exams/:id", async (req, res) => res.json(await exam_model_1.ExamModel.findByIdAndUpdate(req.params.id, req.body, { new: true })));
-exports.adminExamRoutes.delete("/exams/:id", async (req, res) => { await exam_model_1.ExamModel.findByIdAndDelete(req.params.id); res.status(204).send(); });
+exports.adminExamRoutes.delete("/exams/:id", requireDestructiveStepUp('exams', 'legacy_exam_delete'), async (req, res) => { await exam_model_1.ExamModel.findByIdAndDelete(req.params.id); res.status(204).send(); });
 exports.adminExamRoutes.get("/exams/:id/questions", async (req, res) => res.json(await examQuestion_model_1.ExamQuestionModel.find({ examId: req.params.id }).sort({ orderIndex: 1 })));
 exports.adminExamRoutes.post("/exams/:id/questions", async (req, res) => res.json(await examQuestion_model_1.ExamQuestionModel.create({ ...req.body, examId: req.params.id })));
 exports.adminExamRoutes.put("/exams/:id/questions/:questionId", async (req, res) => res.json(await examQuestion_model_1.ExamQuestionModel.findByIdAndUpdate(req.params.questionId, req.body, { new: true })));
-exports.adminExamRoutes.delete("/exams/:id/questions/:questionId", async (req, res) => { await examQuestion_model_1.ExamQuestionModel.findByIdAndDelete(req.params.questionId); res.status(204).send(); });
+exports.adminExamRoutes.delete("/exams/:id/questions/:questionId", requireDestructiveStepUp('exams', 'legacy_exam_question_delete'), async (req, res) => { await examQuestion_model_1.ExamQuestionModel.findByIdAndDelete(req.params.questionId); res.status(204).send(); });
 exports.adminExamRoutes.post("/exams/:id/questions/import/preview", async (req, res) => res.json({ ok: true, preview: req.body.rows || [] }));
 exports.adminExamRoutes.post("/exams/:id/questions/import/commit", async (req, res) => {
     const rows = (req.body.rows || []).map((r, i) => ({ ...r, examId: req.params.id, orderIndex: r.orderIndex ?? i + 1 }));
@@ -32,7 +43,7 @@ exports.adminExamRoutes.post("/exams/:id/questions/import/commit", async (req, r
     res.json({ ok: true, count: created.length });
 });
 exports.adminExamRoutes.get("/exams/:id/results", async (req, res) => res.json(await result_model_1.ResultModel.find({ examId: req.params.id }).sort({ obtainedMarks: -1 })));
-exports.adminExamRoutes.get("/exams/:id/exports", async (req, res) => {
+exports.adminExamRoutes.get("/exams/:id/exports", requireSensitiveExportStepUp('reports', 'legacy_exam_results_export'), (0, sensitiveAction_1.trackSensitiveExport)({ moduleName: 'reports', actionName: 'legacy_exam_results_export', targetType: 'exam', targetParam: 'id' }), async (req, res) => {
     const exam = await exam_model_1.ExamModel.findById(req.params.id).lean();
     if (!exam)
         return res.status(404).json({ message: "Exam not found" });
@@ -99,7 +110,7 @@ exports.adminExamRoutes.get("/payments", async (_req, res) => res.json(await pay
 exports.adminExamRoutes.put("/payments/:id/verify", async (req, res) => res.json(await payment_model_1.PaymentModel.findByIdAndUpdate(req.params.id, { status: "paid", verifiedByAdminId: req.user.id, paidAt: new Date(), notes: req.body.notes }, { new: true })));
 exports.adminExamRoutes.get("/students", async (_req, res) => res.json(await user_model_1.UserModel.find({ role: "student" })));
 exports.adminExamRoutes.post("/students/import", async (req, res) => res.json({ ok: true, rows: (req.body.rows || []).length }));
-exports.adminExamRoutes.get("/students/export", async (_req, res) => {
+exports.adminExamRoutes.get("/students/export", requireSensitiveExportStepUp('students_groups', 'legacy_students_export'), (0, sensitiveAction_1.trackSensitiveExport)({ moduleName: 'students_groups', actionName: 'legacy_students_export' }), async (_req, res) => {
     const csv = new json2csv_1.Parser().parse(await user_model_1.UserModel.find({ role: "student" }).lean());
     res.type("text/csv").send(csv);
 });

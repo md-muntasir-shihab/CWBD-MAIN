@@ -18,7 +18,6 @@ export declare function adminBulkUserAction(req: AuthRequest, res: Response): Pr
 export declare function adminBulkStudentAction(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminBulkImportStudents(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminResetUserPassword(req: AuthRequest, res: Response): Promise<void>;
-export declare function adminRevealStudentPassword(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminGetAuditLogs(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminGetUserActivity(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminExportStudents(req: AuthRequest, res: Response): Promise<void>;

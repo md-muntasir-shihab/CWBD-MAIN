@@ -10,6 +10,7 @@ const ExamSession_1 = __importDefault(require("../models/ExamSession"));
 const ExamResult_1 = __importDefault(require("../models/ExamResult"));
 const Question_1 = __importDefault(require("../models/Question"));
 const StudentProfile_1 = __importDefault(require("../models/StudentProfile"));
+const examProfileSyncEngine_1 = require("./examProfileSyncEngine");
 function normalizeIncomingAnswers(input) {
     if (Array.isArray(input)) {
         return input
@@ -454,6 +455,14 @@ async function finalizeExamSession(input) {
     await session.save();
     await updateExamAnalytics(examId);
     await updateStudentPoints(studentId);
+    await (0, examProfileSyncEngine_1.syncExamResultToStudentProfile)({
+        exam: exam.toObject(),
+        result: resultDoc.toObject(),
+        studentId,
+        source: 'internal_result',
+        syncMode: 'overwrite_mapped_fields',
+        notifyStudent: true,
+    });
     return {
         ok: true,
         statusCode: 200,

@@ -3,6 +3,8 @@ export interface ITeamApprovalRule extends Document {
     module: string;
     action: string;
     requiresApproval: boolean;
+    requiredApprovals: number;
+    description: string;
     approverRoleIds: mongoose.Types.ObjectId[];
 }
 declare const _default: mongoose.Model<ITeamApprovalRule, {}, {}, {}, mongoose.Document<unknown, {}, ITeamApprovalRule, {}, {}> & ITeamApprovalRule & Required<{

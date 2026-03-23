@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import XLSX from 'xlsx';
 
 import { authenticate, requireRole } from '../middlewares/auth';
+import { requireSensitiveAction, trackSensitiveExport } from '../middlewares/sensitiveAction';
 import User from '../models/User';
 import StudentProfile from '../models/StudentProfile';
 import UserSubscription from '../models/UserSubscription';
@@ -25,7 +26,7 @@ import ExamResult from '../models/ExamResult';
 import ImportExportLog from '../models/ImportExportLog';
 import { encrypt } from '../services/cryptoService';
 import { sendNotificationToStudent } from '../services/notificationProviderService';
-import { resolveAudience } from '../services/notificationOrchestrationService';
+import { executeCampaign, resolveAudience, retryFailedDeliveries } from '../services/notificationOrchestrationService';
 import {
   parseFileBuffer,
   generatePreview,
@@ -49,6 +50,19 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 // All routes require admin auth
 const adminAuth = [authenticate, requireRole('superadmin', 'admin', 'moderator')];
 const notificationAdminAuth = [authenticate, requireRole('superadmin', 'admin', 'moderator', 'editor', 'viewer', 'support_agent', 'finance_agent')];
+
+const requireDestructiveStepUp = (moduleName: string, actionName: string) => requireSensitiveAction({
+  actionKey: 'data.destructive_change',
+  moduleName,
+  actionName,
+});
+
+const requireSensitiveExport = (moduleName: string, actionName: string, enforceExportRolePolicy = false) => requireSensitiveAction({
+  actionKey: 'students.export',
+  moduleName,
+  actionName,
+  enforceExportRolePolicy,
+});
 
 // ============================================================================
 // STUDENT METRICS (Dashboard overview) — must be before :id wildcard routes
@@ -423,7 +437,7 @@ router.get('/students-v2/template.xlsx', ...adminAuth, async (_req: Request, res
   }
 });
 
-router.get('/students-v2/export', ...adminAuth, async (req: Request, res: Response) => {
+router.get('/students-v2/export', ...adminAuth, requireSensitiveExport('students_groups', 'students_v2_export', true), trackSensitiveExport({ moduleName: 'students_groups', actionName: 'students_v2_export' }), async (req: Request, res: Response) => {
   try {
     const format = String(req.query['format'] ?? req.query['type'] ?? 'xlsx').trim().toLowerCase() === 'csv' ? 'csv' : 'xlsx';
     const filters: Record<string, unknown> = {};
@@ -490,7 +504,7 @@ router.post('/students-v2/import/commit', ...adminAuth, async (req: Request, res
   }
 });
 
-router.post('/students-v2/bulk-delete', ...adminAuth, async (req: Request, res: Response) => {
+router.post('/students-v2/bulk-delete', ...adminAuth, requireDestructiveStepUp('students_groups', 'students_v2_bulk_delete'), async (req: Request, res: Response) => {
   try {
     const { ids } = req.body as { ids: string[] };
     if (!Array.isArray(ids) || ids.length === 0) {
@@ -747,7 +761,7 @@ router.get('/student-groups', ...adminAuth, async (req: Request, res: Response) 
   }
 });
 
-router.get('/student-groups/export', ...adminAuth, async (req: Request, res: Response) => {
+router.get('/student-groups/export', ...adminAuth, requireSensitiveExport('students_groups', 'student_groups_legacy_export', true), trackSensitiveExport({ moduleName: 'students_groups', actionName: 'student_groups_legacy_export' }), async (req: Request, res: Response) => {
   try {
     const { q, isActive } = req.query as Record<string, string>;
     const format = String(req.query['format'] ?? req.query['type'] ?? 'xlsx').trim().toLowerCase() === 'csv' ? 'csv' : 'xlsx';
@@ -843,7 +857,7 @@ router.post('/student-groups/bulk-update', ...adminAuth, async (req: Request, re
   }
 });
 
-router.post('/student-groups/bulk-delete', ...adminAuth, async (req: Request, res: Response) => {
+router.post('/student-groups/bulk-delete', ...adminAuth, requireDestructiveStepUp('students_groups', 'student_groups_bulk_delete'), async (req: Request, res: Response) => {
   try {
     const { ids } = req.body as { ids: string[] };
     if (!Array.isArray(ids) || ids.length === 0) {
@@ -964,7 +978,7 @@ router.put('/student-groups/:id', ...adminAuth, async (req: Request, res: Respon
   }
 });
 
-router.delete('/student-groups/:id', ...adminAuth, async (req: Request, res: Response) => {
+router.delete('/student-groups/:id', ...adminAuth, requireDestructiveStepUp('students_groups', 'student_group_delete'), async (req: Request, res: Response) => {
   try {
     // Safety check before deletion
     const safety = await groupMembershipService.canDeleteGroup(String(req.params.id));
@@ -1072,7 +1086,7 @@ router.post('/student-groups/:id/members/remove', ...adminAuth, async (req: Requ
   }
 });
 
-router.get('/student-groups/:id/members/export', ...adminAuth, async (req: Request, res: Response) => {
+router.get('/student-groups/:id/members/export', ...adminAuth, requireSensitiveExport('students_groups', 'student_group_members_export', true), trackSensitiveExport({ moduleName: 'students_groups', actionName: 'student_group_members_export', targetType: 'student_group', targetParam: 'id' }), async (req: Request, res: Response) => {
   try {
     const format = String(req.query['format'] ?? req.query['type'] ?? 'csv').trim().toLowerCase() === 'xlsx' ? 'xlsx' : 'csv';
     const groupId    = new mongoose.Types.ObjectId(String(req.params.id));
@@ -1426,7 +1440,7 @@ router.post('/student-contact-timeline/:studentId', ...adminAuth, async (req: Re
   }
 });
 
-router.delete('/student-contact-timeline/:studentId/:entryId', ...adminAuth, async (req: Request, res: Response) => {
+router.delete('/student-contact-timeline/:studentId/:entryId', ...adminAuth, requireDestructiveStepUp('students_groups', 'student_contact_timeline_delete'), async (req: Request, res: Response) => {
   try {
     const entry = await StudentContactTimeline.findOneAndDelete({
       _id:       req.params.entryId,
@@ -1554,7 +1568,7 @@ router.get('/notification-providers', ...notificationAdminAuth, async (_req: Req
   }
 });
 
-router.post('/notification-providers', ...notificationAdminAuth, async (req: Request, res: Response) => {
+router.post('/notification-providers', ...notificationAdminAuth, requireSensitiveAction({ actionKey: 'providers.credentials_change', moduleName: 'notification_center', actionName: 'provider_create' }), async (req: Request, res: Response) => {
   try {
     const { type, provider, displayName, credentials, senderConfig, rateLimit, isEnabled } = req.body;
     if (!type || !provider || !displayName || !credentials) {
@@ -1586,7 +1600,7 @@ router.get('/notification-providers/:id', ...notificationAdminAuth, async (req: 
   }
 });
 
-router.put('/notification-providers/:id', ...notificationAdminAuth, async (req: Request, res: Response) => {
+router.put('/notification-providers/:id', ...notificationAdminAuth, requireSensitiveAction({ actionKey: 'providers.credentials_change', moduleName: 'notification_center', actionName: 'provider_update' }), async (req: Request, res: Response) => {
   try {
     const { displayName, credentials, senderConfig, rateLimit, isEnabled } = req.body;
     const update: Record<string, unknown> = {};
@@ -1605,7 +1619,7 @@ router.put('/notification-providers/:id', ...notificationAdminAuth, async (req: 
   }
 });
 
-router.delete('/notification-providers/:id', ...notificationAdminAuth, async (req: Request, res: Response) => {
+router.delete('/notification-providers/:id', ...notificationAdminAuth, requireSensitiveAction({ actionKey: 'providers.credentials_change', moduleName: 'notification_center', actionName: 'provider_delete' }), async (req: Request, res: Response) => {
   try {
     const doc = await NotificationProvider.findByIdAndDelete(req.params.id).lean();
     if (!doc) return res.status(404).json({ message: 'Provider not found' });
@@ -1615,7 +1629,7 @@ router.delete('/notification-providers/:id', ...notificationAdminAuth, async (re
   }
 });
 
-router.post('/notification-providers/:id/test-send', ...notificationAdminAuth, async (req: Request, res: Response) => {
+router.post('/notification-providers/:id/test-send', ...notificationAdminAuth, requireSensitiveAction({ actionKey: 'providers.credentials_change', moduleName: 'notification_center', actionName: 'provider_test_send' }), async (req: Request, res: Response) => {
   try {
     const { studentId } = req.body;
     if (!studentId) return res.status(400).json({ message: 'studentId required' });
@@ -1674,7 +1688,7 @@ router.get('/notification-templates/:id', ...notificationAdminAuth, async (req: 
   }
 });
 
-router.put('/notification-templates/:id', ...notificationAdminAuth, async (req: Request, res: Response) => {
+router.put('/notification-templates/:id', ...notificationAdminAuth, requireDestructiveStepUp('notification_center', 'template_update'), async (req: Request, res: Response) => {
   try {
     const { subject, body, placeholdersAllowed, isEnabled } = req.body;
     const update: Record<string, unknown> = {};
@@ -1692,7 +1706,7 @@ router.put('/notification-templates/:id', ...notificationAdminAuth, async (req: 
   }
 });
 
-router.delete('/notification-templates/:id', ...notificationAdminAuth, async (req: Request, res: Response) => {
+router.delete('/notification-templates/:id', ...notificationAdminAuth, requireDestructiveStepUp('notification_center', 'template_delete'), async (req: Request, res: Response) => {
   try {
     const template = await NotificationTemplate.findByIdAndDelete(req.params.id).lean();
     if (!template) return res.status(404).json({ message: 'Template not found' });
@@ -1711,86 +1725,67 @@ router.post('/notifications-v2/send', ...notificationAdminAuth, async (req: Requ
     const {
       channel, target, templateKey, payloadOverrides,
       targetStudentId, targetGroupId, targetStudentIds, targetFilterJson,
-      scheduledAtUTC,
+      scheduledAtUTC, customBody, customSubject, campaignName, guardianTargeted, recipientMode,
     } = req.body;
 
     if (!channel || !target || !templateKey) {
       return res.status(400).json({ message: 'channel, target, templateKey required' });
     }
 
-    const adminUser  = (req as unknown as Record<string, unknown>)['user'] as Record<string, unknown> | undefined;
-    const adminId    = adminUser?.['_id'];
-    let recipientIds: mongoose.Types.ObjectId[] = [];
+    const adminUser = (req as unknown as Record<string, unknown>)['user'] as Record<string, unknown> | undefined;
+    const adminId = String(adminUser?.['_id'] || '');
+    let totalTargets = 0;
+    let audienceFilters: Record<string, unknown> | undefined;
 
-    if (target === 'single' && targetStudentId) {
-      recipientIds = [new mongoose.Types.ObjectId(targetStudentId)];
-    } else if (target === 'group' && targetGroupId) {
+    if (target === 'group' && targetGroupId) {
       const recipients = await resolveAudience('group', { groupId: String(targetGroupId) });
-      recipientIds = recipients.map((recipient) => recipient.userId);
+      totalTargets = recipients.length;
+    } else if (target === 'single' && targetStudentId) {
+      totalTargets = 1;
     } else if (target === 'selected' && Array.isArray(targetStudentIds)) {
-      recipientIds = (targetStudentIds as string[])
-        .filter((id) => mongoose.Types.ObjectId.isValid(id))
-        .map((id) => new mongoose.Types.ObjectId(id));
+      totalTargets = (targetStudentIds as string[]).filter((id) => mongoose.Types.ObjectId.isValid(id)).length;
     } else if (target === 'filter' && targetFilterJson) {
       try {
         const parsedFilters = JSON.parse(targetFilterJson as string) as Record<string, unknown>;
-        const normalizedFilters: Record<string, unknown> = { ...parsedFilters };
-        if (!normalizedFilters.statuses && normalizedFilters.status) {
-          normalizedFilters.statuses = [normalizedFilters.status];
+        audienceFilters = { ...parsedFilters };
+        if (!audienceFilters.statuses && audienceFilters.status) {
+          audienceFilters.statuses = [audienceFilters.status];
         }
-        const recipients = await resolveAudience('filter', { filters: normalizedFilters });
-        recipientIds = recipients.map((recipient) => recipient.userId);
-      } catch { /* invalid filter */ }
+        const recipients = await resolveAudience('filter', { filters: audienceFilters });
+        totalTargets = recipients.length;
+      } catch {
+        return res.status(400).json({ message: 'Invalid targetFilterJson' });
+      }
     }
 
-    const job = await NotificationJob.create({
-      type:             scheduledAtUTC ? 'scheduled' : 'bulk',
-      channel, target,
-      targetStudentId:  targetStudentId  ? new mongoose.Types.ObjectId(targetStudentId as string)  : undefined,
-      targetGroupId:    targetGroupId    ? new mongoose.Types.ObjectId(targetGroupId as string)    : undefined,
-      targetStudentIds: target === 'selected' ? recipientIds : undefined,
-      targetFilterJson: targetFilterJson ?? undefined,
-      templateKey:      String(templateKey).toUpperCase(),
-      payloadOverrides: payloadOverrides ?? {},
-      status:           scheduledAtUTC ? 'queued' : 'processing',
-      scheduledAtUTC:   scheduledAtUTC ? new Date(scheduledAtUTC as string) : undefined,
-      totalTargets:     recipientIds.length,
-      sentCount:        0,
-      failedCount:      0,
-      createdByAdminId: adminId,
+    const result = await executeCampaign({
+      campaignName: String(campaignName || templateKey),
+      channels: channel === 'both' ? ['sms', 'email'] : [channel as 'sms' | 'email'],
+      templateKey: String(templateKey).toUpperCase(),
+      customBody: typeof customBody === 'string' ? customBody : undefined,
+      customSubject: typeof customSubject === 'string' ? customSubject : undefined,
+      vars: (payloadOverrides ?? {}) as Record<string, string>,
+      audienceType: target === 'group' ? 'group' : target === 'filter' ? 'filter' : 'manual',
+      audienceGroupId: target === 'group' ? String(targetGroupId || '') : undefined,
+      audienceFilters,
+      manualStudentIds: target === 'single'
+        ? [String(targetStudentId || '')].filter(Boolean)
+        : Array.isArray(targetStudentIds)
+          ? (targetStudentIds as string[]).map((id) => String(id || '')).filter(Boolean)
+          : undefined,
+      guardianTargeted: Boolean(guardianTargeted),
+      recipientMode: recipientMode === 'guardian' || recipientMode === 'both' ? recipientMode : 'student',
+      scheduledAtUTC: scheduledAtUTC ? new Date(scheduledAtUTC as string) : undefined,
+      adminId,
     });
 
-    if (!scheduledAtUTC && recipientIds.length <= 50) {
-      let sent = 0;
-      let failed = 0;
-      const vars = (payloadOverrides ?? {}) as Record<string, string>;
-      const channels: ('sms' | 'email')[] =
-        channel === 'both' ? ['sms', 'email'] : [channel as 'sms' | 'email'];
-
-      for (const recipId of recipientIds) {
-        for (const ch of channels) {
-          try {
-            const result = await sendNotificationToStudent(recipId, templateKey as string, ch, vars, job._id as never);
-            if (result.success) sent++;
-            else failed++;
-          } catch { failed++; }
-        }
-      }
-      await NotificationJob.findByIdAndUpdate(job._id, {
-        $set: {
-          status:         failed === 0 ? 'done' : sent > 0 ? 'partial' : 'failed',
-          sentCount:      sent,
-          failedCount:    failed,
-          processedAtUTC: new Date(),
-        },
-      });
-      return res.status(201).json({ message: 'Notification job completed', jobId: String(job._id), sent, failed });
-    }
-
     res.status(201).json({
-      message:      scheduledAtUTC ? 'Notification job scheduled' : 'Notification job queued (large batch)',
-      jobId:        String(job._id),
-      totalTargets: recipientIds.length,
+      message: scheduledAtUTC ? 'Notification job scheduled' : 'Notification job queued or completed',
+      jobId: result.jobId,
+      totalTargets,
+      sent: result.sent,
+      failed: result.failed,
+      skipped: result.skipped,
     });
   } catch (err) {
     res.status(500).json({ message: String(err) });
@@ -1832,41 +1827,9 @@ router.post('/notifications-v2/jobs/:id/retry-failed', ...notificationAdminAuth,
       return res.status(400).json({ message: 'Only failed or partial jobs can be retried' });
     }
 
-    const failedLogs = await NotificationDeliveryLog.find({ jobId: job._id, status: 'failed' }).lean();
-    let sent = 0;
-    let failed = 0;
-    const vars = (job.payloadOverrides ?? {}) as Record<string, string>;
-
-    for (const log of failedLogs) {
-      try {
-        const logData = log as unknown as Record<string, unknown>;
-        const result = await sendNotificationToStudent(
-          logData['studentId'] as never,
-          job.templateKey,
-          logData['channel'] as 'sms' | 'email',
-          vars,
-          job._id as never,
-        );
-        if (result.success) {
-          sent++;
-          await NotificationDeliveryLog.findByIdAndUpdate(log._id, {
-            $set: { status: 'sent', sentAtUTC: new Date() },
-          });
-        } else {
-          failed++;
-        }
-      } catch { failed++; }
-    }
-
-    await NotificationJob.findByIdAndUpdate(job._id, {
-      $set: {
-        status:      failed === 0 ? 'done' : sent > 0 ? 'partial' : 'failed',
-        sentCount:   job.sentCount + sent,
-        failedCount: failed,
-      },
-    });
-
-    res.json({ message: 'Retry complete', sent, failed });
+    const adminUser = (req as unknown as Record<string, unknown>)['user'] as Record<string, unknown> | undefined;
+    const result = await retryFailedDeliveries(String(job._id), String(adminUser?.['_id'] || ''));
+    res.json({ message: 'Retry complete', ...result });
   } catch (err) {
     res.status(500).json({ message: String(err) });
   }
@@ -1984,7 +1947,7 @@ router.post('/audience-segments/preview', ...adminAuth, async (req: Request, res
   }
 });
 
-router.delete('/audience-segments/:id', ...adminAuth, async (req: Request, res: Response) => {
+router.delete('/audience-segments/:id', ...adminAuth, requireDestructiveStepUp('students_groups', 'audience_segment_delete'), async (req: Request, res: Response) => {
   try {
     const segment = await StudentGroup.findOneAndDelete({ _id: req.params.id, type: 'dynamic' }).lean();
     if (!segment) return res.status(404).json({ message: 'Segment not found' });
@@ -1998,7 +1961,7 @@ router.delete('/audience-segments/:id', ...adminAuth, async (req: Request, res: 
 // FINANCE ADJUSTMENT (Admin adds manual finance entries for a student)
 // ============================================================================
 
-router.post('/students-v2/:id/finance-adjustment', ...adminAuth, async (req: Request, res: Response) => {
+router.post('/students-v2/:id/finance-adjustment', ...adminAuth, requireDestructiveStepUp('payments', 'student_finance_adjustment'), async (req: Request, res: Response) => {
   try {
     const { amount, direction, description, method, categoryLabel } = req.body;
     if (!amount || !direction || !description) {
@@ -2258,3 +2221,7 @@ async function resolveAudienceCount(rules?: Record<string, unknown>): Promise<nu
 }
 
 export default router;
+
+
+
+

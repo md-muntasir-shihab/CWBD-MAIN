@@ -11,6 +11,7 @@ const ActiveSession_1 = __importDefault(require("../models/ActiveSession"));
 const StudentSettings_1 = require("../models/StudentSettings");
 const notificationProviderService_1 = require("../services/notificationProviderService");
 const notificationOrchestrationService_1 = require("../services/notificationOrchestrationService");
+const subscriptionLifecycleService_1 = require("../services/subscriptionLifecycleService");
 const logger_1 = require("../utils/logger");
 // Map reminder day count to template key
 const REMINDER_TEMPLATE_MAP = {
@@ -27,6 +28,12 @@ function dayEnd(d) {
     const e = new Date(d);
     e.setUTCHours(23, 59, 59, 999);
     return e;
+}
+function buildRenewalUrl(plan) {
+    const frontEndUrl = String(process.env.FRONTEND_URL || '').trim().replace(/\/$/, '');
+    const slug = String(plan?.['slug'] || plan?.['code'] || '').trim();
+    const path = slug ? `/subscription-plans/checkout/${slug}` : '/subscription-plans';
+    return frontEndUrl ? `${frontEndUrl}${path}` : path;
 }
 async function runSubscriptionExpiryCheck() {
     logger_1.logger.info('[subscriptionExpiryCron] Starting run');
@@ -66,7 +73,9 @@ async function runSubscriptionExpiryCheck() {
                     { lastReminderSentAtUTC: { $exists: false } },
                     { lastReminderSentAtUTC: { $lt: todayStart } },
                 ],
-            }).lean();
+            })
+                .populate('planId', 'name slug code allowsSMSUpdates allowsEmailUpdates')
+                .lean();
         }
         catch (err) {
             logger_1.logger.error(`[subscriptionExpiryCron] Failed to query reminders for day ${reminderDay}`, undefined, { error: String(err) });
@@ -82,24 +91,29 @@ async function runSubscriptionExpiryCheck() {
                     }
                 }
                 const user = await User_1.default.findById(sub['userId']).select('full_name email phone_number').lean();
+                const plan = sub['planId'] || {};
                 const expiryDateStr = new Date(sub['expiresAtUTC']).toISOString().split('T')[0];
                 const vars = {
                     expiry_date: expiryDateStr,
-                    plan_name: '',
-                    renewal_url: process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/subscription` : '',
+                    plan_name: String(plan['name'] || ''),
+                    renewal_url: buildRenewalUrl(plan),
                     student_name: user?.full_name ?? '',
                 };
-                try {
-                    await (0, notificationProviderService_1.sendNotificationToStudent)(sub['userId'], templateKey, 'sms', vars);
+                if (plan['allowsSMSUpdates'] !== false) {
+                    try {
+                        await (0, notificationProviderService_1.sendNotificationToStudent)(sub['userId'], templateKey, 'sms', vars);
+                    }
+                    catch (smsErr) {
+                        logger_1.logger.warn(`[subscriptionExpiryCron] SMS reminder failed for userId=${sub['userId']}`, undefined, { error: String(smsErr) });
+                    }
                 }
-                catch (smsErr) {
-                    logger_1.logger.warn(`[subscriptionExpiryCron] SMS reminder failed for userId=${sub['userId']}`, undefined, { error: String(smsErr) });
-                }
-                try {
-                    await (0, notificationProviderService_1.sendNotificationToStudent)(sub['userId'], templateKey, 'email', vars);
-                }
-                catch (emailErr) {
-                    logger_1.logger.warn(`[subscriptionExpiryCron] Email reminder failed for userId=${sub['userId']}`, undefined, { error: String(emailErr) });
+                if (plan['allowsEmailUpdates'] !== false) {
+                    try {
+                        await (0, notificationProviderService_1.sendNotificationToStudent)(sub['userId'], templateKey, 'email', vars);
+                    }
+                    catch (emailErr) {
+                        logger_1.logger.warn(`[subscriptionExpiryCron] Email reminder failed for userId=${sub['userId']}`, undefined, { error: String(emailErr) });
+                    }
                 }
                 await UserSubscription_1.default.findByIdAndUpdate(sub['_id'], {
                     $set: { lastReminderSentAtUTC: now },
@@ -123,7 +137,9 @@ async function runSubscriptionExpiryCheck() {
         overdueSubscriptions = await UserSubscription_1.default.find({
             status: 'active',
             expiresAtUTC: { $lte: now },
-        }).lean();
+        })
+            .populate('planId', 'name slug code allowsSMSUpdates allowsEmailUpdates')
+            .lean();
     }
     catch (err) {
         logger_1.logger.error('[subscriptionExpiryCron] Failed to query overdue subscriptions', undefined, {
@@ -144,15 +160,23 @@ async function runSubscriptionExpiryCheck() {
             continue;
         }
         try {
-            const userUpdate = {
-                'subscription.isActive': false,
-            };
+            const userUpdate = {};
+            const plan = sub['planId'] || {};
+            await (0, subscriptionLifecycleService_1.syncUserSubscriptionCache)({
+                userId: String(sub['userId'] || ''),
+                plan,
+                status: 'expired',
+                startAtUTC: sub['startAtUTC'] ? new Date(String(sub['startAtUTC'])) : null,
+                expiresAtUTC: sub['expiresAtUTC'] ? new Date(String(sub['expiresAtUTC'])) : null,
+            });
             if (settings['passwordResetOnExpiry']) {
                 userUpdate['mustChangePassword'] = true;
                 userUpdate['passwordResetRequired'] = true;
             }
-            await User_1.default.findByIdAndUpdate(sub['userId'], { $set: userUpdate });
-            logger_1.logger.info(`[subscriptionExpiryCron] Updated user subscription.isActive=false for userId=${sub['userId']}`);
+            if (Object.keys(userUpdate).length > 0) {
+                await User_1.default.findByIdAndUpdate(sub['userId'], { $set: userUpdate });
+                logger_1.logger.info(`[subscriptionExpiryCron] Updated user expiry-side flags for userId=${sub['userId']}`);
+            }
         }
         catch (err) {
             logger_1.logger.error(`[subscriptionExpiryCron] Failed to update user for subscription _id=${sub['_id']}`, undefined, { error: String(err) });
@@ -165,19 +189,25 @@ async function runSubscriptionExpiryCheck() {
             logger_1.logger.error(`[subscriptionExpiryCron] Failed to revoke sessions for userId=${sub['userId']}`, undefined, { error: String(err) });
         }
         try {
+            const plan = sub['planId'] || {};
             const expiryDateStr = new Date(sub['expiresAtUTC']).toISOString().split('T')[0];
             const vars = {
                 expiry_date: expiryDateStr,
-                plan_name: '',
+                plan_name: String(plan['name'] || ''),
+                renewal_url: buildRenewalUrl(plan),
             };
-            try {
-                await (0, notificationProviderService_1.sendNotificationToStudent)(sub['userId'], 'SUB_EXPIRED', 'sms', vars);
+            if (plan['allowsSMSUpdates'] !== false) {
+                try {
+                    await (0, notificationProviderService_1.sendNotificationToStudent)(sub['userId'], 'SUB_EXPIRED', 'sms', vars);
+                }
+                catch { /* non-fatal */ }
             }
-            catch { /* non-fatal */ }
-            try {
-                await (0, notificationProviderService_1.sendNotificationToStudent)(sub['userId'], 'SUB_EXPIRED', 'email', vars);
+            if (plan['allowsEmailUpdates'] !== false) {
+                try {
+                    await (0, notificationProviderService_1.sendNotificationToStudent)(sub['userId'], 'SUB_EXPIRED', 'email', vars);
+                }
+                catch { /* non-fatal */ }
             }
-            catch { /* non-fatal */ }
             logger_1.logger.info(`[subscriptionExpiryCron] SUB_EXPIRED notification dispatched for userId=${sub['userId']}`);
         }
         catch (err) {

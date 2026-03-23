@@ -5,6 +5,23 @@ export interface IAnnouncementNotice extends Document {
     message: string;
     target: AnnouncementTarget;
     targetIds: string[];
+    sourceNewsId?: mongoose.Types.ObjectId | null;
+    priority?: 'normal' | 'priority' | 'breaking';
+    classification?: {
+        primaryCategory?: string;
+        tags?: string[];
+        universityIds?: mongoose.Types.ObjectId[];
+        clusterIds?: mongoose.Types.ObjectId[];
+        groupIds?: mongoose.Types.ObjectId[];
+    };
+    deliveryMeta?: {
+        lastJobId?: mongoose.Types.ObjectId | null;
+        lastChannel?: 'sms' | 'email' | 'both';
+        lastAudienceSummary?: string;
+        lastSentAt?: Date | null;
+    };
+    templateRef?: string;
+    triggerRef?: string;
     startAt: Date;
     endAt?: Date | null;
     isActive: boolean;

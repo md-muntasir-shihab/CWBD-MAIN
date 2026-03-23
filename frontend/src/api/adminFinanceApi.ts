@@ -1,5 +1,5 @@
 /* ─── Finance Center API Layer ──────────────────────────── */
-import api from '../services/api';
+import api, { resolveSensitiveActionHeaders, type SensitiveActionProof } from '../services/api';
 import { downloadFile } from '../utils/download';
 import type {
     FcTransaction, FcInvoice, FcBudget, FcRecurringRule,
@@ -106,8 +106,16 @@ export const fcApi = {
         api.get<{ data: FcAuditLog }>(`${FC}/audit-logs/${id}`).then(r => r.data),
 
     // ── Export / Import ─────────────────────────────────
-    exportTransactions: (p: Params = {}) =>
-        api.get(`${FC}/export${qs(p)}`, { responseType: 'blob' }),
+    exportTransactions: async (p: Params = {}, proof?: SensitiveActionProof) =>
+        api.get(`${FC}/export${qs(p)}`, {
+            responseType: 'blob',
+            headers: await resolveSensitiveActionHeaders({
+                actionLabel: 'export finance transactions',
+                defaultReason: 'Export finance transaction records',
+                requireOtpHint: true,
+                proof,
+            }),
+        }),
     downloadImportTemplate: () =>
         api.get(`${FC}/import-template`, { responseType: 'blob' }),
     importPreview: (file: File) => {
@@ -119,9 +127,17 @@ export const fcApi = {
         api.post(`${FC}/import-commit`, { rows }).then(r => r.data),
 
     // ── P&L Report PDF ──────────────────────────────────
-    downloadPLReport: (month?: string) => {
+    downloadPLReport: async (month?: string, proof?: SensitiveActionProof) => {
         const url = `${FC}/report.pdf${qs({ month })}`;
-        return api.get(url, { responseType: 'blob' }).then(r => {
+        return api.get(url, {
+            responseType: 'blob',
+            headers: await resolveSensitiveActionHeaders({
+                actionLabel: 'download finance profit and loss report',
+                defaultReason: 'Download finance profit and loss report',
+                requireOtpHint: true,
+                proof,
+            }),
+        }).then(r => {
             downloadFile(r, { filename: `PL-Report-${month || 'current'}.pdf` });
         });
     },

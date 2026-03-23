@@ -73,6 +73,11 @@ const StudentProfileSchema = new mongoose_1.Schema({
     profile_completion_percentage: { type: Number, default: 0, min: 0, max: 100 },
     points: { type: Number, default: 0, index: true },
     rank: { type: Number },
+    examIdentity: { type: mongoose_1.Schema.Types.Mixed, default: {} },
+    examHistory: { type: [mongoose_1.Schema.Types.Mixed], default: [] },
+    latestExamResultSummary: { type: String, default: '' },
+    examDataLastSyncAt: { type: Date, default: null },
+    examDataLastSyncSource: { type: String, default: '' },
 }, { timestamps: true });
 StudentProfileSchema.index({ full_name: 1 });
 StudentProfileSchema.index({ institution_name: 1, roll_number: 1 });

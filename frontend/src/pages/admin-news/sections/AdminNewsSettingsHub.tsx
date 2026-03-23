@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import NewsHelpButton from '../../../components/admin/NewsHelpButton';
 import {
     ApiNewsV2Settings,
     adminGetNewsSettings,
@@ -253,12 +254,41 @@ export default function AdminNewsSettingsHub({ initialPanel = 'appearance' }: Pr
 
     return (
         <div className="space-y-4">
+            <div className="grid gap-3 lg:grid-cols-3">
+                <SummaryCard
+                    title="Appearance"
+                    text="Page title, banners, and visual defaults."
+                />
+                <SummaryCard
+                    title="Workflow"
+                    text="Fetch, draft, publish, and review defaults."
+                />
+                <SummaryCard
+                    title="Communication"
+                    text="Share templates and outbound button defaults."
+                />
+            </div>
+
             <form onSubmit={onSaveCore} className="card-flat space-y-4 border border-cyan-500/20 p-4">
-                <div>
-                    <h2 className="text-xl font-semibold">News Settings</h2>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                        Manage branding, workflow, AI preset, and share templates from one place.
-                    </p>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-1">
+                        <h2 className="text-xl font-semibold">News Settings</h2>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                            Manage branding, workflow, AI preset, and share templates from one place.
+                        </p>
+                    </div>
+                    <NewsHelpButton
+                        title="News Settings Center"
+                        content="This is the single place where the active News experience is configured."
+                        impact="It keeps the public feed, the review flow, and outbound sharing in sync."
+                        affected="Editors, admins, and any public news page that reads the current settings."
+                        publishNote="Published content uses the stored branding and share defaults."
+                        publishSendNote="If publish + send is used later, the communication settings on this screen influence the message formatting."
+                        enabledNote="A single settings source prevents confusing split behavior."
+                        disabledNote="If these controls are spread across multiple forms, the workflow becomes harder to manage."
+                        bestPractice="Edit the grouped controls below before changing individual content records."
+                        variant="full"
+                    />
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
@@ -425,16 +455,10 @@ export default function AdminNewsSettingsHub({ initialPanel = 'appearance' }: Pr
             </form>
 
             <div className="card-flat space-y-4 border border-cyan-500/20 p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                    <button className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${panel === 'appearance' ? 'border-cyan-400 bg-cyan-500/20 text-cyan-700 dark:text-cyan-100' : 'border-slate-300 text-slate-700 hover:border-cyan-500/60 dark:border-slate-700 dark:text-slate-300'}`} onClick={() => setPanel('appearance')}>
-                        Appearance
-                    </button>
-                    <button className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${panel === 'ai' ? 'border-cyan-400 bg-cyan-500/20 text-cyan-700 dark:text-cyan-100' : 'border-slate-300 text-slate-700 hover:border-cyan-500/60 dark:border-slate-700 dark:text-slate-300'}`} onClick={() => setPanel('ai')}>
-                        AI Provider
-                    </button>
-                    <button className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${panel === 'share' ? 'border-cyan-400 bg-cyan-500/20 text-cyan-700 dark:text-cyan-100' : 'border-slate-300 text-slate-700 hover:border-cyan-500/60 dark:border-slate-700 dark:text-slate-300'}`} onClick={() => setPanel('share')}>
-                        Share / UTM
-                    </button>
+                <div className="grid gap-2 md:grid-cols-3">
+                    <PanelButton active={panel === 'appearance'} title="Appearance" text="Branding and visual defaults" onClick={() => setPanel('appearance')} />
+                    <PanelButton active={panel === 'ai'} title="AI Provider" text="Drafting, prompt, and verification" onClick={() => setPanel('ai')} />
+                    <PanelButton active={panel === 'share'} title="Share / UTM" text="Templates and tracking defaults" onClick={() => setPanel('share')} />
                 </div>
 
                 {panel === 'appearance' && <AdminNewsSettingsSection mode="appearance" />}
@@ -442,6 +466,41 @@ export default function AdminNewsSettingsHub({ initialPanel = 'appearance' }: Pr
                 {panel === 'share' && <AdminNewsSettingsSection mode="share" />}
             </div>
         </div>
+    );
+}
+
+function SummaryCard({ title, text }: { title: string; text: string }) {
+    return (
+        <div className="rounded-2xl border border-slate-200/80 bg-slate-100/70 p-4 dark:border-slate-800/70 dark:bg-slate-950/50">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-600 dark:text-cyan-300">{title}</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{text}</p>
+        </div>
+    );
+}
+
+function PanelButton({
+    active,
+    title,
+    text,
+    onClick,
+}: {
+    active: boolean;
+    title: string;
+    text: string;
+    onClick: () => void;
+}) {
+    return (
+        <button
+            type="button"
+            className={`rounded-2xl border px-4 py-3 text-left transition ${active
+                ? 'border-cyan-400 bg-cyan-500/15 text-cyan-100'
+                : 'border-slate-200/80 bg-slate-100/70 text-slate-700 hover:border-cyan-400/60 hover:bg-cyan-500/5 dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-300'
+                }`}
+            onClick={onClick}
+        >
+            <p className="text-sm font-semibold">{title}</p>
+            <p className="mt-1 text-xs leading-5 opacity-80">{text}</p>
+        </button>
     );
 }
 

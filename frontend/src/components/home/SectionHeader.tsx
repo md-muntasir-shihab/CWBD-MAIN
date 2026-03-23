@@ -26,10 +26,15 @@ export default function SectionHeader({
               initial={{ scale: 0.8, opacity: 0 }}
               whileInView={{ scale: 1, opacity: 1 }}
               viewport={{ once: true }}
-              className="relative p-2.5 rounded-xl bg-gradient-to-br from-[var(--primary)]/15 to-purple-500/10 dark:from-[var(--primary)]/25 dark:to-purple-500/15 ring-1 ring-[var(--primary)]/10 dark:ring-[var(--primary)]/20"
+              className="relative p-2.5 rounded-xl bg-white dark:bg-gray-900 shadow-sm ring-1 ring-gray-200 dark:ring-gray-700 overflow-hidden group"
             >
-              <Icon className="w-5 h-5 text-[var(--primary)] dark:text-[var(--primary)]" />
-              <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-[var(--primary)]/5 to-transparent blur-sm" />
+              {/* Subtle background gradient overlay */}
+              <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/10 to-indigo-500/5 dark:from-[var(--primary)]/20 dark:to-indigo-500/10" />
+              
+              <Icon className="relative z-10 w-5 h-5 text-[var(--primary)] dark:text-[var(--primary)]" />
+              
+              {/* Inner glow effect */}
+              <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-[var(--primary)]/5 to-transparent blur-sm pointer-events-none" />
             </motion.div>
           )}
           <div>

@@ -20,7 +20,6 @@ const DEFAULT_FEATURE_FLAGS = {
     strictExamTabLock: false,
     webNextEnabled: false,
     studentRegistrationEnabled: false,
-    passwordRevealEnabled: true,
     financeDashboardV1: false,
     smsReminderEnabled: false,
     emailReminderEnabled: true,
@@ -52,7 +51,6 @@ function normalizeFeatureFlags(source, strictExamTabLock) {
         strictExamTabLock,
         webNextEnabled: asBoolean(raw.webNextEnabled, DEFAULT_FEATURE_FLAGS.webNextEnabled),
         studentRegistrationEnabled: asBoolean(raw.studentRegistrationEnabled, DEFAULT_FEATURE_FLAGS.studentRegistrationEnabled),
-        passwordRevealEnabled: asBoolean(raw.passwordRevealEnabled, DEFAULT_FEATURE_FLAGS.passwordRevealEnabled),
         financeDashboardV1: asBoolean(raw.financeDashboardV1, DEFAULT_FEATURE_FLAGS.financeDashboardV1),
         smsReminderEnabled: asBoolean(raw.smsReminderEnabled, DEFAULT_FEATURE_FLAGS.smsReminderEnabled),
         emailReminderEnabled: asBoolean(raw.emailReminderEnabled, DEFAULT_FEATURE_FLAGS.emailReminderEnabled),
@@ -85,7 +83,6 @@ async function getRuntimeSettingsSnapshot(forceRefreshSecurity = true) {
         settings.featureFlags?.pushNotifications === undefined ||
         settings.featureFlags?.webNextEnabled === undefined ||
         settings.featureFlags?.studentRegistrationEnabled === undefined ||
-        settings.featureFlags?.passwordRevealEnabled === undefined ||
         settings.featureFlags?.financeDashboardV1 === undefined ||
         settings.featureFlags?.smsReminderEnabled === undefined ||
         settings.featureFlags?.emailReminderEnabled === undefined ||

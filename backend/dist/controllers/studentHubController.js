@@ -24,10 +24,13 @@ const StudentDueLedger_1 = __importDefault(require("../models/StudentDueLedger")
 const Notification_1 = __importDefault(require("../models/Notification"));
 const Resource_1 = __importDefault(require("../models/Resource"));
 const StudentNotificationRead_1 = __importDefault(require("../models/StudentNotificationRead"));
+const UserSubscription_1 = __importDefault(require("../models/UserSubscription"));
 const studentDashboardService_1 = require("../services/studentDashboardService");
+const subscriptionAccessService_1 = require("../services/subscriptionAccessService");
 const externalExamAttemptService_1 = require("../services/externalExamAttemptService");
 const studentProfileScoreService_1 = require("../services/studentProfileScoreService");
 const securityConfigService_1 = require("../services/securityConfigService");
+const secureUploadService_1 = require("../services/secureUploadService");
 function ensureStudent(req, res) {
     if (!req.user) {
         res.status(401).json({ message: 'Authentication required' });
@@ -174,7 +177,7 @@ async function getStudentMeExamById(req, res) {
             res.status(400).json({ message: 'Invalid exam id' });
             return;
         }
-        const [exam, user, profile, dueLedger, resultCount, externalAttemptCount, myResult] = await Promise.all([
+        const [exam, user, profile, dueLedger, resultCount, externalAttemptCount, myResult, activeSubscription] = await Promise.all([
             Exam_1.default.findById(examId).lean(),
             User_1.default.findById(studentId).select('subscription').lean(),
             StudentProfile_1.default.findOne({ user_id: studentId }).lean(),
@@ -182,6 +185,13 @@ async function getStudentMeExamById(req, res) {
             ExamResult_1.default.countDocuments({ exam: examId, student: studentId }),
             (0, externalExamAttemptService_1.getExternalExamAttemptCount)(examId, studentId),
             ExamResult_1.default.findOne({ exam: examId, student: studentId }).sort({ submittedAt: -1 }).lean(),
+            UserSubscription_1.default.findOne({
+                userId: studentId,
+                status: 'active',
+                expiresAtUTC: { $gt: new Date() },
+            })
+                .populate('planId', 'code')
+                .lean(),
         ]);
         if (!exam) {
             res.status(404).json({ message: 'Exam not found' });
@@ -199,19 +209,22 @@ async function getStudentMeExamById(req, res) {
         const requiredPlanCodes = Array.isArray(accessControl.allowedPlanCodes)
             ? accessControl.allowedPlanCodes.map((item) => String(item || '').toLowerCase()).filter(Boolean)
             : [];
+        const persistedSubscription = user?.subscription || {};
+        const activePlan = activeSubscription?.planId || null;
         const studentGroupIds = normalizeObjectIdArray(profile?.groupIds || []);
         const subscriptionRequired = Boolean(exam.subscriptionRequired)
             || Boolean(exam.requiresActiveSubscription)
             || visibilityMode === 'subscription_only'
             || requiredPlanCodes.length > 0;
-        const studentPlanCode = String(user?.subscription?.planCode ||
-            user?.subscription?.plan ||
+        const studentPlanCode = String(activePlan?.code ||
+            persistedSubscription.planCode ||
+            persistedSubscription.plan ||
             '').toLowerCase();
-        const subscriptionExpiryRaw = user?.subscription?.expiryDate;
+        const subscriptionExpiryRaw = activeSubscription?.expiresAtUTC || persistedSubscription.expiryDate;
         const subscriptionExpiryTime = subscriptionExpiryRaw ? new Date(String(subscriptionExpiryRaw)).getTime() : 0;
-        const subscriptionActive = Boolean(user?.subscription?.isActive &&
+        const subscriptionActive = Boolean(activeSubscription || (persistedSubscription.isActive &&
             Number.isFinite(subscriptionExpiryTime) &&
-            subscriptionExpiryTime > Date.now());
+            subscriptionExpiryTime > Date.now()));
         const planEligible = requiredPlanCodes.length === 0 || requiredPlanCodes.includes(studentPlanCode);
         const subscriptionEligible = !subscriptionRequired || subscriptionActive;
         const paymentRequired = subscriptionRequired && subscriptionActive;
@@ -553,7 +566,11 @@ async function getStudentMeResources(req, res) {
             return;
         const category = String(req.query.category || '').trim();
         const q = String(req.query.q || '').trim();
-        const filter = { isPublic: true };
+        const subscriptionSnapshot = await (0, subscriptionAccessService_1.getCanonicalSubscriptionSnapshot)(studentId);
+        const filter = {};
+        if (subscriptionSnapshot.allowsPremiumResources !== true) {
+            filter.isPublic = true;
+        }
         if (category && category.toLowerCase() !== 'all')
             filter.category = category;
         if (q) {
@@ -617,7 +634,20 @@ async function studentSubmitPaymentProof(req, res) {
         const studentId = ensureStudent(req, res);
         if (!studentId)
             return;
-        const { amount, method, reference, notes, proofUrl, entryType, subscriptionPlanId } = req.body;
+        const { amount, method, reference, notes, proofUrl: rawProofUrl, entryType, subscriptionPlanId } = req.body;
+        let proofUrl = String(rawProofUrl || '').trim();
+        if (req.file) {
+            const secureUpload = await (0, secureUploadService_1.registerSecureUpload)({
+                file: req.file,
+                category: 'payment_proof',
+                visibility: 'protected',
+                ownerUserId: studentId,
+                ownerRole: req.user?.role || 'student',
+                uploadedBy: studentId,
+                accessRoles: ['student', 'superadmin', 'admin', 'finance_agent'],
+            });
+            proofUrl = (0, secureUploadService_1.buildSecureUploadUrl)(secureUpload.storedName);
+        }
         if (!amount || Number(amount) <= 0) {
             res.status(400).json({ message: 'Valid amount is required' });
             return;

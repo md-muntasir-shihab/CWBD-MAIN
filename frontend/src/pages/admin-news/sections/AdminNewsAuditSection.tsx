@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { adminGetNewsAuditLogs } from '../../../services/api';
+import NewsHelpButton from '../../../components/admin/NewsHelpButton';
 
 export default function AdminNewsAuditSection() {
     const [action, setAction] = useState('');
@@ -23,8 +24,24 @@ export default function AdminNewsAuditSection() {
     return (
         <div className="space-y-4">
             <div className="card-flat border border-cyan-500/20 p-4">
-                <h2 className="text-xl font-semibold">Audit Logs</h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Immutable timeline of News V2 admin actions.</p>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-1">
+                        <h2 className="text-xl font-semibold">Audit Logs</h2>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">Immutable timeline of News V2 admin actions.</p>
+                    </div>
+                    <NewsHelpButton
+                        title="Audit Logs"
+                        content="Audit logs show who changed what, when, and from where."
+                        impact="It makes content and source changes traceable for review and support."
+                        affected="Admins, editors, and compliance reviewers."
+                        publishNote="Published items should line up with an audit entry for the publish action."
+                        publishSendNote="Publish + send should also leave a trace in delivery logs and related audit records."
+                        enabledNote="The timeline is easier to scan when filters stay narrow."
+                        disabledNote="Without audit visibility, it is harder to diagnose who changed a story or source."
+                        bestPractice="Filter by action before drilling into individual entries."
+                        variant="full"
+                    />
+                </div>
                 <div className="mt-3 grid gap-3 md:grid-cols-3">
                     <input
                         className="input-field"

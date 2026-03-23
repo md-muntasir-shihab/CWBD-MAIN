@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import NewsHelpButton from '../../../components/admin/NewsHelpButton';
 import {
     ApiNewsV2Settings,
     adminNewsV2GetAiSettings,
@@ -99,9 +100,46 @@ export default function AdminNewsSettingsSection({ mode }: Props) {
 
     return (
         <form onSubmit={onSubmit} className="card-flat space-y-4 border border-cyan-500/20 p-4">
-            <div>
-                <h2 className="text-xl font-semibold">{title}</h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400">All fields are admin-controlled and applied live after save.</p>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
+                    <h2 className="text-xl font-semibold">{title}</h2>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">All fields are admin-controlled and applied live after save.</p>
+                </div>
+                <NewsHelpButton
+                    title={title}
+                    content={mode === 'appearance'
+                        ? 'Controls how the public news surface looks and how dense the cards feel.'
+                        : mode === 'ai'
+                            ? 'Controls the AI provider, prompt, language, and safety defaults used when drafting content.'
+                            : 'Controls the share templates and tracking settings used when content is shared out.'
+                    }
+                    impact={mode === 'appearance'
+                        ? 'This changes the visual language used across the public news pages.'
+                        : mode === 'ai'
+                            ? 'This changes how safely and consistently AI-assisted drafts are generated.'
+                            : 'This changes how outbound share links and tracking parameters are composed.'
+                    }
+                    affected={mode === 'appearance'
+                        ? 'Public readers and editors scanning the news feed.'
+                        : mode === 'ai'
+                            ? 'Editors who apply AI help to draft or rewrite content.'
+                            : 'Anyone sharing news links through buttons or templates.'
+                    }
+                    publishNote={mode === 'appearance'
+                        ? 'Published stories will inherit the same banners, density, and visual defaults.'
+                        : mode === 'ai'
+                            ? 'Published stories can be seeded from the AI draft output if auto-apply is enabled.'
+                            : 'Published stories will keep the configured share message structure.'
+                    }
+                    publishSendNote={mode === 'share'
+                        ? 'Publish + send uses these sharing and tracking defaults when the message is distributed.'
+                        : 'If publish + send is used later, the current settings still influence the rendered story and delivery payload.'
+                    }
+                    enabledNote="Keeping the settings grouped makes it easier to confirm which defaults are live."
+                    disabledNote="If this panel is separated from the core settings, editors can miss the active default."
+                    bestPractice="Use the smallest useful change, then save and verify the public page once."
+                    variant="full"
+                />
             </div>
 
             {mode === 'appearance' && (

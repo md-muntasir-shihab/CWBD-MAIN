@@ -18,6 +18,10 @@ export interface SecurityConfig {
     allowLegacyTokens: boolean;
     strictExamTabLock: boolean;
     strictTokenHashValidation: boolean;
+    testingAccessMode: boolean;
+    requiredTwoFactorRoles: string[];
+    allowedTwoFactorMethods: TwoFactorMethod[];
+    stepUpSensitiveActions: boolean;
     allowTestOtp: boolean;
     testOtpCode: string;
     passwordPolicy: {
@@ -25,6 +29,77 @@ export interface SecurityConfig {
         requireNumber: boolean;
         requireUppercase: boolean;
         requireSpecial: boolean;
+    };
+    passwordPolicies: {
+        default: {
+            minLength: number;
+            requireUppercase: boolean;
+            requireLowercase: boolean;
+            requireNumber: boolean;
+            requireSpecial: boolean;
+            denyCommonPasswords: boolean;
+            preventReuseCount: number;
+            expiryDays: number;
+            forceResetOnFirstLogin: boolean;
+        };
+        admin: {
+            minLength: number;
+            requireUppercase: boolean;
+            requireLowercase: boolean;
+            requireNumber: boolean;
+            requireSpecial: boolean;
+            denyCommonPasswords: boolean;
+            preventReuseCount: number;
+            expiryDays: number;
+            forceResetOnFirstLogin: boolean;
+        };
+        staff: {
+            minLength: number;
+            requireUppercase: boolean;
+            requireLowercase: boolean;
+            requireNumber: boolean;
+            requireSpecial: boolean;
+            denyCommonPasswords: boolean;
+            preventReuseCount: number;
+            expiryDays: number;
+            forceResetOnFirstLogin: boolean;
+        };
+        student: {
+            minLength: number;
+            requireUppercase: boolean;
+            requireLowercase: boolean;
+            requireNumber: boolean;
+            requireSpecial: boolean;
+            denyCommonPasswords: boolean;
+            preventReuseCount: number;
+            expiryDays: number;
+            forceResetOnFirstLogin: boolean;
+        };
+        strengthMeterEnabled: boolean;
+    };
+    authentication: {
+        loginAttemptsLimit: number;
+        lockDurationMinutes: number;
+        genericErrorMessages: boolean;
+        verificationRequired: boolean;
+        allowedLoginMethods: Array<'username' | 'email' | 'phone'>;
+        accountLockEnabled: boolean;
+        newDeviceAlerts: boolean;
+        suspiciousLoginAlerts: boolean;
+        adminLoginAlerts: boolean;
+        throttleWindowMinutes: number;
+        otpResendLimit: number;
+        otpVerifyLimit: number;
+        recaptchaEnabled: boolean;
+    };
+    verificationRecovery: {
+        requireVerifiedEmailForStudents: boolean;
+        requireVerifiedEmailForAdmins: boolean;
+        phoneVerificationEnabled: boolean;
+        emailVerificationExpiryHours: number;
+        passwordResetExpiryMinutes: number;
+        resendCooldownMinutes: number;
+        allowAdminRecovery: boolean;
     };
     loginProtection: {
         maxAttempts: number;
@@ -82,26 +157,36 @@ export async function getSecurityConfig(forceRefresh = false): Promise<SecurityC
     }
 
     const settings = await getSecuritySettingsSnapshot(forceRefresh);
+    const requiredTwoFactorRoles = settings.twoFactor.requireForRoles.map((role) => role.toLowerCase());
+    const enable2faAdmin = requiredTwoFactorRoles.some((role) => ['superadmin', 'admin', 'moderator', 'editor', 'viewer', 'support_agent', 'finance_agent'].includes(role));
+    const enable2faStudent = requiredTwoFactorRoles.includes('student');
+    const forceLogoutOnNewLogin = !settings.sessions.allowConcurrentSessions || settings.sessions.maxActiveSessionsPerUser <= 1;
 
     const data: SecurityConfig = {
-        singleBrowserLogin: true,
-        forceLogoutOnNewLogin: true,
-        enable2faAdmin: settings.adminAccess.require2FAForAdmins,
-        enable2faStudent: false,
-        force2faSuperAdmin: settings.adminAccess.require2FAForAdmins,
-        default2faMethod: 'email',
-        otpExpiryMinutes: Math.max(1, Math.min(30, settings.loginProtection.lockoutMinutes)),
-        maxOtpAttempts: settings.loginProtection.maxAttempts,
-        ipChangeAlert: true,
+        singleBrowserLogin: forceLogoutOnNewLogin,
+        forceLogoutOnNewLogin,
+        enable2faAdmin,
+        enable2faStudent,
+        force2faSuperAdmin: requiredTwoFactorRoles.includes('superadmin'),
+        default2faMethod: settings.twoFactor.defaultMethod,
+        otpExpiryMinutes: settings.twoFactor.otpExpiryMinutes,
+        maxOtpAttempts: settings.twoFactor.maxAttempts,
+        ipChangeAlert: settings.authentication.newDeviceAlerts || settings.authentication.suspiciousLoginAlerts,
         allowLegacyTokens: false,
         strictExamTabLock: settings.examProtection.logTabSwitch,
         strictTokenHashValidation: true,
+        testingAccessMode: settings.runtimeGuards.testingAccessMode,
+        requiredTwoFactorRoles,
+        allowedTwoFactorMethods: settings.twoFactor.allowedMethods,
+        stepUpSensitiveActions: settings.twoFactor.stepUpForSensitiveActions,
         allowTestOtp: String(
             process.env.ALLOW_TEST_OTP ||
             (process.env.NODE_ENV === 'production' ? 'false' : 'true')
         ).trim().toLowerCase() === 'true',
         testOtpCode: String(process.env.TEST_OTP_CODE || '123456'),
         passwordPolicy: settings.passwordPolicy,
+        passwordPolicies: settings.passwordPolicies,
+        authentication: settings.authentication,
         loginProtection: settings.loginProtection,
         session: settings.session,
         adminAccess: settings.adminAccess,
@@ -110,6 +195,7 @@ export async function getSecurityConfig(forceRefresh = false): Promise<SecurityC
         logging: settings.logging,
         rateLimit: settings.rateLimit,
         panic: settings.panic,
+        verificationRecovery: settings.verificationRecovery,
     };
 
     cache = { data, ts: Date.now() };

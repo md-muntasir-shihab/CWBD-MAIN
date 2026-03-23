@@ -7,6 +7,14 @@ export interface IActiveSession extends Document {
     browser_fingerprint: string;
     ip_address: string;
     device_type: string;
+    device_name?: string;
+    platform?: string;
+    browser?: string;
+    location_summary?: string;
+    risk_score?: number;
+    risk_flags?: string[];
+    stream_ticket_hash?: string;
+    stream_ticket_expires_at?: Date;
     login_time: Date;
     last_activity: Date;
     status: 'active' | 'terminated';
@@ -25,6 +33,14 @@ const ActiveSessionSchema = new Schema<IActiveSession>(
         browser_fingerprint: { type: String, default: '' },
         ip_address: { type: String, default: '' },
         device_type: { type: String, default: 'unknown' },
+        device_name: { type: String, default: '' },
+        platform: { type: String, default: '' },
+        browser: { type: String, default: '' },
+        location_summary: { type: String, default: '' },
+        risk_score: { type: Number, default: 0, min: 0, max: 100 },
+        risk_flags: { type: [String], default: [] },
+        stream_ticket_hash: { type: String, default: '' },
+        stream_ticket_expires_at: { type: Date, default: null },
         login_time: { type: Date, default: Date.now },
         last_activity: { type: Date, default: Date.now },
         status: { type: String, enum: ['active', 'terminated'], default: 'active' },

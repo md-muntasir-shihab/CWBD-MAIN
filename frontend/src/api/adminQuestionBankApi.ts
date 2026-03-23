@@ -1,4 +1,4 @@
-import api from '../services/api';
+import api, { resolveSensitiveActionHeaders, type SensitiveActionProof } from '../services/api';
 import type {
     BankQuestion,
     BankQuestionDetail,
@@ -79,8 +79,20 @@ export const importCommit = (file: File, mapping: Record<string, string>, mode: 
     return api.post<{ data: ImportCommitResponse }>(`${BASE}/import/commit`, fd).then((r) => r.data.data);
 };
 
-export const exportQuestions = (filters: BankQuestionFilters, format: 'csv' | 'xlsx' = 'xlsx') =>
-    api.get(`${BASE}/export`, { params: { ...filters, format }, responseType: 'blob' }).then((r) => r.data);
+export const exportQuestions = async (
+    filters: BankQuestionFilters,
+    format: 'csv' | 'xlsx' = 'xlsx',
+    proof?: SensitiveActionProof,
+) =>
+    api.get(`${BASE}/export`, {
+        params: { ...filters, format },
+        responseType: 'blob',
+        headers: await resolveSensitiveActionHeaders({
+            actionLabel: 'export question bank',
+            defaultReason: 'Export question bank records',
+            proof,
+        }),
+    }).then((r) => r.data);
 
 /* ── Sets ── */
 export const listSets = () =>

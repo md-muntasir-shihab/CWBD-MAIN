@@ -3,25 +3,25 @@ declare const rssSourceSchema: Schema<any, import("mongoose").Model<any, any, an
     timestamps: true;
 }, {
     name: string;
+    priority: number;
     enabled: boolean;
     rssUrl: string;
     siteUrl: string;
-    iconType: "upload" | "url";
-    categoryTags: string[];
+    iconType: "url" | "upload";
     fetchIntervalMinutes: number;
-    priority: number;
+    categoryTags: string[];
     iconUrl?: string | null | undefined;
     lastFetchedAt?: NativeDate | null | undefined;
     lastError?: string | null | undefined;
 } & import("mongoose").DefaultTimestampProps, import("mongoose").Document<unknown, {}, import("mongoose").FlatRecord<{
     name: string;
+    priority: number;
     enabled: boolean;
     rssUrl: string;
     siteUrl: string;
-    iconType: "upload" | "url";
-    categoryTags: string[];
+    iconType: "url" | "upload";
     fetchIntervalMinutes: number;
-    priority: number;
+    categoryTags: string[];
     iconUrl?: string | null | undefined;
     lastFetchedAt?: NativeDate | null | undefined;
     lastError?: string | null | undefined;
@@ -29,13 +29,13 @@ declare const rssSourceSchema: Schema<any, import("mongoose").Model<any, any, an
     timestamps: true;
 }>> & import("mongoose").FlatRecord<{
     name: string;
+    priority: number;
     enabled: boolean;
     rssUrl: string;
     siteUrl: string;
-    iconType: "upload" | "url";
-    categoryTags: string[];
+    iconType: "url" | "upload";
     fetchIntervalMinutes: number;
-    priority: number;
+    categoryTags: string[];
     iconUrl?: string | null | undefined;
     lastFetchedAt?: NativeDate | null | undefined;
     lastError?: string | null | undefined;
@@ -47,25 +47,25 @@ declare const rssSourceSchema: Schema<any, import("mongoose").Model<any, any, an
 export type RssSource = InferSchemaType<typeof rssSourceSchema>;
 export declare const RssSourceModel: import("mongoose").Model<{
     name: string;
+    priority: number;
     enabled: boolean;
     rssUrl: string;
     siteUrl: string;
-    iconType: "upload" | "url";
-    categoryTags: string[];
+    iconType: "url" | "upload";
     fetchIntervalMinutes: number;
-    priority: number;
+    categoryTags: string[];
     iconUrl?: string | null | undefined;
     lastFetchedAt?: NativeDate | null | undefined;
     lastError?: string | null | undefined;
 } & import("mongoose").DefaultTimestampProps, {}, {}, {}, import("mongoose").Document<unknown, {}, {
     name: string;
+    priority: number;
     enabled: boolean;
     rssUrl: string;
     siteUrl: string;
-    iconType: "upload" | "url";
-    categoryTags: string[];
+    iconType: "url" | "upload";
     fetchIntervalMinutes: number;
-    priority: number;
+    categoryTags: string[];
     iconUrl?: string | null | undefined;
     lastFetchedAt?: NativeDate | null | undefined;
     lastError?: string | null | undefined;
@@ -73,13 +73,13 @@ export declare const RssSourceModel: import("mongoose").Model<{
     timestamps: true;
 }> & {
     name: string;
+    priority: number;
     enabled: boolean;
     rssUrl: string;
     siteUrl: string;
-    iconType: "upload" | "url";
-    categoryTags: string[];
+    iconType: "url" | "upload";
     fetchIntervalMinutes: number;
-    priority: number;
+    categoryTags: string[];
     iconUrl?: string | null | undefined;
     lastFetchedAt?: NativeDate | null | undefined;
     lastError?: string | null | undefined;
@@ -91,25 +91,25 @@ export declare const RssSourceModel: import("mongoose").Model<{
     timestamps: true;
 }, {
     name: string;
+    priority: number;
     enabled: boolean;
     rssUrl: string;
     siteUrl: string;
-    iconType: "upload" | "url";
-    categoryTags: string[];
+    iconType: "url" | "upload";
     fetchIntervalMinutes: number;
-    priority: number;
+    categoryTags: string[];
     iconUrl?: string | null | undefined;
     lastFetchedAt?: NativeDate | null | undefined;
     lastError?: string | null | undefined;
 } & import("mongoose").DefaultTimestampProps, import("mongoose").Document<unknown, {}, import("mongoose").FlatRecord<{
     name: string;
+    priority: number;
     enabled: boolean;
     rssUrl: string;
     siteUrl: string;
-    iconType: "upload" | "url";
-    categoryTags: string[];
+    iconType: "url" | "upload";
     fetchIntervalMinutes: number;
-    priority: number;
+    categoryTags: string[];
     iconUrl?: string | null | undefined;
     lastFetchedAt?: NativeDate | null | undefined;
     lastError?: string | null | undefined;
@@ -117,13 +117,13 @@ export declare const RssSourceModel: import("mongoose").Model<{
     timestamps: true;
 }>> & import("mongoose").FlatRecord<{
     name: string;
+    priority: number;
     enabled: boolean;
     rssUrl: string;
     siteUrl: string;
-    iconType: "upload" | "url";
-    categoryTags: string[];
+    iconType: "url" | "upload";
     fetchIntervalMinutes: number;
-    priority: number;
+    categoryTags: string[];
     iconUrl?: string | null | undefined;
     lastFetchedAt?: NativeDate | null | undefined;
     lastError?: string | null | undefined;

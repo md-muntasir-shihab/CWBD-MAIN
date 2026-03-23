@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useModuleAccess } from '../../hooks/useModuleAccess';
@@ -41,6 +41,8 @@ type AdminGuardShellProps = {
     requiredLegacyPermission?: AdminLegacyPermission;
 };
 
+const AdminShellNestingContext = createContext(false);
+
 export default function AdminGuardShell({
     title,
     description,
@@ -52,6 +54,7 @@ export default function AdminGuardShell({
 }: AdminGuardShellProps) {
     const { user, isLoading } = useAuth();
     const { hasAccess } = useModuleAccess();
+    const isNestedInsideAdminShell = useContext(AdminShellNestingContext);
 
     if (isLoading) {
         return <div className="section-container py-16 text-sm text-text-muted dark:text-dark-text/70">Checking admin access...</div>;
@@ -73,9 +76,15 @@ export default function AdminGuardShell({
         return <Navigate to="/__cw_admin__/access-denied" replace />;
     }
 
+    if (isNestedInsideAdminShell) {
+        return <>{children}</>;
+    }
+
     return (
-        <AdminShell title={title} description={description}>
-            {children}
-        </AdminShell>
+        <AdminShellNestingContext.Provider value>
+            <AdminShell title={title} description={description}>
+                {children}
+            </AdminShell>
+        </AdminShellNestingContext.Provider>
     );
 }

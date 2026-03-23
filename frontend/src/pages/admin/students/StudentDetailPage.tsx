@@ -13,9 +13,12 @@ import {
   toggleForceReset, revokeStudentSessions,
   type StudentSecurityMeta,
 } from '../../../api/adminStudentSecurityApi';
+import ModernToggle from '../../../components/ui/ModernToggle';
+import AdminGuideButton, { type AdminGuideButtonProps } from '../../../components/admin/AdminGuideButton';
 
 type Toast = { show: boolean; message: string; type: 'success' | 'error' };
 type Tab = 'profile' | 'subscription' | 'notifications' | 'timeline' | 'security';
+type InlineGuide = Omit<AdminGuideButtonProps, 'variant' | 'tone'>;
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'profile', label: 'Profile' },
@@ -24,6 +27,14 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'timeline', label: 'Contact Timeline' },
   { key: 'security', label: 'Security' },
 ];
+
+const DETAIL_TAB_GUIDES: Record<Tab, InlineGuide> = {
+  profile: { title: 'Profile Tab', content: 'Review and update the student profile record.', affected: 'Student profile data and reflected admin views.' },
+  subscription: { title: 'Subscription Tab', content: 'Manage subscription state, extension, expiry, and auto-renew for this student.', affected: 'Student plan privileges and gated features.' },
+  notifications: { title: 'Notifications Tab', content: 'Review notification history tied to this student.', affected: 'Student communication history.' },
+  timeline: { title: 'Contact Timeline Tab', content: 'Manage timeline notes and contact history for this student.', affected: 'CRM and support follow-up.' },
+  security: { title: 'Security Tab', content: 'Manage password, reset, and session-related controls for this student.', affected: 'Student account security.' },
+};
 
 const DEPARTMENTS = ['Science', 'Commerce', 'Arts', 'Engineering', 'Medical', 'Other'];
 const GENDERS = ['Male', 'Female', 'Other'];
@@ -245,13 +256,13 @@ export default function StudentDetailPage() {
   const fieldRow = (label: string, key: string, type = 'text') => (
     <div key={key}>
       <label className={labelCls}>{label}</label>
-      <input type={type} value={profileForm[key] ?? ''} onChange={e => setField(key, e.target.value)} className={inp()} />
+      <input aria-label={label} title={label} type={type} value={profileForm[key] ?? ''} onChange={e => setField(key, e.target.value)} className={inp()} />
     </div>
   );
   const selectRow = (label: string, key: string, opts: string[]) => (
     <div key={key}>
       <label className={labelCls}>{label}</label>
-      <select value={profileForm[key] ?? ''} onChange={e => setField(key, e.target.value)} className={inp()}>
+      <select aria-label={label} title={label} value={profileForm[key] ?? ''} onChange={e => setField(key, e.target.value)} className={inp()}>
         <option value="">Select...</option>
         {opts.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
@@ -280,7 +291,7 @@ export default function StudentDetailPage() {
           </div>
           <div className="sm:ml-auto flex items-center gap-2">
             <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-              <div className={`h-full rounded-full ${SCORE_CLS(score)}`} style={{ width: `${Math.min(score, 100)}%` }} />
+              <div className={`h-full rounded-full ${SCORE_CLS(score)}`} ref={(el) => { if (el) el.style.width = `${Math.min(score, 100)}%`; }} />
             </div>
           </div>
         </div>
@@ -288,10 +299,13 @@ export default function StudentDetailPage() {
         {/* Tabs */}
         <div className="flex gap-1 overflow-x-auto pb-px">
           {TABS.map(t => (
-            <button key={t.key} onClick={() => setActiveTab(t.key)}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg whitespace-nowrap border-b-2 transition-colors ${activeTab === t.key ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
-              {t.label}
-            </button>
+            <div key={t.key} className="flex items-center gap-1">
+              <button onClick={() => setActiveTab(t.key)}
+                className={`px-4 py-2 text-sm font-medium rounded-t-lg whitespace-nowrap border-b-2 transition-colors ${activeTab === t.key ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+                {t.label}
+              </button>
+              <AdminGuideButton {...DETAIL_TAB_GUIDES[t.key]} tone="indigo" />
+            </div>
           ))}
         </div>
       </div>
@@ -324,7 +338,7 @@ export default function StudentDetailPage() {
             </div>
             <div className="flex items-center gap-3">
               <div className="flex-1 h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full ${SCORE_CLS(score)}`} style={{ width: `${Math.min(score, 100)}%` }} />
+                <div className={`h-full rounded-full ${SCORE_CLS(score)}`} ref={(el) => { if (el) el.style.width = `${Math.min(score, 100)}%`; }} />
               </div>
               <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{score}% complete</span>
               <button onClick={handleProfileSave} disabled={!profileDirty} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40">Save Profile</button>
@@ -433,9 +447,9 @@ export default function StudentDetailPage() {
       {/* Assign Plan Modal */}
       <Modal open={assignModal} onClose={() => setAssignModal(false)} title="Assign Subscription">
         <div className="space-y-3">
-          <div><label className="block text-xs text-gray-500 mb-1">Plan ID</label><input value={assignForm.planId} onChange={e => setAssignForm(f => ({ ...f, planId: e.target.value }))} className={inp()} placeholder="plan_id" /></div>
-          <div><label className="block text-xs text-gray-500 mb-1">Start Date</label><input type="date" value={assignForm.startDate} onChange={e => setAssignForm(f => ({ ...f, startDate: e.target.value }))} className={inp()} /></div>
-          <div><label className="block text-xs text-gray-500 mb-1">Notes</label><input value={assignForm.notes} onChange={e => setAssignForm(f => ({ ...f, notes: e.target.value }))} className={inp()} placeholder="Optional notes" /></div>
+          <div><label className="block text-xs text-gray-500 mb-1">Plan ID</label><input aria-label="Plan ID" title="Plan ID" value={assignForm.planId} onChange={e => setAssignForm(f => ({ ...f, planId: e.target.value }))} className={inp()} placeholder="plan_id" /></div>
+          <div><label className="block text-xs text-gray-500 mb-1">Start Date</label><input aria-label="Start Date" title="Start Date" type="date" value={assignForm.startDate} onChange={e => setAssignForm(f => ({ ...f, startDate: e.target.value }))} className={inp()} /></div>
+          <div><label className="block text-xs text-gray-500 mb-1">Notes</label><input aria-label="Notes" title="Notes" value={assignForm.notes} onChange={e => setAssignForm(f => ({ ...f, notes: e.target.value }))} className={inp()} placeholder="Optional notes" /></div>
           <div className="flex gap-2 justify-end pt-2">
             <button onClick={() => setAssignModal(false)} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">Cancel</button>
             <button onClick={handleAssign} disabled={!assignForm.planId} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg disabled:opacity-40">Assign</button>
@@ -446,8 +460,8 @@ export default function StudentDetailPage() {
       {/* Extend Modal */}
       <Modal open={extendModal} onClose={() => setExtendModal(false)} title="Extend Subscription">
         <div className="space-y-3">
-          <div><label className="block text-xs text-gray-500 mb-1">Days to extend</label><input type="number" value={extendForm.days} onChange={e => setExtendForm(f => ({ ...f, days: e.target.value }))} className={inp()} min="1" /></div>
-          <div><label className="block text-xs text-gray-500 mb-1">Notes</label><input value={extendForm.notes} onChange={e => setExtendForm(f => ({ ...f, notes: e.target.value }))} className={inp()} placeholder="Optional notes" /></div>
+          <div><label className="block text-xs text-gray-500 mb-1">Days to extend</label><input aria-label="Days to extend" title="Days to extend" type="number" value={extendForm.days} onChange={e => setExtendForm(f => ({ ...f, days: e.target.value }))} className={inp()} min="1" /></div>
+          <div><label className="block text-xs text-gray-500 mb-1">Notes</label><input aria-label="Notes" title="Notes" value={extendForm.notes} onChange={e => setExtendForm(f => ({ ...f, notes: e.target.value }))} className={inp()} placeholder="Optional notes" /></div>
           <div className="flex gap-2 justify-end pt-2">
             <button onClick={() => setExtendModal(false)} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">Cancel</button>
             <button onClick={handleExtend} className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg">Extend {extendForm.days}d</button>
@@ -460,13 +474,13 @@ export default function StudentDetailPage() {
         <div className="space-y-3">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Type</label>
-            <select value={noteForm.type} onChange={e => setNoteForm(f => ({ ...f, type: e.target.value }))} className={inp()}>
+            <select aria-label="Entry type" title="Entry type" value={noteForm.type} onChange={e => setNoteForm(f => ({ ...f, type: e.target.value }))} className={inp()}>
               <option value="note">Note</option>
               <option value="call">Call</option>
               <option value="message">Message</option>
             </select>
           </div>
-          <div><label className="block text-xs text-gray-500 mb-1">Content</label><textarea value={noteForm.content} onChange={e => setNoteForm(f => ({ ...f, content: e.target.value }))} className={inp() + ' h-24 resize-none'} placeholder="Write here..." /></div>
+          <div><label className="block text-xs text-gray-500 mb-1">Content</label><textarea aria-label="Entry content" title="Entry content" value={noteForm.content} onChange={e => setNoteForm(f => ({ ...f, content: e.target.value }))} className={inp() + ' h-24 resize-none'} placeholder="Write here..." /></div>
           <div className="flex gap-2 justify-end pt-2">
             <button onClick={() => setAddNoteModal(false)} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">Cancel</button>
             <button onClick={handleAddNote} disabled={!noteForm.content.trim()} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg disabled:opacity-40">Add</button>
@@ -479,7 +493,7 @@ export default function StudentDetailPage() {
         <div className="space-y-3">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Channel</label>
-            <select value={notiForm.channel} onChange={e => setNotiForm(f => ({ ...f, channel: e.target.value }))} className={inp()}>
+            <select aria-label="Notification channel" title="Notification channel" value={notiForm.channel} onChange={e => setNotiForm(f => ({ ...f, channel: e.target.value }))} className={inp()}>
               <option value="sms">SMS</option>
               <option value="email">Email</option>
               <option value="both">Both</option>
@@ -487,7 +501,7 @@ export default function StudentDetailPage() {
           </div>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Template</label>
-            <select value={notiForm.templateId} onChange={e => setNotiForm(f => ({ ...f, templateId: e.target.value }))} className={inp()}>
+            <select aria-label="Notification template" title="Notification template" value={notiForm.templateId} onChange={e => setNotiForm(f => ({ ...f, templateId: e.target.value }))} className={inp()}>
               <option value="">Select template...</option>
               {((templates as { templates?: Record<string, unknown>[] })?.templates || []).map((t: Record<string, unknown>) => (
                 <option key={t._id as string} value={t._id as string}>{t.key as string} — {t.channel as string}</option>
@@ -540,19 +554,19 @@ function SecurityTabContent({
   const handleAdminSetPassword = async () => {
     try {
       await adminSetPassword(studentId, { newPassword: setPasswordForm.password, sendVia: [setPasswordForm.sendSms && 'sms', setPasswordForm.sendEmail && 'email'].filter(Boolean) as string[] });
-      showToast('Password set successfully');
+      showToast('Password reset link sent');
       setShowSetPwModal(false);
       setSetPasswordForm({ password: '', sendSms: true, sendEmail: false });
       qc.invalidateQueries({ queryKey: ['student-security', studentId] });
     } catch {
-      showToast('Failed to set password', 'error');
+      showToast('Failed to issue reset link', 'error');
     }
   };
 
   const handleResendInfo = async () => {
     try {
-      await resendAccountInfo(studentId, { channels: ['sms'] });
-      showToast('Account info resent');
+      await resendAccountInfo(studentId, { channels: ['email'] });
+      showToast('Password setup link sent');
       qc.invalidateQueries({ queryKey: ['student-security', studentId] });
     } catch {
       showToast('Failed to resend', 'error');
@@ -654,14 +668,20 @@ function SecurityTabContent({
                 <label className="block text-xs text-gray-500 mb-1">New Password</label>
                 <input type="password" value={setPasswordForm.password} onChange={e => setSetPasswordForm(p => ({ ...p, password: e.target.value }))} className={inp()} placeholder="Enter password" />
               </div>
-              <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                <input type="checkbox" checked={setPasswordForm.sendSms} onChange={e => setSetPasswordForm(p => ({ ...p, sendSms: e.target.checked }))} className="rounded border-gray-300" />
-                Send password via SMS
-              </label>
-              <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                <input type="checkbox" checked={setPasswordForm.sendEmail} onChange={e => setSetPasswordForm(p => ({ ...p, sendEmail: e.target.checked }))} className="rounded border-gray-300" />
-                Send password via Email
-              </label>
+              <div className="flex flex-col gap-3">
+                <ModernToggle
+                  label="Send password via SMS"
+                  checked={setPasswordForm.sendSms}
+                  onChange={v => setSetPasswordForm(p => ({ ...p, sendSms: v }))}
+                  size="sm"
+                />
+                <ModernToggle
+                  label="Send password via Email"
+                  checked={setPasswordForm.sendEmail}
+                  onChange={v => setSetPasswordForm(p => ({ ...p, sendEmail: v }))}
+                  size="sm"
+                />
+              </div>
               <div className="flex gap-2 justify-end pt-2">
                 <button onClick={() => setShowSetPwModal(false)} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">Cancel</button>
                 <button onClick={handleAdminSetPassword} disabled={!setPasswordForm.password.trim()} className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg disabled:opacity-40">Set Password</button>

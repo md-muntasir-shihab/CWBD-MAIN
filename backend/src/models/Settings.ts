@@ -47,7 +47,6 @@ export interface ISiteSettings extends Document {
         strictExamTabLock: boolean;
         webNextEnabled: boolean;
         studentRegistrationEnabled: boolean;
-        passwordRevealEnabled: boolean;
         financeDashboardV1: boolean;
         smsReminderEnabled: boolean;
         emailReminderEnabled: boolean;
@@ -96,6 +95,10 @@ export interface ISiteSettings extends Document {
         notifyStudentsOnSync: boolean;
         notifyGuardiansOnResult: boolean;
         allowExternalImports: boolean;
+    };
+    adminUiLayout: {
+        sidebarOrder: string[];
+        settingsCardOrder: string[];
     };
     runtimeVersion: number;
     updatedBy: mongoose.Types.ObjectId;
@@ -153,7 +156,6 @@ const SiteSettingsSchema = new Schema<ISiteSettings>({
         strictExamTabLock: { type: Boolean, default: false },
         webNextEnabled: { type: Boolean, default: false },
         studentRegistrationEnabled: { type: Boolean, default: false },
-        passwordRevealEnabled: { type: Boolean, default: true },
         financeDashboardV1: { type: Boolean, default: false },
         smsReminderEnabled: { type: Boolean, default: false },
         emailReminderEnabled: { type: Boolean, default: true },
@@ -218,6 +220,10 @@ const SiteSettingsSchema = new Schema<ISiteSettings>({
         notifyStudentsOnSync: { type: Boolean, default: true },
         notifyGuardiansOnResult: { type: Boolean, default: false },
         allowExternalImports: { type: Boolean, default: true },
+    },
+    adminUiLayout: {
+        sidebarOrder: { type: [String], default: [] },
+        settingsCardOrder: { type: [String], default: [] },
     },
     runtimeVersion: { type: Number, default: 1 },
     updatedBy: { type: Schema.Types.ObjectId, ref: 'User' },

@@ -4,9 +4,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.buildAccessPayload = void 0;
+const mongoose_1 = __importDefault(require("mongoose"));
 const examSession_model_1 = require("../models/examSession.model");
 const payment_model_1 = require("../models/payment.model");
-const subscription_model_1 = require("../models/subscription.model");
+const UserSubscription_1 = __importDefault(require("../models/UserSubscription"));
 const user_model_1 = require("../models/user.model");
 const StudentProfile_1 = __importDefault(require("../models/StudentProfile"));
 const buildAccessPayload = async (exam, userId) => {
@@ -35,7 +36,13 @@ const buildAccessPayload = async (exam, userId) => {
         }
     }
     if (userId && (exam.subscriptionRequired || exam.requiresActiveSubscription)) {
-        const active = await subscription_model_1.SubscriptionModel.findOne({ userId, status: "active", expiresAtUTC: { $gt: now } });
+        const active = mongoose_1.default.Types.ObjectId.isValid(userId)
+            ? await UserSubscription_1.default.findOne({
+                userId: new mongoose_1.default.Types.ObjectId(userId),
+                status: 'active',
+                expiresAtUTC: { $gt: now },
+            }).lean()
+            : null;
         if (!active)
             blockReasons.push("SUBSCRIPTION_REQUIRED");
     }

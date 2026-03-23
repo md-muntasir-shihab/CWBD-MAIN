@@ -75,7 +75,7 @@ router.post('/students/create-with-password', ...adminAuth, async (req, res) => 
 // Resend account info
 router.post('/students/:id/resend-account-info', ...adminAuth, async (req, res) => {
     try {
-        const result = await (0, accountControlService_1.adminResendAccountInfo)(String(req.params.id), req.body.channels ?? ['sms'], req.body.tempPassword, req.user._id);
+        const result = await (0, accountControlService_1.adminResendAccountInfo)(String(req.params.id), req.body.channels ?? ['sms'], req.user._id);
         res.json(result);
     }
     catch (err) {

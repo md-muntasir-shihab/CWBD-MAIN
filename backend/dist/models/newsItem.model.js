@@ -13,7 +13,7 @@ exports.NEWS_STATUS = [
 const newsItemSchema = new mongoose_1.Schema({
     status: { type: String, enum: exports.NEWS_STATUS, default: "pending_review", index: true },
     title: { type: String, required: true, trim: true },
-    slug: { type: String, required: true, unique: true, index: true },
+    slug: { type: String, required: true, unique: true },
     shortSummary: { type: String, default: "" },
     fullContent: { type: String, default: "" },
     coverImageUrl: { type: String, default: null },

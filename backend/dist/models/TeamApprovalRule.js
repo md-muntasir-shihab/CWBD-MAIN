@@ -38,6 +38,8 @@ const TeamApprovalRuleSchema = new mongoose_1.Schema({
     module: { type: String, required: true, trim: true, lowercase: true, index: true },
     action: { type: String, required: true, trim: true, lowercase: true, index: true },
     requiresApproval: { type: Boolean, default: true },
+    requiredApprovals: { type: Number, default: 1, min: 1 },
+    description: { type: String, trim: true, default: '' },
     approverRoleIds: [{ type: mongoose_1.Schema.Types.ObjectId, ref: 'TeamRole' }],
 }, { timestamps: true, collection: 'team_approval_rules' });
 TeamApprovalRuleSchema.index({ module: 1, action: 1 }, { unique: true });

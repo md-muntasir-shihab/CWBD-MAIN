@@ -6,6 +6,7 @@ export interface IUniversityClusterDateConfig {
     scienceExamDate?: string;
     commerceExamDate?: string;
     artsExamDate?: string;
+    admissionWebsite?: string;
     examCenters: IExamCenter[];
 }
 export interface IUniversityCluster extends Document {

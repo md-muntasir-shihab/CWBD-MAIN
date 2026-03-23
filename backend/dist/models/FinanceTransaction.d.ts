@@ -1,7 +1,7 @@
 import mongoose, { Document } from 'mongoose';
 export type TxnDirection = 'income' | 'expense';
 export type TxnStatus = 'pending' | 'approved' | 'paid' | 'cancelled' | 'refunded';
-export type TxnMethod = 'cash' | 'bkash' | 'nagad' | 'bank' | 'card' | 'manual' | 'gateway' | 'upay' | 'rocket';
+export type TxnMethod = 'cash' | 'bkash' | 'nagad' | 'bank' | 'card' | 'manual' | 'gateway' | 'upay' | 'rocket' | 'auto';
 export type TxnSourceType = 'subscription_payment' | 'exam_payment' | 'service_sale' | 'manual_income' | 'expense' | 'refund' | 'sms_cost' | 'email_cost' | 'sms_campaign_cost' | 'email_campaign_cost' | 'onboarding_message_cost' | 'result_notification_cost' | 'guardian_notification_cost' | 'auto_notification_cost' | 'hosting_cost' | 'staff_payout' | 'sms_test_send_cost' | 'email_test_send_cost' | 'other';
 export interface IAttachment {
     url: string;

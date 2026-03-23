@@ -47,7 +47,6 @@ const TeamRoleSchema = new mongoose_1.Schema({
         default: 'viewer',
     },
 }, { timestamps: true, collection: 'team_roles' });
-TeamRoleSchema.index({ slug: 1 }, { unique: true });
 TeamRoleSchema.index({ isActive: 1 });
 exports.default = mongoose_1.default.model('TeamRole', TeamRoleSchema);
 //# sourceMappingURL=TeamRole.js.map

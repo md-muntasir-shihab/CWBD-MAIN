@@ -14,8 +14,10 @@ const User_1 = __importDefault(require("../models/User"));
 const StudentProfile_1 = __importDefault(require("../models/StudentProfile"));
 const UserSubscription_1 = __importDefault(require("../models/UserSubscription"));
 const payment_model_1 = require("../models/payment.model");
+const ManualPayment_1 = __importDefault(require("../models/ManualPayment"));
 const FinanceTransaction_1 = __importDefault(require("../models/FinanceTransaction"));
 const ExamResult_1 = __importDefault(require("../models/ExamResult"));
+const ExamProfileSyncLog_1 = __importDefault(require("../models/ExamProfileSyncLog"));
 const NotificationDeliveryLog_1 = __importDefault(require("../models/NotificationDeliveryLog"));
 const SupportTicket_1 = __importDefault(require("../models/SupportTicket"));
 const StudentContactTimeline_1 = __importDefault(require("../models/StudentContactTimeline"));
@@ -35,7 +37,7 @@ async function getUnifiedStudentDetail(studentId) {
     if (!user || user.role !== 'student')
         return null;
     // Parallel aggregation of all related data
-    const [profile, activeSub, subHistory, payments, financeTxns, dueLedger, examResults, deliveryLogs, tickets, timelineEntries, groupMemberships,] = await Promise.all([
+    const [profile, activeSub, subHistory, legacyPayments, manualPayments, financeTxns, dueLedger, examResults, examSyncLogs, deliveryLogs, tickets, timelineEntries, groupMemberships,] = await Promise.all([
         StudentProfile_1.default.findOne({ user_id: user._id }).lean(),
         UserSubscription_1.default.findOne({ userId: user._id, status: 'active' })
             .populate('planId', 'name code durationDays')
@@ -49,14 +51,23 @@ async function getUnifiedStudentDetail(studentId) {
             .sort({ createdAt: -1 })
             .limit(20)
             .lean(),
+        ManualPayment_1.default.find({ studentId: user._id })
+            .sort({ date: -1, createdAt: -1 })
+            .limit(20)
+            .lean(),
         FinanceTransaction_1.default.find({ studentId: user._id, isDeleted: { $ne: true } })
             .sort({ dateUTC: -1 })
             .limit(15)
             .lean(),
         StudentDueLedger_1.default.findOne({ studentId: user._id }).lean(),
         ExamResult_1.default.find({ student: user._id })
-            .populate('exam', 'title')
+            .populate('exam', 'title deliveryMode')
             .sort({ submittedAt: -1 })
+            .limit(10)
+            .lean(),
+        ExamProfileSyncLog_1.default.find({ studentId: user._id })
+            .populate('examId', 'title deliveryMode')
+            .sort({ createdAt: -1 })
             .limit(10)
             .lean(),
         NotificationDeliveryLog_1.default.find({ studentId: user._id })
@@ -92,9 +103,35 @@ async function getUnifiedStudentDetail(studentId) {
         subState = 'expired';
     }
     // ─── Build payment section ─────────────────────────────────────────────
+    const payments = [
+        ...legacyPayments.map((payment) => {
+            const row = payment;
+            return {
+                _id: String(row._id),
+                amountBDT: Number(row.amountBDT) || 0,
+                method: String(row.method || 'manual'),
+                status: String(row.status || 'pending'),
+                paidAt: row.paidAt ? new Date(String(row.paidAt)).toISOString() : undefined,
+                createdAt: row.createdAt ? new Date(String(row.createdAt)).toISOString() : '',
+            };
+        }),
+        ...manualPayments.map((payment) => {
+            const row = payment;
+            return {
+                _id: String(row._id),
+                amountBDT: Number(row.amount) || 0,
+                method: String(row.method || 'manual'),
+                status: String(row.status || 'pending'),
+                paidAt: row.paidAt ? new Date(String(row.paidAt)).toISOString() : undefined,
+                createdAt: row.createdAt
+                    ? new Date(String(row.createdAt)).toISOString()
+                    : (row.date ? new Date(String(row.date)).toISOString() : ''),
+            };
+        }),
+    ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     const totalPaid = payments
         .filter((p) => p.status === 'paid')
-        .reduce((sum, p) => sum + (Number(p.amountBDT) || 0), 0);
+        .reduce((sum, p) => sum + p.amountBDT, 0);
     const pendingCount = payments.filter((p) => p.status === 'pending').length;
     // ─── Build finance section ─────────────────────────────────────────────
     const totalIncome = financeTxns
@@ -179,17 +216,7 @@ async function getUnifiedStudentDetail(studentId) {
         payments: {
             totalPaid,
             pendingCount,
-            recentPayments: payments.slice(0, 10).map((p) => {
-                const r = p;
-                return {
-                    _id: String(r._id),
-                    amountBDT: Number(r.amountBDT) || 0,
-                    method: String(r.method || 'manual'),
-                    status: String(r.status || 'pending'),
-                    paidAt: r.paidAt ? new Date(r.paidAt).toISOString() : undefined,
-                    createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : '',
-                };
-            }),
+            recentPayments: payments.slice(0, 10),
         },
         finance: {
             totalIncome,
@@ -208,6 +235,28 @@ async function getUnifiedStudentDetail(studentId) {
         exams: {
             totalAttempted: examResults.length,
             upcomingCount: 0, // will be enriched in Phase 2
+            identity: profile
+                ? {
+                    serialId: profile.examIdentity && typeof profile.examIdentity === 'object'
+                        ? profile.examIdentity.serialId
+                        : undefined,
+                    rollNumber: profile.examIdentity && typeof profile.examIdentity === 'object'
+                        ? profile.examIdentity.rollNumber
+                        : undefined,
+                    registrationNumber: profile.examIdentity && typeof profile.examIdentity === 'object'
+                        ? profile.examIdentity.registrationNumber
+                        : undefined,
+                    admitCardNumber: profile.examIdentity && typeof profile.examIdentity === 'object'
+                        ? profile.examIdentity.admitCardNumber
+                        : undefined,
+                    examCenter: profile.examIdentity && typeof profile.examIdentity === 'object'
+                        ? profile.examIdentity.examCenter
+                        : undefined,
+                    latestResultSummary: profile.latestExamResultSummary,
+                    lastSyncAt: profile.examDataLastSyncAt?.toISOString(),
+                    lastSyncSource: profile.examDataLastSyncSource,
+                }
+                : undefined,
             recentResults: examResults.slice(0, 8).map((r) => {
                 const exam = r.exam;
                 return {
@@ -218,6 +267,21 @@ async function getUnifiedStudentDetail(studentId) {
                     totalMarks: r.totalMarks ?? 0,
                     submittedAt: r.submittedAt?.toISOString() ?? '',
                     status: r.status ?? 'submitted',
+                    source: r.sourceType,
+                    examCenter: r.examCenterName,
+                    syncStatus: r.syncStatus,
+                };
+            }),
+            syncHistory: examSyncLogs.slice(0, 8).map((log) => {
+                const exam = log.examId;
+                return {
+                    _id: String(log._id),
+                    examTitle: exam?.title,
+                    source: log.source,
+                    status: log.status,
+                    syncMode: log.syncMode,
+                    changedFields: log.changedFields || [],
+                    createdAt: log.createdAt.toISOString(),
                 };
             }),
         },

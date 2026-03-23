@@ -16,6 +16,13 @@ export interface INewsSource extends Document {
     categoryTags?: string[];
     lastFetchedAt?: Date;
     lastSuccessAt?: Date;
+    lastFetchStatus?: 'idle' | 'success' | 'failed';
+    consecutiveFailureCount?: number;
+    lastHttpStatus?: number;
+    lastParseError?: string;
+    lastDuplicateRate?: number;
+    lastCreatedCount?: number;
+    lastExtractionMode?: 'rss_content' | 'readability_scrape' | 'both';
     lastError?: string;
     language?: string;
     tagsDefault: string[];
@@ -43,6 +50,13 @@ const NewsSourceSchema = new Schema<INewsSource>(
         categoryTags: [{ type: String }],
         lastFetchedAt: { type: Date },
         lastSuccessAt: { type: Date },
+        lastFetchStatus: { type: String, enum: ['idle', 'success', 'failed'], default: 'idle' },
+        consecutiveFailureCount: { type: Number, default: 0, min: 0 },
+        lastHttpStatus: { type: Number, default: null },
+        lastParseError: { type: String, default: '' },
+        lastDuplicateRate: { type: Number, default: 0, min: 0 },
+        lastCreatedCount: { type: Number, default: 0, min: 0 },
+        lastExtractionMode: { type: String, enum: ['rss_content', 'readability_scrape', 'both'], default: 'both' },
         lastError: { type: String, default: '' },
         language: { type: String, default: 'en' },
         tagsDefault: [{ type: String }],
@@ -59,6 +73,7 @@ const NewsSourceSchema = new Schema<INewsSource>(
 NewsSourceSchema.index({ isActive: 1, order: 1 });
 NewsSourceSchema.index({ enabled: 1, priority: 1, order: 1 });
 NewsSourceSchema.index({ feedUrl: 1 }, { unique: true });
+NewsSourceSchema.index({ lastFetchStatus: 1, consecutiveFailureCount: -1, updatedAt: -1 });
 
 NewsSourceSchema.pre('validate', function syncCompatFields(next) {
     const doc = this as INewsSource;
@@ -77,6 +92,8 @@ NewsSourceSchema.pre('validate', function syncCompatFields(next) {
     if (!Array.isArray(doc.categoryTags)) {
         doc.categoryTags = [];
     }
+    doc.lastFetchStatus = doc.lastFetchStatus === 'success' || doc.lastFetchStatus === 'failed' ? doc.lastFetchStatus : 'idle';
+    doc.consecutiveFailureCount = Math.max(0, Number(doc.consecutiveFailureCount || 0));
     next();
 });
 

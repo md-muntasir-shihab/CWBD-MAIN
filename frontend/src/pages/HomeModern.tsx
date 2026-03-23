@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -23,6 +23,10 @@ import NewsCard from '../components/home/cards/NewsCard';
 import ResourceCard from '../components/home/cards/ResourceCard';
 import HomeSubscriptionPreviewCard from '../components/home/cards/HomeSubscriptionPreviewCard';
 import PlanDetailsDrawer from '../components/subscription/PlanDetailsDrawer';
+import {
+    resolveSubscriptionPlanTarget,
+    shouldOpenSubscriptionPlanTargetInNewTab,
+} from '../components/subscription/subscriptionAction';
 import { getHome, type HomeApiResponse, type ApiUniversityCardPreview, type ApiClusterCardPreview, type ApiCategoryCardPreview, type HomeExamWidgetItem, type ApiNews, type SubscriptionPlanPublic } from '../services/api';
 import type { UrgencyState } from '../lib/apiClient';
 import { daysUntilUniversityDate, parseUniversityDate } from '../lib/universityPresentation';
@@ -532,6 +536,8 @@ export default function HomeModern() {
     const [categoryInteracted, setCategoryInteracted] = useState(false);
     const categoryScrollRef = useRef<HTMLDivElement | null>(null);
     const clusterScrollRef = useRef<HTMLDivElement | null>(null);
+    const [categoryScrollState, setCategoryScrollState] = useState({ canLeft: false, canRight: false });
+    const [clusterScrollState, setClusterScrollState] = useState({ canLeft: false, canRight: false });
 
     /* ---------- derived ---------- */
     const hs = data?.homeSettings;
@@ -632,6 +638,7 @@ export default function HomeModern() {
     }, [data?.sectionOrder]);
 
     const contentBlocks = data?.contentBlocksForHome ?? [];
+    const featuredNewsItems = data?.featuredNewsItems ?? data?.featuredNews ?? [];
     const newsItems = data?.newsPreviewItems ?? data?.newsPreview ?? [];
     const resourceItems = data?.resourcePreviewItems ?? data?.resourcesPreview ?? [];
     const [activeSubscriptionPlan, setActiveSubscriptionPlan] = useState<SubscriptionPlanPublic | null>(null);
@@ -665,7 +672,52 @@ export default function HomeModern() {
         if (!el) return;
         const amount = Math.max(180, Math.floor(el.clientWidth * 0.65));
         el.scrollBy({ left: direction === 'right' ? amount : -amount, behavior: 'smooth' });
+        window.setTimeout(() => {
+            updateScrollControls(target);
+        }, 240);
     };
+
+    const updateScrollControls = useCallback((target: 'category' | 'cluster') => {
+        const el = target === 'category' ? categoryScrollRef.current : clusterScrollRef.current;
+        const next = {
+            canLeft: Boolean(el && el.scrollLeft > 4),
+            canRight: Boolean(el && el.scrollLeft + el.clientWidth < el.scrollWidth - 4),
+        };
+        if (target === 'category') {
+            setCategoryScrollState((prev) => (
+                prev.canLeft === next.canLeft && prev.canRight === next.canRight ? prev : next
+            ));
+            return;
+        }
+        setClusterScrollState((prev) => (
+            prev.canLeft === next.canLeft && prev.canRight === next.canRight ? prev : next
+        ));
+    }, []);
+
+    useEffect(() => {
+        const categoryEl = categoryScrollRef.current;
+        const clusterEl = clusterScrollRef.current;
+
+        const onCategoryScroll = () => updateScrollControls('category');
+        const onClusterScroll = () => updateScrollControls('cluster');
+        const onResize = () => {
+            updateScrollControls('category');
+            updateScrollControls('cluster');
+        };
+
+        updateScrollControls('category');
+        updateScrollControls('cluster');
+
+        categoryEl?.addEventListener('scroll', onCategoryScroll, { passive: true });
+        clusterEl?.addEventListener('scroll', onClusterScroll, { passive: true });
+        window.addEventListener('resize', onResize);
+
+        return () => {
+            categoryEl?.removeEventListener('scroll', onCategoryScroll);
+            clusterEl?.removeEventListener('scroll', onClusterScroll);
+            window.removeEventListener('resize', onResize);
+        };
+    }, [currentClusters.length, selectedCategory, sortedCategories.length, updateScrollControls]);
 
     /* ================================================================ */
     /*  SECTION RENDERERS                                                */
@@ -860,7 +912,14 @@ export default function HomeModern() {
                                 <div key={plan.id || plan._id} className={compactCarouselCardClass}>
                                     <HomeSubscriptionPreviewCard
                                         plan={plan}
-                                        onPrimaryAction={(item) => navigate(`/subscription-plans/checkout/${item.slug || item.code || item._id}`)}
+                                        onPrimaryAction={(item) => {
+                                            const target = resolveSubscriptionPlanTarget(item);
+                                            if (shouldOpenSubscriptionPlanTargetInNewTab(item)) {
+                                                window.open(target, '_blank', 'noopener,noreferrer');
+                                                return;
+                                            }
+                                            navigate(target);
+                                        }}
                                         onViewDetails={setActiveSubscriptionPlan}
                                     />
                                 </div>
@@ -896,7 +955,8 @@ export default function HomeModern() {
                         <div
                             ref={categoryScrollRef}
                             onWheel={handleHorizontalWheel}
-                            className="flex gap-2 overflow-x-auto pb-3 scrollbar-hide touch-pan-x"
+                            className="flex gap-2 overflow-x-auto pb-3 scrollbar-hide touch-pan-x px-3 sm:px-4 md:px-16 lg:px-20"
+                            style={{ scrollPaddingLeft: '4.5rem', scrollPaddingRight: '4.5rem' }}
                         >
                             <button
                                 onClick={() => { setSelectedCategory(''); setSelectedCluster(''); setCategoryInteracted(true); }}
@@ -933,21 +993,31 @@ export default function HomeModern() {
                                 );
                             })}
                         </div>
-                        <div className="pointer-events-none absolute inset-y-0 left-0 hidden md:flex items-center">
+                        <div className="pointer-events-none absolute inset-y-0 left-2 hidden md:flex items-center">
                             <button
                                 type="button"
                                 onClick={() => scrollChipRow('category', 'left')}
-                                className="pointer-events-auto ml-1 inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200/80 bg-white/85 text-gray-600 shadow-sm backdrop-blur hover:bg-white dark:border-gray-700 dark:bg-gray-900/85 dark:text-gray-200"
+                                disabled={!categoryScrollState.canLeft}
+                                className={`pointer-events-auto ml-1 inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200/80 bg-white/85 text-gray-600 shadow-sm backdrop-blur dark:border-gray-700 dark:bg-gray-900/85 dark:text-gray-200 ${
+                                    categoryScrollState.canLeft
+                                        ? 'hover:bg-white'
+                                        : 'cursor-not-allowed opacity-35'
+                                }`}
                                 aria-label="Scroll categories left"
                             >
                                 <ChevronLeft className="h-4 w-4" />
                             </button>
                         </div>
-                        <div className="pointer-events-none absolute inset-y-0 right-0 hidden md:flex items-center">
+                        <div className="pointer-events-none absolute inset-y-0 right-2 hidden md:flex items-center">
                             <button
                                 type="button"
                                 onClick={() => scrollChipRow('category', 'right')}
-                                className="pointer-events-auto mr-1 inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200/80 bg-white/85 text-gray-600 shadow-sm backdrop-blur hover:bg-white dark:border-gray-700 dark:bg-gray-900/85 dark:text-gray-200"
+                                disabled={!categoryScrollState.canRight}
+                                className={`pointer-events-auto mr-1 inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200/80 bg-white/85 text-gray-600 shadow-sm backdrop-blur dark:border-gray-700 dark:bg-gray-900/85 dark:text-gray-200 ${
+                                    categoryScrollState.canRight
+                                        ? 'hover:bg-white'
+                                        : 'cursor-not-allowed opacity-35'
+                                }`}
                                 aria-label="Scroll categories right"
                             >
                                 <ChevronRight className="h-4 w-4" />
@@ -992,7 +1062,12 @@ export default function HomeModern() {
                             <button
                                 type="button"
                                 onClick={() => scrollChipRow('cluster', 'left')}
-                                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200/80 bg-white/85 text-gray-600 shadow-sm backdrop-blur hover:bg-white dark:border-gray-700 dark:bg-gray-900/85 dark:text-gray-200"
+                                disabled={!clusterScrollState.canLeft}
+                                className={`inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200/80 bg-white/85 text-gray-600 shadow-sm backdrop-blur dark:border-gray-700 dark:bg-gray-900/85 dark:text-gray-200 ${
+                                    clusterScrollState.canLeft
+                                        ? 'hover:bg-white'
+                                        : 'cursor-not-allowed opacity-35'
+                                }`}
                                 aria-label="Scroll clusters left"
                             >
                                 <ChevronLeft className="h-4 w-4" />
@@ -1000,7 +1075,12 @@ export default function HomeModern() {
                             <button
                                 type="button"
                                 onClick={() => scrollChipRow('cluster', 'right')}
-                                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200/80 bg-white/85 text-gray-600 shadow-sm backdrop-blur hover:bg-white dark:border-gray-700 dark:bg-gray-900/85 dark:text-gray-200"
+                                disabled={!clusterScrollState.canRight}
+                                className={`inline-flex h-7 w-7 items-center justify-center rounded-full border border-gray-200/80 bg-white/85 text-gray-600 shadow-sm backdrop-blur dark:border-gray-700 dark:bg-gray-900/85 dark:text-gray-200 ${
+                                    clusterScrollState.canRight
+                                        ? 'hover:bg-white'
+                                        : 'cursor-not-allowed opacity-35'
+                                }`}
                                 aria-label="Scroll clusters right"
                             >
                                 <ChevronRight className="h-4 w-4" />
@@ -1094,16 +1174,33 @@ export default function HomeModern() {
     /* 9 ─ News Preview */
     function renderNewsPreview() {
         if (hs?.sectionVisibility?.newsPreview === false) return null;
-        if (!newsItems.length) return null;
+        const featuredIds = new Set(featuredNewsItems.map((item) => item._id));
+        const latestNewsItems = newsItems.filter((item) => !featuredIds.has(item._id));
+        const fallbackLatest = latestNewsItems.length > 0 ? latestNewsItems : newsItems;
+        if (!featuredNewsItems.length && !fallbackLatest.length) return null;
         return (
             <SectionWrap>
-                <div className="px-4 md:px-0">
-                    <SectionHeader title="Latest News" subtitle="Admission updates & announcements" icon={Newspaper} viewAllHref="/news" />
-                    <PremiumCarousel>
-                        {newsItems.map((item: ApiNews) => (
-                            <NewsCard key={item._id} item={item} />
-                        ))}
-                    </PremiumCarousel>
+                <div className="space-y-6 px-4 md:px-0">
+                    {featuredNewsItems.length > 0 ? (
+                        <div>
+                            <SectionHeader title="Featured News" subtitle="Pinned updates that should stay visible on the homepage" icon={Megaphone} viewAllHref="/news" />
+                            <PremiumCarousel ariaLabel="Featured news carousel">
+                                {featuredNewsItems.map((item: ApiNews) => (
+                                    <NewsCard key={`featured-${item._id}`} item={item} />
+                                ))}
+                            </PremiumCarousel>
+                        </div>
+                    ) : null}
+                    {fallbackLatest.length > 0 ? (
+                        <div>
+                            <SectionHeader title="Latest News" subtitle="Admission updates & announcements" icon={Newspaper} viewAllHref="/news" />
+                            <PremiumCarousel ariaLabel="Latest news carousel">
+                                {fallbackLatest.map((item: ApiNews) => (
+                                    <NewsCard key={item._id} item={item} />
+                                ))}
+                            </PremiumCarousel>
+                        </div>
+                    ) : null}
                 </div>
             </SectionWrap>
         );
@@ -1203,16 +1300,16 @@ export default function HomeModern() {
         if (!enabled.length) return null;
 
         const statGradients = [
-            'from-blue-500/10 to-cyan-500/5 dark:from-blue-500/20 dark:to-cyan-500/10',
-            'from-purple-500/10 to-pink-500/5 dark:from-purple-500/20 dark:to-pink-500/10',
-            'from-emerald-500/10 to-teal-500/5 dark:from-emerald-500/20 dark:to-teal-500/10',
-            'from-amber-500/10 to-orange-500/5 dark:from-amber-500/20 dark:to-orange-500/10',
+            'from-blue-500/20 to-cyan-400/10 dark:from-blue-500/30 dark:to-cyan-400/20',
+            'from-purple-500/20 to-pink-400/10 dark:from-purple-500/30 dark:to-pink-400/20',
+            'from-emerald-500/20 to-teal-400/10 dark:from-emerald-500/30 dark:to-teal-400/20',
+            'from-amber-500/20 to-orange-400/10 dark:from-amber-500/30 dark:to-orange-400/20',
         ];
         const statTextColors = [
-            'text-blue-600 dark:text-blue-400',
-            'text-purple-600 dark:text-purple-400',
-            'text-emerald-600 dark:text-emerald-400',
-            'text-amber-600 dark:text-amber-400',
+            'text-blue-700 dark:text-blue-300',
+            'text-purple-700 dark:text-purple-300',
+            'text-emerald-700 dark:text-emerald-300',
+            'text-amber-700 dark:text-amber-300',
         ];
 
         return (
@@ -1314,7 +1411,15 @@ export default function HomeModern() {
                 open={Boolean(activeSubscriptionPlan)}
                 plan={activeSubscriptionPlan}
                 onClose={() => setActiveSubscriptionPlan(null)}
-                onPrimaryAction={(plan) => navigate(`/subscription-plans/checkout/${plan.slug || plan.code || plan._id}`)}
+                onDismissToContact={() => navigate('/contact')}
+                onPrimaryAction={(plan) => {
+                    const target = resolveSubscriptionPlanTarget(plan);
+                    if (shouldOpenSubscriptionPlanTargetInNewTab(plan)) {
+                        window.open(target, '_blank', 'noopener,noreferrer');
+                        return;
+                    }
+                    navigate(target);
+                }}
             />
         </div>
     );

@@ -37,6 +37,7 @@ const mongoose_1 = __importStar(require("mongoose"));
 const NewsSchema = new mongoose_1.Schema({
     title: { type: String, required: true, trim: true },
     slug: { type: String, required: true, unique: true },
+    displayType: { type: String, enum: ['news', 'update'], default: 'news' },
     shortSummary: { type: String, default: '' },
     shortDescription: { type: String, required: true },
     fullContent: { type: String, default: '' },
@@ -89,11 +90,38 @@ const NewsSchema = new mongoose_1.Schema({
         noHallucinationPassed: { type: Boolean, default: false },
         warning: { type: String, default: '' },
     },
+    aiEnrichment: {
+        shortSummary: { type: String, default: '' },
+        detailedExplanation: { type: String, default: '' },
+        studentFriendlyExplanation: { type: String, default: '' },
+        keyPoints: [{ type: String }],
+        suggestedCategory: { type: String, default: '' },
+        suggestedTags: [{ type: String }],
+        importanceHint: { type: String, enum: ['low', 'normal', 'high', 'urgent'], default: 'normal' },
+        suggestedAudience: { type: String, default: '' },
+        smsText: { type: String, default: '' },
+        emailSubject: { type: String, default: '' },
+        emailBody: { type: String, default: '' },
+        importantDates: [{ type: String }],
+        confidence: { type: Number, default: 0 },
+        citations: [{ type: String }],
+        provider: { type: String, default: '' },
+        model: { type: String, default: '' },
+        warning: { type: String, default: '' },
+    },
     reviewMeta: {
         reviewerId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User' },
         reviewedAt: { type: Date },
         rejectReason: { type: String, default: '' },
     },
+    classification: {
+        primaryCategory: { type: String, default: '' },
+        tags: [{ type: String }],
+        universityIds: [{ type: mongoose_1.Schema.Types.ObjectId }],
+        clusterIds: [{ type: mongoose_1.Schema.Types.ObjectId }],
+        groupIds: [{ type: mongoose_1.Schema.Types.ObjectId }],
+    },
+    priority: { type: String, enum: ['normal', 'priority', 'breaking'], default: 'normal' },
     isManual: { type: Boolean, default: true },
     scheduledAt: { type: Date },
     scheduleAt: { type: Date },
@@ -113,6 +141,18 @@ const NewsSchema = new mongoose_1.Schema({
         canonicalUrl: { type: String, default: '' },
         shortUrl: { type: String, default: '' },
         templateId: { type: String, default: '' },
+    },
+    publishOutcome: {
+        type: { type: String, enum: ['news', 'notice', 'update'], default: 'news' },
+        targetId: { type: String, default: '' },
+        publishedAt: { type: Date, default: null },
+        publishedBy: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User' },
+    },
+    deliveryMeta: {
+        lastJobId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'NotificationJob' },
+        lastChannel: { type: String, enum: ['sms', 'email', 'both'], default: undefined },
+        lastAudienceSummary: { type: String, default: '' },
+        lastSentAt: { type: Date, default: null },
     },
     appearanceOverrides: {
         layoutMode: { type: String, enum: ['rss_reader', 'grid', 'list'], default: undefined },
@@ -140,8 +180,12 @@ NewsSchema.index({ duplicateOfNewsId: 1 });
 NewsSchema.index({ tags: 1, publishDate: -1 });
 NewsSchema.index({ rssGuid: 1 });
 NewsSchema.index({ aiSelected: 1, status: 1, createdAt: -1 });
+NewsSchema.index({ isFeatured: 1, priority: 1, publishDate: -1 });
+NewsSchema.index({ 'classification.primaryCategory': 1, status: 1, publishDate: -1 });
+NewsSchema.index({ 'deliveryMeta.lastJobId': 1 });
 NewsSchema.pre('validate', function syncSpecCompat(next) {
     const doc = this;
+    doc.displayType = doc.displayType === 'update' ? 'update' : 'news';
     const summary = String(doc.shortSummary || doc.shortDescription || '').trim();
     doc.shortSummary = summary;
     doc.shortDescription = summary || String(doc.shortDescription || '').trim();
@@ -164,6 +208,39 @@ NewsSchema.pre('validate', function syncSpecCompat(next) {
         doc.aiPromptVersion = String(doc.aiMeta.promptVersion);
     if (doc.aiMeta?.provider && !doc.aiUsed)
         doc.aiUsed = true;
+    if (!doc.aiEnrichment) {
+        doc.aiEnrichment = {};
+    }
+    if (!doc.aiEnrichment.shortSummary) {
+        doc.aiEnrichment.shortSummary = summary;
+    }
+    if (!doc.aiEnrichment.suggestedCategory) {
+        doc.aiEnrichment.suggestedCategory = String(doc.category || '').trim();
+    }
+    if (!Array.isArray(doc.aiEnrichment.suggestedTags)) {
+        doc.aiEnrichment.suggestedTags = Array.isArray(doc.tags) ? [...doc.tags] : [];
+    }
+    {
+        const importanceHint = String(doc.aiEnrichment.importanceHint || '').trim().toLowerCase();
+        doc.aiEnrichment.importanceHint =
+            importanceHint === 'low' || importanceHint === 'high' || importanceHint === 'urgent'
+                ? importanceHint
+                : 'normal';
+    }
+    if (!doc.classification) {
+        doc.classification = {};
+    }
+    doc.classification.primaryCategory = String(doc.classification.primaryCategory || doc.category || '').trim();
+    if (!Array.isArray(doc.classification.tags) || doc.classification.tags.length === 0) {
+        doc.classification.tags = Array.isArray(doc.tags) ? [...doc.tags] : [];
+    }
+    doc.priority = doc.priority === 'breaking' || doc.priority === 'priority' ? doc.priority : 'normal';
+    if (!doc.publishOutcome) {
+        doc.publishOutcome = {};
+    }
+    if (!doc.publishOutcome.type) {
+        doc.publishOutcome.type = doc.displayType === 'update' ? 'update' : 'news';
+    }
     if (doc.sourceType === 'manual') {
         doc.isManual = true;
         if (!doc.coverImageSource)

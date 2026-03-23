@@ -38,6 +38,10 @@ const ExamResultSchema = new mongoose_1.Schema({
     exam: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Exam', required: true },
     student: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: true },
     attemptNo: { type: Number, default: 1 },
+    sourceType: { type: String, enum: ['internal_submission', 'external_import'], default: 'internal_submission' },
+    importJobId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'ExamImportJob', default: null },
+    syncStatus: { type: String, enum: ['pending', 'synced', 'failed'], default: 'pending' },
+    profileSyncLogId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'ExamProfileSyncLog', default: null },
     answers: [{
             question: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Question' },
             questionType: { type: String, enum: ['mcq', 'written'], required: true, default: 'mcq' },
@@ -53,6 +57,17 @@ const ExamResultSchema = new mongoose_1.Schema({
     unansweredCount: { type: Number, default: 0 },
     percentage: { type: Number, default: 0 },
     rank: Number,
+    serialId: { type: String, default: '' },
+    rollNumber: { type: String, default: '' },
+    registrationNumber: { type: String, default: '' },
+    admitCardNumber: { type: String, default: '' },
+    attendanceStatus: { type: String, default: '' },
+    passFail: { type: String, default: '' },
+    resultNote: { type: String, default: '' },
+    profileUpdateNote: { type: String, default: '' },
+    examCenterName: { type: String, default: '' },
+    examCenterCode: { type: String, default: '' },
+    subjectMarks: { type: [mongoose_1.Schema.Types.Mixed], default: [] },
     pointsEarned: { type: Number, default: 0 },
     timeTaken: { type: Number, default: 0 },
     deviceInfo: String,
@@ -69,5 +84,6 @@ const ExamResultSchema = new mongoose_1.Schema({
 }, { timestamps: true, collection: 'student_results' });
 ExamResultSchema.index({ exam: 1, student: 1, attemptNo: 1 }, { unique: true });
 ExamResultSchema.index({ exam: 1, obtainedMarks: -1 });
+ExamResultSchema.index({ student: 1, submittedAt: -1 });
 exports.default = mongoose_1.default.model('ExamResult', ExamResultSchema);
 //# sourceMappingURL=ExamResult.js.map

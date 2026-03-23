@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { getFirebaseStorageBucket } from '../config/firebaseAdmin';
+import { buildSecureUploadUrl, registerSecureUpload } from '../services/secureUploadService';
 
 // Ensure the upload directory exists
 const uploadDir = path.join(__dirname, '../../public/uploads');
@@ -19,6 +20,7 @@ const ALLOWED_MIME_TYPES = new Set([
     'image/gif',
     'application/pdf',
 ]);
+const SECURE_CATEGORIES = new Set(['profile_photo', 'student_document', 'payment_proof', 'support_attachment', 'exam_upload', 'admin_upload']);
 
 // Configure multer storage
 const storage = multer.diskStorage({
@@ -64,8 +66,17 @@ export async function uploadMedia(req: AuthRequest, res: Response): Promise<void
         }
 
         const origin = `${req.protocol}://${req.get('host')}`;
+        const requestedVisibility = String(req.body?.visibility || req.query.visibility || '').trim().toLowerCase() === 'protected'
+            ? 'protected'
+            : 'public';
+        const requestedCategoryRaw = String(req.body?.category || req.query.category || '').trim().toLowerCase();
+        const requestedCategory = SECURE_CATEGORIES.has(requestedCategoryRaw) ? requestedCategoryRaw : 'admin_upload';
+        const accessRoles = String(req.body?.accessRoles || req.query.accessRoles || '')
+            .split(',')
+            .map((role) => role.trim().toLowerCase())
+            .filter(Boolean);
         const firebaseBucket = getFirebaseStorageBucket();
-        if (firebaseBucket) {
+        if (firebaseBucket && requestedVisibility !== 'protected') {
             const ext = path.extname(req.file.originalname || '').toLowerCase() || path.extname(req.file.filename || '');
             const safeExt = ext && ext.length <= 10 ? ext : '';
             const objectKey = `media/${Date.now()}-${crypto.randomBytes(8).toString('hex')}${safeExt}`;
@@ -92,6 +103,29 @@ export async function uploadMedia(req: AuthRequest, res: Response): Promise<void
             return;
         }
 
+        if (requestedVisibility === 'protected') {
+            const secureUpload = await registerSecureUpload({
+                file: req.file,
+                category: requestedCategory as Parameters<typeof registerSecureUpload>[0]['category'],
+                visibility: 'protected',
+                ownerUserId: req.user?._id || null,
+                ownerRole: req.user?.role || null,
+                uploadedBy: req.user?._id || null,
+                accessRoles,
+            });
+            const url = buildSecureUploadUrl(secureUpload.storedName);
+            res.status(201).json({
+                message: 'File uploaded successfully.',
+                url,
+                absoluteUrl: `${origin}${url}`,
+                filename: secureUpload.storedName,
+                mimetype: secureUpload.mimeType,
+                size: secureUpload.sizeBytes,
+                visibility: secureUpload.visibility,
+            });
+            return;
+        }
+
         // Construct the public URL for the uploaded file
         // For development, it will be served from the local Node server e.g. /uploads/filename.ext
         const fileUrl = `/uploads/${req.file.filename}`;
@@ -103,7 +137,8 @@ export async function uploadMedia(req: AuthRequest, res: Response): Promise<void
             absoluteUrl,
             filename: req.file.filename,
             mimetype: req.file.mimetype,
-            size: req.file.size
+            size: req.file.size,
+            visibility: 'public',
         });
     } catch (err) {
         console.error('[uploadMedia]', err);

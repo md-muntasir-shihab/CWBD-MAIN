@@ -16,9 +16,26 @@ test.describe('Admin Smoke', () => {
 
         await expect(page).toHaveURL(/\/__cw_admin__\/dashboard/);
 
+        const expectSingleExamShell = async () => {
+            await expect(page.locator('aside').first()).toBeVisible();
+            await expect(page.locator('aside')).toHaveCount(1);
+            await expect(page.getByRole('heading', { name: /Exams|Exam Center/i }).first()).toBeVisible();
+        };
+
         await page.goto('/__cw_admin__/exams');
         await expect(page).toHaveURL(/\/__cw_admin__\/exams/);
-        await expect(page.getByText(/Exam Management|Exams/i).first()).toBeVisible();
+        await expect(page.getByText(/Exam Management|Exam Center|Exams/i).first()).toBeVisible();
+        await expectSingleExamShell();
+
+        await page.goto('/__cw_admin__/dashboard');
+        await page.getByRole('button', { name: /Open Exams/i }).click();
+        await expect(page).toHaveURL(/\/__cw_admin__\/exams/);
+        await expectSingleExamShell();
+
+        await page.goto('/__cw_admin__/dashboard');
+        await page.getByRole('link', { name: /^Exams$/i }).click();
+        await expect(page).toHaveURL(/\/__cw_admin__\/exams/);
+        await expectSingleExamShell();
 
         await page.goto('/__cw_admin__/students');
         // Legacy students route now canonicalizes to student-management/list.
@@ -28,7 +45,6 @@ test.describe('Admin Smoke', () => {
         await page.goto('/__cw_admin__/settings/security-center');
         await expect(page).toHaveURL(/\/__cw_admin__\/settings\/security-center/);
         await expect(page.getByRole('heading', { name: /Security Center/i }).first()).toBeVisible();
-        await expect(page.getByText(/Password Policy/i).first()).toBeVisible();
 
         await expectPageHealthy(page, tracker);
         tracker.detach();

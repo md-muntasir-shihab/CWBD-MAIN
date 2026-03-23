@@ -1,20 +1,36 @@
 import { Schema } from "mongoose";
 export declare const NewsSettingsModel: import("mongoose").Model<{
+    defaultBannerUrl: string;
     newsPageTitle: string;
     newsPageSubtitle: string;
-    defaultBannerUrl: string;
     defaultThumbUrl: string;
     defaultSourceIconUrl: string;
     fetchFullArticleEnabled: boolean;
-    fullArticleFetchMode: "rss_content" | "readability_scrape" | "both";
+    fullArticleFetchMode: "both" | "rss_content" | "readability_scrape";
+    workflow?: {
+        defaultIncomingStatus: string;
+        allowScheduling: boolean;
+        autoExpireDays?: number | null | undefined;
+    } | null | undefined;
+    aiSettings?: {
+        maxLength: number;
+        enabled: boolean;
+        language: "bn" | "en" | "mixed";
+        apiKey: string;
+        stylePreset: "standard" | "short" | "detailed";
+        strictNoHallucination: boolean;
+        duplicateSensitivity: "strict" | "medium" | "loose";
+        customPrompt: string;
+        apiProviderUrl: string;
+    } | null | undefined;
     appearance?: {
+        animationLevel: string;
         layoutMode: string;
         density: string;
-        animationLevel: string;
         paginationMode: string;
         showWidgets?: {
-            trending: boolean;
             latest: boolean;
+            trending: boolean;
             sourceSidebar: boolean;
             tagChips: boolean;
             previewPanel: boolean;
@@ -22,43 +38,43 @@ export declare const NewsSettingsModel: import("mongoose").Model<{
         } | null | undefined;
     } | null | undefined;
     shareTemplates?: {
-        whatsapp: string;
         facebook: string;
+        whatsapp: string;
         messenger: string;
         telegram: string;
-    } | null | undefined;
-    aiSettings?: {
-        maxLength: number;
-        enabled: boolean;
-        language: "bn" | "en" | "mixed";
-        stylePreset: "short" | "standard" | "detailed";
-        apiProviderUrl: string;
-        apiKey: string;
-        customPrompt: string;
-        strictNoHallucination: boolean;
-        duplicateSensitivity: "strict" | "medium" | "loose";
-    } | null | undefined;
-    workflow?: {
-        defaultIncomingStatus: string;
-        allowScheduling: boolean;
-        autoExpireDays?: number | null | undefined;
     } | null | undefined;
 } & import("mongoose").DefaultTimestampProps, {}, {}, {}, import("mongoose").Document<unknown, {}, {
+    defaultBannerUrl: string;
     newsPageTitle: string;
     newsPageSubtitle: string;
-    defaultBannerUrl: string;
     defaultThumbUrl: string;
     defaultSourceIconUrl: string;
     fetchFullArticleEnabled: boolean;
-    fullArticleFetchMode: "rss_content" | "readability_scrape" | "both";
+    fullArticleFetchMode: "both" | "rss_content" | "readability_scrape";
+    workflow?: {
+        defaultIncomingStatus: string;
+        allowScheduling: boolean;
+        autoExpireDays?: number | null | undefined;
+    } | null | undefined;
+    aiSettings?: {
+        maxLength: number;
+        enabled: boolean;
+        language: "bn" | "en" | "mixed";
+        apiKey: string;
+        stylePreset: "standard" | "short" | "detailed";
+        strictNoHallucination: boolean;
+        duplicateSensitivity: "strict" | "medium" | "loose";
+        customPrompt: string;
+        apiProviderUrl: string;
+    } | null | undefined;
     appearance?: {
+        animationLevel: string;
         layoutMode: string;
         density: string;
-        animationLevel: string;
         paginationMode: string;
         showWidgets?: {
-            trending: boolean;
             latest: boolean;
+            trending: boolean;
             sourceSidebar: boolean;
             tagChips: boolean;
             previewPanel: boolean;
@@ -66,45 +82,45 @@ export declare const NewsSettingsModel: import("mongoose").Model<{
         } | null | undefined;
     } | null | undefined;
     shareTemplates?: {
-        whatsapp: string;
         facebook: string;
+        whatsapp: string;
         messenger: string;
         telegram: string;
-    } | null | undefined;
-    aiSettings?: {
-        maxLength: number;
-        enabled: boolean;
-        language: "bn" | "en" | "mixed";
-        stylePreset: "short" | "standard" | "detailed";
-        apiProviderUrl: string;
-        apiKey: string;
-        customPrompt: string;
-        strictNoHallucination: boolean;
-        duplicateSensitivity: "strict" | "medium" | "loose";
-    } | null | undefined;
-    workflow?: {
-        defaultIncomingStatus: string;
-        allowScheduling: boolean;
-        autoExpireDays?: number | null | undefined;
     } | null | undefined;
 } & import("mongoose").DefaultTimestampProps, {}, {
     timestamps: true;
 }> & {
+    defaultBannerUrl: string;
     newsPageTitle: string;
     newsPageSubtitle: string;
-    defaultBannerUrl: string;
     defaultThumbUrl: string;
     defaultSourceIconUrl: string;
     fetchFullArticleEnabled: boolean;
-    fullArticleFetchMode: "rss_content" | "readability_scrape" | "both";
+    fullArticleFetchMode: "both" | "rss_content" | "readability_scrape";
+    workflow?: {
+        defaultIncomingStatus: string;
+        allowScheduling: boolean;
+        autoExpireDays?: number | null | undefined;
+    } | null | undefined;
+    aiSettings?: {
+        maxLength: number;
+        enabled: boolean;
+        language: "bn" | "en" | "mixed";
+        apiKey: string;
+        stylePreset: "standard" | "short" | "detailed";
+        strictNoHallucination: boolean;
+        duplicateSensitivity: "strict" | "medium" | "loose";
+        customPrompt: string;
+        apiProviderUrl: string;
+    } | null | undefined;
     appearance?: {
+        animationLevel: string;
         layoutMode: string;
         density: string;
-        animationLevel: string;
         paginationMode: string;
         showWidgets?: {
-            trending: boolean;
             latest: boolean;
+            trending: boolean;
             sourceSidebar: boolean;
             tagChips: boolean;
             previewPanel: boolean;
@@ -112,26 +128,10 @@ export declare const NewsSettingsModel: import("mongoose").Model<{
         } | null | undefined;
     } | null | undefined;
     shareTemplates?: {
-        whatsapp: string;
         facebook: string;
+        whatsapp: string;
         messenger: string;
         telegram: string;
-    } | null | undefined;
-    aiSettings?: {
-        maxLength: number;
-        enabled: boolean;
-        language: "bn" | "en" | "mixed";
-        stylePreset: "short" | "standard" | "detailed";
-        apiProviderUrl: string;
-        apiKey: string;
-        customPrompt: string;
-        strictNoHallucination: boolean;
-        duplicateSensitivity: "strict" | "medium" | "loose";
-    } | null | undefined;
-    workflow?: {
-        defaultIncomingStatus: string;
-        allowScheduling: boolean;
-        autoExpireDays?: number | null | undefined;
     } | null | undefined;
 } & import("mongoose").DefaultTimestampProps & {
     _id: import("mongoose").Types.ObjectId;
@@ -140,21 +140,37 @@ export declare const NewsSettingsModel: import("mongoose").Model<{
 }, Schema<any, import("mongoose").Model<any, any, any, any, any, any>, {}, {}, {}, {}, {
     timestamps: true;
 }, {
+    defaultBannerUrl: string;
     newsPageTitle: string;
     newsPageSubtitle: string;
-    defaultBannerUrl: string;
     defaultThumbUrl: string;
     defaultSourceIconUrl: string;
     fetchFullArticleEnabled: boolean;
-    fullArticleFetchMode: "rss_content" | "readability_scrape" | "both";
+    fullArticleFetchMode: "both" | "rss_content" | "readability_scrape";
+    workflow?: {
+        defaultIncomingStatus: string;
+        allowScheduling: boolean;
+        autoExpireDays?: number | null | undefined;
+    } | null | undefined;
+    aiSettings?: {
+        maxLength: number;
+        enabled: boolean;
+        language: "bn" | "en" | "mixed";
+        apiKey: string;
+        stylePreset: "standard" | "short" | "detailed";
+        strictNoHallucination: boolean;
+        duplicateSensitivity: "strict" | "medium" | "loose";
+        customPrompt: string;
+        apiProviderUrl: string;
+    } | null | undefined;
     appearance?: {
+        animationLevel: string;
         layoutMode: string;
         density: string;
-        animationLevel: string;
         paginationMode: string;
         showWidgets?: {
-            trending: boolean;
             latest: boolean;
+            trending: boolean;
             sourceSidebar: boolean;
             tagChips: boolean;
             previewPanel: boolean;
@@ -162,43 +178,43 @@ export declare const NewsSettingsModel: import("mongoose").Model<{
         } | null | undefined;
     } | null | undefined;
     shareTemplates?: {
-        whatsapp: string;
         facebook: string;
+        whatsapp: string;
         messenger: string;
         telegram: string;
-    } | null | undefined;
-    aiSettings?: {
-        maxLength: number;
-        enabled: boolean;
-        language: "bn" | "en" | "mixed";
-        stylePreset: "short" | "standard" | "detailed";
-        apiProviderUrl: string;
-        apiKey: string;
-        customPrompt: string;
-        strictNoHallucination: boolean;
-        duplicateSensitivity: "strict" | "medium" | "loose";
-    } | null | undefined;
-    workflow?: {
-        defaultIncomingStatus: string;
-        allowScheduling: boolean;
-        autoExpireDays?: number | null | undefined;
     } | null | undefined;
 } & import("mongoose").DefaultTimestampProps, import("mongoose").Document<unknown, {}, import("mongoose").FlatRecord<{
+    defaultBannerUrl: string;
     newsPageTitle: string;
     newsPageSubtitle: string;
-    defaultBannerUrl: string;
     defaultThumbUrl: string;
     defaultSourceIconUrl: string;
     fetchFullArticleEnabled: boolean;
-    fullArticleFetchMode: "rss_content" | "readability_scrape" | "both";
+    fullArticleFetchMode: "both" | "rss_content" | "readability_scrape";
+    workflow?: {
+        defaultIncomingStatus: string;
+        allowScheduling: boolean;
+        autoExpireDays?: number | null | undefined;
+    } | null | undefined;
+    aiSettings?: {
+        maxLength: number;
+        enabled: boolean;
+        language: "bn" | "en" | "mixed";
+        apiKey: string;
+        stylePreset: "standard" | "short" | "detailed";
+        strictNoHallucination: boolean;
+        duplicateSensitivity: "strict" | "medium" | "loose";
+        customPrompt: string;
+        apiProviderUrl: string;
+    } | null | undefined;
     appearance?: {
+        animationLevel: string;
         layoutMode: string;
         density: string;
-        animationLevel: string;
         paginationMode: string;
         showWidgets?: {
-            trending: boolean;
             latest: boolean;
+            trending: boolean;
             sourceSidebar: boolean;
             tagChips: boolean;
             previewPanel: boolean;
@@ -206,45 +222,45 @@ export declare const NewsSettingsModel: import("mongoose").Model<{
         } | null | undefined;
     } | null | undefined;
     shareTemplates?: {
-        whatsapp: string;
         facebook: string;
+        whatsapp: string;
         messenger: string;
         telegram: string;
-    } | null | undefined;
-    aiSettings?: {
-        maxLength: number;
-        enabled: boolean;
-        language: "bn" | "en" | "mixed";
-        stylePreset: "short" | "standard" | "detailed";
-        apiProviderUrl: string;
-        apiKey: string;
-        customPrompt: string;
-        strictNoHallucination: boolean;
-        duplicateSensitivity: "strict" | "medium" | "loose";
-    } | null | undefined;
-    workflow?: {
-        defaultIncomingStatus: string;
-        allowScheduling: boolean;
-        autoExpireDays?: number | null | undefined;
     } | null | undefined;
 } & import("mongoose").DefaultTimestampProps>, {}, import("mongoose").MergeType<import("mongoose").DefaultSchemaOptions, {
     timestamps: true;
 }>> & import("mongoose").FlatRecord<{
+    defaultBannerUrl: string;
     newsPageTitle: string;
     newsPageSubtitle: string;
-    defaultBannerUrl: string;
     defaultThumbUrl: string;
     defaultSourceIconUrl: string;
     fetchFullArticleEnabled: boolean;
-    fullArticleFetchMode: "rss_content" | "readability_scrape" | "both";
+    fullArticleFetchMode: "both" | "rss_content" | "readability_scrape";
+    workflow?: {
+        defaultIncomingStatus: string;
+        allowScheduling: boolean;
+        autoExpireDays?: number | null | undefined;
+    } | null | undefined;
+    aiSettings?: {
+        maxLength: number;
+        enabled: boolean;
+        language: "bn" | "en" | "mixed";
+        apiKey: string;
+        stylePreset: "standard" | "short" | "detailed";
+        strictNoHallucination: boolean;
+        duplicateSensitivity: "strict" | "medium" | "loose";
+        customPrompt: string;
+        apiProviderUrl: string;
+    } | null | undefined;
     appearance?: {
+        animationLevel: string;
         layoutMode: string;
         density: string;
-        animationLevel: string;
         paginationMode: string;
         showWidgets?: {
-            trending: boolean;
             latest: boolean;
+            trending: boolean;
             sourceSidebar: boolean;
             tagChips: boolean;
             previewPanel: boolean;
@@ -252,26 +268,10 @@ export declare const NewsSettingsModel: import("mongoose").Model<{
         } | null | undefined;
     } | null | undefined;
     shareTemplates?: {
-        whatsapp: string;
         facebook: string;
+        whatsapp: string;
         messenger: string;
         telegram: string;
-    } | null | undefined;
-    aiSettings?: {
-        maxLength: number;
-        enabled: boolean;
-        language: "bn" | "en" | "mixed";
-        stylePreset: "short" | "standard" | "detailed";
-        apiProviderUrl: string;
-        apiKey: string;
-        customPrompt: string;
-        strictNoHallucination: boolean;
-        duplicateSensitivity: "strict" | "medium" | "loose";
-    } | null | undefined;
-    workflow?: {
-        defaultIncomingStatus: string;
-        allowScheduling: boolean;
-        autoExpireDays?: number | null | undefined;
     } | null | undefined;
 } & import("mongoose").DefaultTimestampProps> & {
     _id: import("mongoose").Types.ObjectId;

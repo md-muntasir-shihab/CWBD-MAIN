@@ -27,6 +27,11 @@ import {
     teamDeleteRole,
     teamGetPermissions,
     teamUpdateRolePermissions,
+    teamUpdateMemberOverride,
+    teamGetApprovalRules,
+    teamCreateApprovalRule,
+    teamUpdateApprovalRule,
+    teamDeleteApprovalRule,
 } from '../../src/controllers/teamAccessController';
 import { TEAM_ACTIONS, TEAM_MODULES } from '../../src/teamAccess/defaults';
 
@@ -58,6 +63,11 @@ function buildApp() {
 
     app.get('/admin/team/permissions', wrap(teamGetPermissions));
     app.put('/admin/team/permissions/roles/:id', wrap(teamUpdateRolePermissions));
+    app.put('/admin/team/permissions/members/:id/override', wrap(teamUpdateMemberOverride));
+    app.get('/admin/team/approval-rules', wrap(teamGetApprovalRules));
+    app.post('/admin/team/approval-rules', wrap(teamCreateApprovalRule));
+    app.put('/admin/team/approval-rules/:id', wrap(teamUpdateApprovalRule));
+    app.delete('/admin/team/approval-rules/:id', wrap(teamDeleteApprovalRule));
 
     return app;
 }
@@ -293,7 +303,7 @@ describe('Team Access API', () => {
                 .expect(201);
 
             expect(res.body.item).toHaveProperty('fullName', 'Jane Doe');
-            expect(res.body.item).toHaveProperty('tempPassword');
+            expect(res.body.item).toHaveProperty('inviteSent');
 
             // Verify invite was created
             const invite = await TeamInvite.findOne({ email: 'jane@test.com' }).lean();
@@ -371,17 +381,18 @@ describe('Team Access API', () => {
     });
 
     describe('POST /admin/team/members/:id/reset-password', () => {
-        test('resets password and returns temp password', async () => {
+        test('resets password and forces a password change', async () => {
             const member = await seedAdmin();
             const res = await request(app)
                 .post(`/admin/team/members/${member._id}/reset-password`)
                 .expect(200);
 
-            expect(res.body).toHaveProperty('tempPassword');
-            expect(typeof res.body.tempPassword).toBe('string');
+            expect(res.body).toHaveProperty('message');
+            expect(res.body).toHaveProperty('inviteSent');
 
             const updated = await User.findById(member._id).lean() as any;
             expect(updated!.forcePasswordResetRequired).toBe(true);
+            expect(updated!.mustChangePassword).toBe(true);
         });
     });
 
@@ -423,6 +434,65 @@ describe('Team Access API', () => {
             const permSet = await RolePermissionSet.findOne({ roleId }).lean();
             expect(permSet!.modulePermissions['dashboard']['view']).toBe(true);
             expect(permSet!.modulePermissions['dashboard']['create']).toBe(true);
+        });
+    });
+
+    describe('PUT /admin/team/permissions/members/:id/override', () => {
+        test('rejects malformed override payloads', async () => {
+            const member = await seedAdmin();
+            const res = await request(app)
+                .put(`/admin/team/permissions/members/${member._id}/override`)
+                .send({ overrides: [{ module: 'team_access_control', action: 'view', enabled: true }] })
+                .expect(400);
+
+            expect(res.body.message).toMatch(/allow or deny/i);
+        });
+    });
+
+    describe('Approval rules', () => {
+        test('creates approval rule with metadata and approver role aliases', async () => {
+            await ensureDefaultTeamRoles();
+            const res = await request(app)
+                .post('/admin/team/approval-rules')
+                .send({
+                    module: 'payments',
+                    action: 'approve',
+                    requiresApproval: true,
+                    requiredApprovals: 1,
+                    description: 'Finance approval for refunds',
+                    approverRoles: ['admin'],
+                })
+                .expect(201);
+
+            expect(res.body.item.description).toBe('Finance approval for refunds');
+            expect(res.body.item.requiredApprovals).toBe(1);
+            expect(Array.isArray(res.body.item.approverRoleIds)).toBe(true);
+            expect(res.body.item.approverRoleIds.length).toBeGreaterThan(0);
+        });
+
+        test('updates approval rule metadata fields', async () => {
+            await ensureDefaultTeamRoles();
+            const created = await request(app)
+                .post('/admin/team/approval-rules')
+                .send({
+                    module: 'news',
+                    action: 'publish',
+                    description: 'Initial rule',
+                })
+                .expect(201);
+
+            const res = await request(app)
+                .put(`/admin/team/approval-rules/${created.body.item._id}`)
+                .send({
+                    requiredApprovals: 2,
+                    description: 'Updated rule',
+                    requiresApproval: false,
+                })
+                .expect(200);
+
+            expect(res.body.item.requiredApprovals).toBe(2);
+            expect(res.body.item.description).toBe('Updated rule');
+            expect(res.body.item.requiresApproval).toBe(false);
         });
     });
 

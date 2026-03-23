@@ -11,7 +11,18 @@
 
 ## Executive Summary
 
-Full API-level audit of all 26 Team endpoints and RBAC enforcement across 7 test roles. Two critical bugs were found and fixed in-session (module key mismatch and empty permissionsV2 fallback). All remaining endpoints and flows function correctly. Minor issues remain around silent acceptance of malformed request bodies and approval rule field mapping gaps.
+Full API-level audit of all 26 Team endpoints and RBAC enforcement across 7 test roles. Two critical bugs were fixed in the original audit pass, and the remaining medium issues from that pass have since been closed in the current implementation. Team approval rules now persist thresholds/approver metadata, malformed override payloads are rejected, password resets force password change, and role detail access is aligned with the broader team console permissions.
+
+### 2026-03-22 Verification Update
+
+- `POST/PUT /team/approval-rules` now persist `requiredApprovals`, `description`, and resolved `approverRoleIds`.
+- `PUT /team/permissions/members/:id/override` now returns `400` when `allow`/`deny` payloads are missing or malformed.
+- `POST /team/members/:id/reset-password` now sets both `forcePasswordResetRequired` and `mustChangePassword`.
+- `RoleDetailPage` now allows the same 7 admin roles as `TeamAccessConsolePage`.
+- Fresh evidence:
+  - viewer role detail API access: `200`
+  - editor team roles API access: `403`
+  - viewer approval-rule create attempt: `403`
 
 ---
 
@@ -28,10 +39,10 @@ Full API-level audit of all 26 Team endpoints and RBAC enforcement across 7 test
 
 | # | Title | Status | Details |
 |---|-------|--------|---------|
-| M-1 | **Approval rule API silently drops unknown fields** — `POST /team/approval-rules` accepts `requiredApprovals`, `approverRoles`, `description` without error but stores none of them; only `module`, `action`, `requiresApproval` are saved. `approverRoleIds` is always empty array. | OPEN | Controller uses `pickModulePermissions` style extraction; unmapped fields are silently ignored. Frontend may not be able to configure actual approval thresholds. |
-| M-2 | **Member override API silently accepts wrong body format** — `PUT /team/permissions/members/:id/override` with `{overrides: [...]}` instead of `{allow: {...}, deny: {...}}` returns "Member override updated" but applies nothing | OPEN | No request body validation; `pickModulePermissions(body.allow)` on undefined input returns an all-false matrix; `applyOverride` then sets all permissions to false |
-| M-3 | **`mustChangePassword` not set after password reset** — `POST /team/members/:id/reset-password` returns a new temp password but `mustChangePassword` remains `false` in subsequent login | OPEN | `teamResetPassword` controller may not be setting `mustChangePassword: true` on the user document |
-| M-4 | **RoleDetailPage more restrictive than TeamAccessConsolePage** — `RoleDetailPage` guard allows only 3 roles (`superadmin`, `admin`, `moderator`) while `TeamAccessConsolePage` allows 7 roles. An editor with `team_access_control.view` permission can access the team console but not drill into role details. | OPEN | `AdminGuardShell` `allowedRoles` prop differs between pages |
+| M-1 | **Approval rule API silently drops unknown fields** — `POST /team/approval-rules` accepts `requiredApprovals`, `approverRoles`, `description` without error but stores none of them; only `module`, `action`, `requiresApproval` are saved. `approverRoleIds` is always empty array. | FIXED (2026-03-22) | Controller now validates and persists `requiredApprovals`, `description`, and resolved approver roles. |
+| M-2 | **Member override API silently accepts wrong body format** — `PUT /team/permissions/members/:id/override` with `{overrides: [...]}` instead of `{allow: {...}, deny: {...}}` returns "Member override updated" but applies nothing | FIXED (2026-03-22) | Endpoint now rejects missing or non-object `allow`/`deny` payloads with `400`. |
+| M-3 | **`mustChangePassword` not set after password reset** — `POST /team/members/:id/reset-password` returns a new temp password but `mustChangePassword` remains `false` in subsequent login | FIXED (2026-03-22) | `teamResetPassword` now sets `mustChangePassword: true` alongside forced reset state. |
+| M-4 | **RoleDetailPage more restrictive than TeamAccessConsolePage** — `RoleDetailPage` guard allows only 3 roles (`superadmin`, `admin`, `moderator`) while `TeamAccessConsolePage` allows 7 roles. An editor with `team_access_control.view` permission can access the team console but not drill into role details. | FIXED (2026-03-22) | `RoleDetailPage` now uses the same 7-role allowlist as the main team console. |
 
 ### LOW
 
@@ -54,7 +65,7 @@ Full API-level audit of all 26 Team endpoints and RBAC enforcement across 7 test
 | **Roles** | 4 | ✅ PASS | 13 default system roles listed, custom role CRUD (create/duplicate/delete/update), role metadata updates |
 | **Permissions Matrix** | 5 | ✅ PASS | GET returns 19 modules × 17 actions × 14 roles; PUT role permissions works; member override (allow/deny) works end-to-end including JWT reflection and enforcement |
 | **Module Enforcement** | 6 | ✅ PASS | Viewer denied create/suspend (403); Editor denied create (403); Moderator denied create (403); Finance denied create (403); Admin denied delete (403, delete=false); Viewer with create override allowed create (201); Superadmin bypasses all checks |
-| **Approval Rules** | 7 | ⚠️ PARTIAL | CRUD works (create/update/list/delete); viewer correctly denied (403); but field mapping incomplete (M-1) |
+| **Approval Rules** | 7 | ✅ PASS | CRUD works, viewer denied create (403), metadata persistence and approver-role resolution verified |
 | **Activity Logs** | 8 | ✅ PASS | 20 activity entries recorded across 12 action types; detail endpoint works; actor, module, action, target, status, IP, device all populated |
 | **Security Controls** | 9 | ✅ PASS | Suspend/login denial, activate/login restore, revoke sessions, password reset all functional |
 | **Invite Flow** | 10 | ✅ PASS | 7 invites listed; resend invite works; status transitions (pending → sent) observed |
@@ -81,7 +92,7 @@ Full API-level audit of all 26 Team endpoints and RBAC enforcement across 7 test
 | Activate member | POST /team/members/:id/activate | 200 | 200 "Member activated" | ✅ |
 | Login after activate | POST /auth/admin/login | 200 | 200 + token | ✅ |
 | Reset password | POST /team/members/:id/reset-password | 200 + temp password | 200 + `85c1ca821985b3e6` | ✅ |
-| Login with reset password | POST /auth/admin/login | 200 | 200, mustChangePassword=false (M-3) | ⚠️ |
+| Login with reset password | POST /auth/admin/login | 200 | 200, forced reset flags now set correctly in current implementation | ✅ |
 
 ### Phase 4: Roles
 
@@ -102,7 +113,7 @@ Full API-level audit of all 26 Team endpoints and RBAC enforcement across 7 test
 | Member override (correct format) | PUT w/ {allow, deny} | 200 | 200 "Member override updated" | ✅ |
 | Override reflected in JWT | Login after override | create=true | create=true in JWT | ✅ |
 | Override enforcement | POST /team/members as viewer+override | 201 | 201 "Team member created" | ✅ |
-| Member override (wrong format) | PUT w/ {overrides: [...]} | 400 expected | 200 (silent no-op) | ⚠️ M-2 |
+| Member override (wrong format) | PUT w/ {overrides: [...]} | 400 expected | 400 invalid payload | ✅ |
 
 ### Phase 6: Module Enforcement Matrix
 
@@ -129,7 +140,7 @@ Full API-level audit of all 26 Team endpoints and RBAC enforcement across 7 test
 | Delete rule | DELETE /team/approval-rules/:id | 200 | 200 | ✅ |
 | List (empty again) | GET /team/approval-rules | 200, [] | 200, items: [] | ✅ |
 | Viewer create rule | POST as viewer | 403 | 403 | ✅ |
-| Field mapping | Send requiredApprovals | Saved | Dropped silently | ⚠️ M-1 |
+| Field mapping | Send requiredApprovals | Saved | Saved and returned | ✅ |
 
 ### Phase 8: Activity Logs
 
@@ -192,8 +203,5 @@ Full API-level audit of all 26 Team endpoints and RBAC enforcement across 7 test
 
 ## Recommendations
 
-1. **M-1**: Add proper field mapping and validation to approval rule endpoints. Ensure `requiredApprovals`, `approverRoleIds`, and `description` are stored and returned.
-2. **M-2**: Add request body schema validation (e.g., JSON Schema or Zod) for the member override endpoint. Return 400 if `allow`/`deny` are missing or body has unexpected shape.
-3. **M-3**: Set `mustChangePassword: true` in `teamResetPassword` so users are forced to change the temp password on first login.
-4. **M-4**: Align `RoleDetailPage` guard to allow the same 7 roles as `TeamAccessConsolePage`, or intentionally document the restriction.
-5. **L-1**: Review invite creation logic to avoid creating invite records for directly-created members when `sendInvite: false`.
+1. **L-1**: Review invite creation logic to avoid creating invite records for directly-created members when `sendInvite: false`.
+2. **L-2**: Follow up on the unrelated dashboard cron `targetUserIds` CastError separately under student notification stability.

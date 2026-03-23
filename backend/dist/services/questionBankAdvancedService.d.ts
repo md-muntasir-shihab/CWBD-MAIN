@@ -145,23 +145,23 @@ export declare function deleteSet(id: string, adminId: string): Promise<(mongoos
 export declare function resolveSetQuestions(setId: string): Promise<any[] | null>;
 export declare function searchBankQuestionsForExam(examId: string, params: ListBankQuestionsParams): Promise<any>;
 export declare function attachBankQuestionsToExam(examId: string, bankQuestionIds: string[], adminId: string): Promise<mongoose.MergeType<mongoose.Document<unknown, {}, {
-    tags: string[];
     options: mongoose.Types.DocumentArray<{
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }, mongoose.Types.Subdocument<mongoose.mongo.BSON.ObjectId, any, {
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }> & {
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }>;
+    tags: string[];
     examId: string;
     topic?: string | null | undefined;
     marks?: number | null | undefined;
@@ -179,23 +179,23 @@ export declare function attachBankQuestionsToExam(examId: string, bankQuestionId
 } & mongoose.DefaultTimestampProps, {}, {
     timestamps: true;
 }> & {
-    tags: string[];
     options: mongoose.Types.DocumentArray<{
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }, mongoose.Types.Subdocument<mongoose.mongo.BSON.ObjectId, any, {
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }> & {
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }>;
+    tags: string[];
     examId: string;
     topic?: string | null | undefined;
     marks?: number | null | undefined;
@@ -233,23 +233,23 @@ export declare function attachBankQuestionsToExam(examId: string, bankQuestionId
     tags: any;
 }, "_id">>[]>;
 export declare function removeBankQuestionFromExam(examId: string, examQuestionId: string, adminId: string): Promise<(mongoose.Document<unknown, {}, {
-    tags: string[];
     options: mongoose.Types.DocumentArray<{
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }, mongoose.Types.Subdocument<mongoose.mongo.BSON.ObjectId, any, {
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }> & {
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }>;
+    tags: string[];
     examId: string;
     topic?: string | null | undefined;
     marks?: number | null | undefined;
@@ -267,23 +267,23 @@ export declare function removeBankQuestionFromExam(examId: string, examQuestionI
 } & mongoose.DefaultTimestampProps, {}, {
     timestamps: true;
 }> & {
-    tags: string[];
     options: mongoose.Types.DocumentArray<{
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }, mongoose.Types.Subdocument<mongoose.mongo.BSON.ObjectId, any, {
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }> & {
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }>;
+    tags: string[];
     examId: string;
     topic?: string | null | undefined;
     marks?: number | null | undefined;
@@ -307,23 +307,23 @@ export declare function reorderExamQuestions(examId: string, orderMap: {
     id: string;
     orderIndex: number;
 }[], adminId: string): Promise<(mongoose.FlattenMaps<{
-    tags: string[];
     options: mongoose.Types.DocumentArray<{
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }, mongoose.Types.Subdocument<mongoose.mongo.BSON.ObjectId, any, {
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }> & {
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }>;
+    tags: string[];
     examId: string;
     topic?: string | null | undefined;
     marks?: number | null | undefined;
@@ -394,6 +394,6 @@ export declare function refreshAllAnalytics(): Promise<{
 export declare function bulkArchive(ids: string[], adminId: string): Promise<mongoose.UpdateWriteOpResult>;
 export declare function bulkActivate(ids: string[], active: boolean, adminId: string): Promise<mongoose.UpdateWriteOpResult>;
 export declare function bulkUpdateTags(ids: string[], tags: string[], mode: 'add' | 'set', adminId: string): Promise<mongoose.UpdateWriteOpResult>;
-export declare function bulkDelete(ids: string[], adminId: string): Promise<mongoose.mongo.DeleteResult | mongoose.UpdateWriteOpResult>;
+export declare function bulkDelete(ids: string[], adminId: string): Promise<mongoose.UpdateWriteOpResult | mongoose.mongo.DeleteResult>;
 export {};
 //# sourceMappingURL=questionBankAdvancedService.d.ts.map

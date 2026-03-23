@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getStudentExams = getStudentExams;
 exports.getPublicExamList = getPublicExamList;
 exports.getExamLanding = getExamLanding;
+exports.getEligibilitySummary = getEligibilitySummary;
 exports.getStudentExamDetails = getStudentExamDetails;
 exports.getStudentExamById = getStudentExamById;
 exports.startExam = startExam;
@@ -43,6 +44,7 @@ const adminLiveStream_1 = require("../realtime/adminLiveStream");
 const examCardMetricsService_1 = require("../services/examCardMetricsService");
 const securityConfigService_1 = require("../services/securityConfigService");
 const examFinalizationService_1 = require("../services/examFinalizationService");
+const subscriptionAccessService_1 = require("../services/subscriptionAccessService");
 const externalExamAttemptService_1 = require("../services/externalExamAttemptService");
 const LEGACY_PLAN_CODE = 'legacy_free';
 const LEGACY_PLAN_NAME = 'Legacy Free Access';
@@ -56,7 +58,7 @@ function getLegacyExpiryFromNow() {
  * 2) transitional fallback: old students with missing subscription metadata get legacy_free backfill
  */
 async function verifySubscription(userId) {
-    const user = await User_1.default.findById(userId);
+    const user = await User_1.default.findById(userId).select('role subscription');
     if (!user)
         return { allowed: false, reason: 'missing' };
     if (['superadmin', 'admin', 'moderator'].includes(user.role)) {
@@ -65,22 +67,18 @@ async function verifySubscription(userId) {
     if (user.role !== 'student') {
         return { allowed: true };
     }
-    const sub = user.subscription || {};
-    const hasAnyPlanIdentity = Boolean(sub.plan || sub.planCode || sub.planName);
-    // Check if subscription is missing or incomplete
-    if (!hasAnyPlanIdentity || !sub.expiryDate || typeof sub.isActive !== 'boolean') {
+    const snapshot = await (0, subscriptionAccessService_1.getCanonicalSubscriptionSnapshot)(userId, user.subscription);
+    if (!snapshot.hasPlanIdentity) {
         return { allowed: false, reason: 'missing' };
     }
-    const current = user.subscription || {};
-    const isActive = current.isActive === true;
-    const expiryDate = current.expiryDate ? new Date(current.expiryDate) : null;
-    if (!isActive) {
-        return { allowed: false, reason: 'inactive', expiryDate };
+    if (!snapshot.isActive || snapshot.allowsExams === false) {
+        return {
+            allowed: false,
+            reason: snapshot.reason === 'expired' ? 'expired' : 'inactive',
+            expiryDate: snapshot.expiresAtUTC,
+        };
     }
-    if (!expiryDate || Number.isNaN(expiryDate.getTime()) || expiryDate.getTime() < Date.now()) {
-        return { allowed: false, reason: 'expired', expiryDate };
-    }
-    return { allowed: true, expiryDate };
+    return { allowed: true, expiryDate: snapshot.expiresAtUTC };
 }
 /** Verify the student can access this specific exam */
 async function canAccessExam(exam, userId) {
@@ -120,7 +118,7 @@ async function getStudentExams(req, res) {
     try {
         const studentId = req.user._id;
         const subscriptionState = await verifySubscription(studentId);
-        const hasActiveSubscription = subscriptionState.allowed;
+        let hasActiveSubscription = subscriptionState.allowed;
         const now = new Date();
         const exams = await Exam_1.default.find({ isPublished: true }).sort({ startDate: 1 }).lean();
         const examIds = exams.map((exam) => String(exam._id || '')).filter(Boolean);
@@ -129,11 +127,11 @@ async function getStudentExams(req, res) {
             User_1.default.findById(studentId).select('subscription').lean(),
             StudentDueLedger_1.default.findOne({ studentId }).select('netDue').lean(),
         ]);
+        const subscriptionSnapshot = await (0, subscriptionAccessService_1.getCanonicalSubscriptionSnapshot)(studentId, user?.subscription);
         const pendingDueAmount = Number(dueLedger?.netDue || 0);
         const studentGroupIds = normalizeObjectIdArray(profile?.groupIds || []);
-        const studentPlanCode = String(user?.subscription?.planCode ||
-            user?.subscription?.plan ||
-            '').toLowerCase();
+        const studentPlanCode = subscriptionSnapshot.planCode;
+        hasActiveSubscription = subscriptionState.allowed && subscriptionSnapshot.allowsExams !== false;
         // Fetch student's completed results (multi-attempt aware)
         const results = await ExamResult_1.default.find({ student: studentId }).sort({ submittedAt: -1 }).lean();
         const resultMap = new Map();
@@ -323,14 +321,9 @@ async function getPublicExamList(req, res) {
             const externalAttemptCountMap = await (0, externalExamAttemptService_1.getExternalExamAttemptCountsForStudent)(studentId, examIds);
             studentGroupIds = normalizeObjectIdArray(profile?.groupIds || []);
             pendingDueAmount = Number(dueLedger?.netDue || 0);
-            studentPlanCode = String(user?.subscription?.planCode ||
-                user?.subscription?.plan ||
-                '').toLowerCase();
-            const subscriptionExpiryRaw = user?.subscription?.expiryDate;
-            const subscriptionExpiry = subscriptionExpiryRaw ? new Date(String(subscriptionExpiryRaw)).getTime() : 0;
-            hasActiveSubscription = Boolean(user?.subscription?.isActive &&
-                Number.isFinite(subscriptionExpiry) &&
-                subscriptionExpiry > Date.now());
+            const subscriptionSnapshot = await (0, subscriptionAccessService_1.getCanonicalSubscriptionSnapshot)(studentId, user?.subscription);
+            studentPlanCode = subscriptionSnapshot.planCode;
+            hasActiveSubscription = subscriptionSnapshot.isActive && subscriptionSnapshot.allowsExams !== false;
             attemptsMap = resultRows.reduce((map, row) => {
                 const examId = String(row.exam || '');
                 map.set(examId, (map.get(examId) || 0) + 1);
@@ -537,10 +530,9 @@ async function getExamLanding(req, res) {
         ]);
         const externalAttemptCountMap = await (0, externalExamAttemptService_1.getExternalExamAttemptCountsForStudent)(studentId, examIds);
         const pendingDueAmount = Number(dueLedger?.netDue || 0);
+        const subscriptionSnapshot = await (0, subscriptionAccessService_1.getCanonicalSubscriptionSnapshot)(studentId, user?.subscription);
         const studentGroupIds = normalizeObjectIdArray(profile?.groupIds || []);
-        const studentPlanCode = String(user?.subscription?.planCode ||
-            user?.subscription?.plan ||
-            '').toLowerCase();
+        const studentPlanCode = subscriptionSnapshot.planCode;
         const attemptCountByExam = new Map();
         for (const result of results) {
             const examKey = String(result.exam || '');
@@ -771,9 +763,8 @@ async function getEligibilitySummary(exam, studentId) {
     const requiredPlanCodes = toStringArray(accessControl.allowedPlanCodes).map((code) => code.toLowerCase());
     const subscriptionRequired = Boolean(exam.subscriptionRequired) || requiredPlanCodes.length > 0;
     const studentGroupIds = normalizeObjectIdArray(profile?.groupIds || []);
-    const studentPlanCode = String(user?.subscription?.planCode ||
-        user?.subscription?.plan ||
-        '').toLowerCase();
+    const subscriptionSnapshot = await (0, subscriptionAccessService_1.getCanonicalSubscriptionSnapshot)(studentId, user?.subscription);
+    const studentPlanCode = subscriptionSnapshot.planCode;
     let accessDeniedReason = '';
     if (requiredUserIds.length > 0 && !requiredUserIds.includes(studentId)) {
         accessAllowed = false;
@@ -953,6 +944,12 @@ function normalizeObjectIdArray(input) {
     })
         .map((value) => value.trim())
         .filter(Boolean);
+}
+function normalizeObjectIdParam(value) {
+    const normalized = String(value || '').trim();
+    if (!normalized || normalized === 'null' || normalized === 'undefined')
+        return '';
+    return mongoose_1.default.Types.ObjectId.isValid(normalized) ? normalized : '';
 }
 function hasAnyIntersection(left, right) {
     if (left.length === 0 || right.length === 0)
@@ -1256,6 +1253,14 @@ async function getStudentExamById(req, res) {
 /* ─────── POST /api/exams/:id/start ─────── */
 async function startExam(req, res) {
     try {
+        if (!req.user?._id) {
+            res.status(401).json({ message: 'Authentication required.' });
+            return;
+        }
+        if (req.user.role !== 'student') {
+            res.status(403).json({ message: 'Student access only.' });
+            return;
+        }
         const studentId = req.user._id;
         const examRef = String(req.params.id || '');
         const user = await User_1.default.findById(studentId).lean();
@@ -1917,7 +1922,11 @@ async function getExamAttemptState(req, res) {
     try {
         const studentId = req.user._id;
         const examId = String(req.params.examId || req.params.id || '');
-        const attemptId = String(req.params.attemptId || '');
+        const attemptId = normalizeObjectIdParam(req.params.attemptId);
+        if (!attemptId) {
+            res.status(400).json({ message: 'Valid attemptId is required.' });
+            return;
+        }
         const [exam, session] = await Promise.all([
             Exam_1.default.findById(examId),
             ExamSession_1.default.findOne({ _id: attemptId, exam: examId, student: studentId }),
@@ -1976,7 +1985,7 @@ async function logExamAttemptEvent(req, res) {
     try {
         const studentId = req.user._id;
         const examId = String(req.params.examId || req.params.id || '');
-        const attemptId = String(req.params.attemptId || '');
+        const attemptId = normalizeObjectIdParam(req.params.attemptId);
         const body = (req.body || {});
         const eventType = String(body.eventType || '').trim();
         const metadata = (body.metadata && typeof body.metadata === 'object'
@@ -1984,7 +1993,7 @@ async function logExamAttemptEvent(req, res) {
             : {});
         const expectedRevision = parseAttemptRevision(body.attemptRevision);
         if (!attemptId) {
-            res.status(400).json({ message: 'attemptId is required.' });
+            res.status(400).json({ message: 'Valid attemptId is required.' });
             return;
         }
         if (!ATTEMPT_EVENT_TYPES.has(eventType)) {
@@ -2499,9 +2508,9 @@ async function streamExamAttempt(req, res) {
         const userId = req.user._id;
         const userRole = String(req.user?.role || 'student');
         const examId = String(req.params.examId || req.params.id || '');
-        const attemptId = String(req.params.attemptId || '');
+        const attemptId = normalizeObjectIdParam(req.params.attemptId);
         if (!attemptId) {
-            res.status(400).json({ message: 'attemptId is required.' });
+            res.status(400).json({ message: 'Valid attemptId is required.' });
             return;
         }
         const session = await ExamSession_1.default.findOne({ _id: attemptId, exam: examId });
@@ -2831,6 +2840,7 @@ async function getQuestionsByIdsAndFormat(questionIds, exam) {
     });
 }
 function sanitizeExamForStudent(exam) {
+    const examCenterSnapshot = (exam.examCenterSnapshot || {});
     return {
         _id: exam._id,
         title: exam.title,
@@ -2842,6 +2852,8 @@ function sanitizeExamForStudent(exam) {
         totalQuestions: exam.totalQuestions,
         totalMarks: exam.totalMarks,
         duration: exam.duration,
+        deliveryMode: exam.deliveryMode || 'internal',
+        examMode: String(exam.deliveryMode || 'internal') === 'external_link' ? 'external_link' : 'internal_system',
         negativeMarking: exam.negativeMarking,
         negativeMarkValue: exam.negativeMarkValue,
         allowBackNavigation: exam.allowBackNavigation,
@@ -2851,6 +2863,9 @@ function sanitizeExamForStudent(exam) {
         answerEditLimitPerQuestion: exam.answerEditLimitPerQuestion,
         bannerImageUrl: exam.bannerImageUrl,
         logoUrl: exam.logoUrl || '',
+        examCenterName: String(examCenterSnapshot.name || ''),
+        examCenterCode: String(examCenterSnapshot.code || ''),
+        examCenterAddress: String(examCenterSnapshot.address || ''),
         startDate: exam.startDate,
         endDate: exam.endDate,
         resultPublishDate: exam.resultPublishDate,

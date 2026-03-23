@@ -9,6 +9,7 @@ const ExamResult_1 = __importDefault(require("../models/ExamResult"));
 const ExamSession_1 = __importDefault(require("../models/ExamSession"));
 const StudentProfile_1 = __importDefault(require("../models/StudentProfile"));
 const User_1 = __importDefault(require("../models/User"));
+const UserSubscription_1 = __importDefault(require("../models/UserSubscription"));
 function normalizeId(value) {
     return String(value || '').trim();
 }
@@ -83,11 +84,39 @@ async function getExamCardMetrics(exams) {
     const activeByExam = new Map(activeRows.map((row) => [String(row._id), Number(row.activeUsers || 0)]));
     const activeStudentIdSet = new Set();
     const planToStudents = new Map();
+    const activeStudentIds = activeStudents
+        .map((user) => normalizeId(user._id))
+        .filter(Boolean);
+    const activeSubscriptions = activeStudentIds.length > 0
+        ? await UserSubscription_1.default.find({
+            userId: { $in: toObjectIds(activeStudentIds) },
+            status: 'active',
+            expiresAtUTC: { $gt: new Date() },
+        })
+            .populate('planId', 'code')
+            .select('userId planId')
+            .lean()
+        : [];
+    const studentsWithCanonicalPlans = new Set();
+    for (const subscription of activeSubscriptions) {
+        const studentId = normalizeId(subscription.userId);
+        const plan = subscription.planId || {};
+        const planCode = String(plan.code || '').trim().toLowerCase();
+        if (!studentId || !planCode)
+            continue;
+        studentsWithCanonicalPlans.add(studentId);
+        if (!planToStudents.has(planCode)) {
+            planToStudents.set(planCode, new Set());
+        }
+        planToStudents.get(planCode)?.add(studentId);
+    }
     for (const user of activeStudents) {
         const studentId = normalizeId(user._id);
         if (!studentId)
             continue;
         activeStudentIdSet.add(studentId);
+        if (studentsWithCanonicalPlans.has(studentId))
+            continue;
         const planCode = getStudentPlanCode(user);
         if (!planCode)
             continue;

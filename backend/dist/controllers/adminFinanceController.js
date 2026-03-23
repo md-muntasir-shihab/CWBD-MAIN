@@ -36,11 +36,13 @@ const StaffPayout_1 = __importDefault(require("../models/StaffPayout"));
 const StudentDueLedger_1 = __importDefault(require("../models/StudentDueLedger"));
 const StudentProfile_1 = __importDefault(require("../models/StudentProfile"));
 const User_1 = __importDefault(require("../models/User"));
-const SubscriptionPlan_1 = __importDefault(require("../models/SubscriptionPlan"));
 const financeStream_1 = require("../realtime/financeStream");
 const runtimeSettingsService_1 = require("../services/runtimeSettingsService");
+const secureUploadService_1 = require("../services/secureUploadService");
 const requestMeta_1 = require("../utils/requestMeta");
 const financeCenterService_1 = require("../services/financeCenterService");
+const subscriptionLifecycleService_1 = require("../services/subscriptionLifecycleService");
+const SECURE_FINANCE_ACCESS_ROLES = ['superadmin', 'admin', 'finance_agent', 'moderator'];
 function parseDate(value) {
     if (!value)
         return null;
@@ -141,25 +143,7 @@ function buildPaymentFilter(query) {
 }
 async function settleSuccessfulPayment(payment, actorId) {
     if (payment.entryType === 'subscription' && payment.subscriptionPlanId) {
-        const plan = await SubscriptionPlan_1.default.findById(payment.subscriptionPlanId);
-        if (plan) {
-            const expiryDate = new Date();
-            expiryDate.setDate(expiryDate.getDate() + plan.durationDays);
-            await User_1.default.findByIdAndUpdate(payment.studentId, {
-                $set: {
-                    subscription: {
-                        plan: String(plan._id),
-                        planCode: plan.code,
-                        planName: plan.name,
-                        isActive: true,
-                        startDate: new Date(),
-                        expiryDate,
-                        assignedBy: actorId || payment.recordedBy || null,
-                        assignedAt: new Date(),
-                    },
-                },
-            });
-        }
+        await (0, subscriptionLifecycleService_1.activateSubscriptionFromPayment)(payment, actorId ? String(actorId) : String(payment.recordedBy || payment.studentId));
     }
     if (payment.entryType === 'due_settlement' || payment.entryType === 'subscription' || payment.entryType === 'exam_fee') {
         await StudentDueLedger_1.default.findOneAndUpdate({ studentId: payment.studentId }, {
@@ -195,6 +179,9 @@ async function settleSuccessfulPayment(payment, actorId) {
     }
     catch (fcErr) {
         console.error('[settleSuccessfulPayment] Finance auto-post failed:', fcErr);
+    }
+    if (payment.entryType === 'subscription') {
+        await (0, subscriptionLifecycleService_1.recomputeStudentDueLedger)(String(payment.studentId), actorId ? String(actorId) : String(payment.recordedBy || payment.studentId), `Subscription payment settled ${String(payment._id)}`);
     }
 }
 function periodKey(date, bucket) {
@@ -415,6 +402,18 @@ async function adminCreatePayment(req, res) {
             ? String(body.status || 'pending')
             : 'pending';
         const paidAt = status === 'paid' ? (parseDate(body.paidAt) || date) : null;
+        const rawProofUrl = String(body.proofFileUrl || body.proofUrl || '').trim();
+        const secureProofUrl = rawProofUrl
+            ? await (0, secureUploadService_1.ensureSecureUploadUrl)({
+                url: rawProofUrl,
+                category: 'payment_proof',
+                visibility: 'protected',
+                ownerUserId: studentId,
+                ownerRole: 'student',
+                uploadedBy: recordedBy,
+                accessRoles: SECURE_FINANCE_ACCESS_ROLES,
+            })
+            : '';
         const created = await ManualPayment_1.default.create({
             studentId,
             ...(subscriptionPlanId ? { subscriptionPlanId } : {}),
@@ -428,8 +427,8 @@ async function adminCreatePayment(req, res) {
             transactionId: String(body.transactionId || '').trim(),
             entryType,
             reference: String(body.reference || '').trim(),
-            proofFileUrl: String(body.proofFileUrl || body.proofUrl || '').trim(),
-            proofUrl: String(body.proofUrl || body.proofFileUrl || '').trim(),
+            proofFileUrl: secureProofUrl,
+            proofUrl: secureProofUrl,
             notes: String(body.notes || '').trim(),
             recordedBy,
         });
@@ -526,10 +525,22 @@ async function adminUpdatePayment(req, res) {
             update.currency = String(body.currency || 'BDT').trim() || 'BDT';
         if (body.transactionId !== undefined)
             update.transactionId = String(body.transactionId || '').trim();
-        if (body.proofFileUrl !== undefined)
-            update.proofFileUrl = String(body.proofFileUrl || '').trim();
-        if (body.proofUrl !== undefined)
-            update.proofUrl = String(body.proofUrl || '').trim();
+        if (body.proofFileUrl !== undefined || body.proofUrl !== undefined) {
+            const nextProofUrl = String(body.proofFileUrl || body.proofUrl || '').trim();
+            const secureProofUrl = nextProofUrl
+                ? await (0, secureUploadService_1.ensureSecureUploadUrl)({
+                    url: nextProofUrl,
+                    category: 'payment_proof',
+                    visibility: 'protected',
+                    ownerUserId: existing.studentId,
+                    ownerRole: 'student',
+                    uploadedBy: req.user?._id || null,
+                    accessRoles: SECURE_FINANCE_ACCESS_ROLES,
+                })
+                : '';
+            update.proofFileUrl = secureProofUrl;
+            update.proofUrl = secureProofUrl;
+        }
         if (body.reference !== undefined)
             update.reference = String(body.reference || '').trim();
         if (body.notes !== undefined)
@@ -1048,7 +1059,7 @@ async function adminGetFinanceTestBoard(req, res) {
                 { $match: { entryType: 'subscription' } },
                 {
                     $lookup: {
-                        from: 'subscription_plans',
+                        from: 'subscriptionplans',
                         localField: 'subscriptionPlanId',
                         foreignField: '_id',
                         as: 'plan',

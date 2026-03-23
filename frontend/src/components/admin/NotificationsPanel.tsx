@@ -33,6 +33,13 @@ const emptyForm: NotificationForm = {
     linkUrl: '',
     attachmentUrl: '',
 };
+const ADMIN_ATTACHMENT_ROLES = ['superadmin', 'admin', 'moderator', 'editor', 'viewer', 'support_agent', 'finance_agent', 'chairman'];
+function getAttachmentAccessRoles(targetRole: NotificationForm['targetRole']): string[] {
+    const roles = [...ADMIN_ATTACHMENT_ROLES];
+    if (targetRole === 'student' || targetRole === 'all') roles.push('student');
+    if (targetRole === 'moderator') roles.push('moderator');
+    return Array.from(new Set(roles));
+}
 
 export default function NotificationsPanel() {
     const [items, setItems] = useState<AdminNotificationItem[]>([]);
@@ -87,9 +94,13 @@ export default function NotificationsPanel() {
         setUploadingAttachment(true);
         const uploadToast = toast.loading('Uploading attachment...');
         try {
-            const res = await adminUploadMedia(file);
+                        const res = await adminUploadMedia(file, {
+                visibility: 'protected',
+                category: 'admin_upload',
+                accessRoles: getAttachmentAccessRoles(form.targetRole),
+            });
             setForm((prev) => ({ ...prev, attachmentUrl: res.data.url || '' }));
-            toast.success('Attachment uploaded', { id: uploadToast });
+            toast.success('Protected attachment uploaded', { id: uploadToast });
         } catch (error: any) {
             toast.error(error.response?.data?.message || 'Attachment upload failed', { id: uploadToast });
         } finally {
@@ -273,7 +284,7 @@ export default function NotificationsPanel() {
                                 </span>
                             </div>
                             <p className="text-xs text-slate-400 mt-1">{item.message}</p>
-                            <p className="text-[11px] text-slate-500 mt-1">{item.category} • target: {item.targetRole || 'student'}</p>
+                            <p className="text-[11px] text-slate-500 mt-1">{item.category} â€¢ target: {item.targetRole || 'student'}</p>
                             {(item.linkUrl || item.attachmentUrl) ? (
                                 <div className="mt-2 flex gap-2 text-[11px]">
                                     {normalizeExternalUrl(item.linkUrl) ? <a href={normalizeExternalUrl(item.linkUrl) || undefined} target="_blank" rel="noreferrer" className="text-cyan-300 hover:text-cyan-200">Link</a> : null}

@@ -1,21 +1,21 @@
 import { Schema } from "mongoose";
 export declare const AuditLogModel: import("mongoose").Model<{
     action: string;
-    targetType: string;
     targetId: string;
+    targetType: string;
     beforeAfterDiff: any;
-    actorId?: string | null | undefined;
     ip?: string | null | undefined;
     userAgent?: string | null | undefined;
+    actorId?: string | null | undefined;
     createdAt: NativeDate;
 }, {}, {}, {}, import("mongoose").Document<unknown, {}, {
     action: string;
-    targetType: string;
     targetId: string;
+    targetType: string;
     beforeAfterDiff: any;
-    actorId?: string | null | undefined;
     ip?: string | null | undefined;
     userAgent?: string | null | undefined;
+    actorId?: string | null | undefined;
     createdAt: NativeDate;
 }, {}, {
     timestamps: {
@@ -24,12 +24,12 @@ export declare const AuditLogModel: import("mongoose").Model<{
     };
 }> & {
     action: string;
-    targetType: string;
     targetId: string;
+    targetType: string;
     beforeAfterDiff: any;
-    actorId?: string | null | undefined;
     ip?: string | null | undefined;
     userAgent?: string | null | undefined;
+    actorId?: string | null | undefined;
     createdAt: NativeDate;
 } & {
     _id: import("mongoose").Types.ObjectId;
@@ -42,21 +42,21 @@ export declare const AuditLogModel: import("mongoose").Model<{
     };
 }, {
     action: string;
-    targetType: string;
     targetId: string;
+    targetType: string;
     beforeAfterDiff: any;
-    actorId?: string | null | undefined;
     ip?: string | null | undefined;
     userAgent?: string | null | undefined;
+    actorId?: string | null | undefined;
     createdAt: NativeDate;
 }, import("mongoose").Document<unknown, {}, import("mongoose").FlatRecord<{
     action: string;
-    targetType: string;
     targetId: string;
+    targetType: string;
     beforeAfterDiff: any;
-    actorId?: string | null | undefined;
     ip?: string | null | undefined;
     userAgent?: string | null | undefined;
+    actorId?: string | null | undefined;
     createdAt: NativeDate;
 }>, {}, import("mongoose").MergeType<import("mongoose").DefaultSchemaOptions, {
     timestamps: {
@@ -65,12 +65,12 @@ export declare const AuditLogModel: import("mongoose").Model<{
     };
 }>> & import("mongoose").FlatRecord<{
     action: string;
-    targetType: string;
     targetId: string;
+    targetType: string;
     beforeAfterDiff: any;
-    actorId?: string | null | undefined;
     ip?: string | null | undefined;
     userAgent?: string | null | undefined;
+    actorId?: string | null | undefined;
     createdAt: NativeDate;
 }> & {
     _id: import("mongoose").Types.ObjectId;

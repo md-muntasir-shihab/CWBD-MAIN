@@ -93,7 +93,7 @@ export default function PremiumCarousel({
         <button
           onClick={() => scrollCarousel(ref, 'left')}
           aria-label="Scroll left"
-          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 hidden md:flex items-center justify-center w-11 h-11 rounded-full bg-white/90 dark:bg-gray-800/90 backdrop-blur-md shadow-lg shadow-black/10 dark:shadow-black/30 border border-gray-200/80 dark:border-gray-700/80 text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 hover:scale-110 hover:shadow-xl transition-all duration-300 opacity-0 group-hover/carousel:opacity-100"
+          className="absolute left-2 top-1/2 -translate-y-1/2 z-10 hidden md:flex items-center justify-center w-11 h-11 rounded-full bg-white/90 dark:bg-gray-800/90 backdrop-blur-md shadow-lg shadow-black/10 dark:shadow-black/30 border border-gray-200/80 dark:border-gray-700/80 text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 hover:scale-110 hover:shadow-xl transition-all duration-300 opacity-0 group-hover/carousel:opacity-100"
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
@@ -102,8 +102,7 @@ export default function PremiumCarousel({
       {/* Track */}
       <div
         ref={ref}
-        className={`flex ${gap} overflow-x-auto scroll-smooth snap-x snap-mandatory pb-2 scrollbar-hide ${className}`}
-        style={{ WebkitOverflowScrolling: 'touch' }}
+        className={`flex ${gap} h-auto min-h-0 items-stretch overflow-x-auto scroll-smooth snap-x snap-mandatory pb-2 scrollbar-hide ${className}`}
       >
         {children}
       </div>
@@ -113,7 +112,7 @@ export default function PremiumCarousel({
         <button
           onClick={() => scrollCarousel(ref, 'right')}
           aria-label="Scroll right"
-          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-10 hidden md:flex items-center justify-center w-11 h-11 rounded-full bg-white/90 dark:bg-gray-800/90 backdrop-blur-md shadow-lg shadow-black/10 dark:shadow-black/30 border border-gray-200/80 dark:border-gray-700/80 text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 hover:scale-110 hover:shadow-xl transition-all duration-300 opacity-0 group-hover/carousel:opacity-100"
+          className="absolute right-2 top-1/2 -translate-y-1/2 z-10 hidden md:flex items-center justify-center w-11 h-11 rounded-full bg-white/90 dark:bg-gray-800/90 backdrop-blur-md shadow-lg shadow-black/10 dark:shadow-black/30 border border-gray-200/80 dark:border-gray-700/80 text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 hover:scale-110 hover:shadow-xl transition-all duration-300 opacity-0 group-hover/carousel:opacity-100"
         >
           <ChevronRight className="w-5 h-5" />
         </button>

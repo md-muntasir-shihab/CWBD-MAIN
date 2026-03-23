@@ -20,7 +20,6 @@ export declare function adminDeleteQuestion(req: AuthRequest, res: Response): Pr
 export declare function adminReorderQuestions(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminImportQuestionsFromExcel(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminGetExamAnalytics(req: AuthRequest, res: Response): Promise<void>;
-export declare function adminMfaConfirm(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminExportExamResults(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminDownloadExamResultsImportTemplate(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminImportExamResults(req: AuthRequest, res: Response): Promise<void>;

@@ -35,7 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
 const NotificationDeliveryLogSchema = new mongoose_1.Schema({
-    jobId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'NotificationJob', required: true, index: true },
+    jobId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'NotificationJob', required: true },
     campaignId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'NotificationJob', default: null },
     studentId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     guardianTargeted: { type: Boolean, default: false },
@@ -45,16 +45,20 @@ const NotificationDeliveryLogSchema = new mongoose_1.Schema({
         required: true,
     },
     providerUsed: { type: String, required: true, trim: true },
+    templateKey: { type: String, trim: true, default: '' },
+    templateId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'NotificationTemplate', default: null },
     to: { type: String, required: true, trim: true },
     status: {
         type: String,
         enum: ['sent', 'failed', 'queued'],
         required: true,
         default: 'queued',
-        index: true,
     },
     providerMessageId: { type: String, trim: true },
     errorMessage: { type: String },
+    originModule: { type: String, enum: ['campaign', 'news', 'notice', 'trigger'], default: 'campaign', index: true },
+    originEntityId: { type: String, trim: true, default: '' },
+    originAction: { type: String, trim: true, default: '' },
     sentAtUTC: { type: Date },
     costAmount: { type: Number, default: 0, min: 0 },
     retryCount: { type: Number, default: 0, min: 0 },
@@ -68,5 +72,6 @@ const NotificationDeliveryLogSchema = new mongoose_1.Schema({
 NotificationDeliveryLogSchema.index({ studentId: 1, sentAtUTC: -1 });
 NotificationDeliveryLogSchema.index({ jobId: 1 });
 NotificationDeliveryLogSchema.index({ status: 1 });
+NotificationDeliveryLogSchema.index({ originModule: 1, originEntityId: 1, createdAt: -1 });
 exports.default = mongoose_1.default.model('NotificationDeliveryLog', NotificationDeliveryLogSchema);
 //# sourceMappingURL=NotificationDeliveryLog.js.map

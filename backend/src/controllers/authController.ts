@@ -4,12 +4,10 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import User, { IUser, IUserPermissions, UserStatus } from '../models/User';
-import PasswordReset from '../models/PasswordReset';
 import StudentProfile from '../models/StudentProfile';
 import AdminProfile from '../models/AdminProfile';
 import LoginActivity from '../models/LoginActivity';
 import ActiveSession from '../models/ActiveSession';
-import OtpVerification from '../models/OtpVerification';
 import AuditLog from '../models/AuditLog';
 import RolePermissionSet from '../models/RolePermissionSet';
 import { addAuthSessionStreamClient } from '../realtime/authSessionStream';
@@ -17,12 +15,13 @@ import { AuthRequest } from '../middlewares/auth';
 import { getClientIp, getDeviceInfo } from '../utils/requestMeta';
 import { sendCampusMail } from '../utils/mailer';
 import { resolvePermissions, resolvePermissionsV2 } from '../utils/permissions';
-import { SecurityConfig, getSecurityConfig, invalidateSecurityConfigCache, TwoFactorMethod } from '../services/securityConfigService';
+import { SecurityConfig, getSecurityConfig, TwoFactorMethod } from '../services/securityConfigService';
 import { getBrowserFingerprint, terminateSessions, terminateSessionsForUser } from '../services/sessionSecurityService';
-import { generateOtpCode, hashOtpCode, maskEmail, normalizeTwoFactorMethod, sendOtpChallenge } from '../services/twoFactorService';
+import { buildTotpOtpAuthUrl, consumeBackupCode, generateBackupCodes, generateOtpCode, generateTotpSecret, hashOtpCode, maskEmail, normalizeTwoFactorMethod, sendOtpChallenge, verifyTotpCode } from '../services/twoFactorService';
 import { getRuntimeSettingsSnapshot } from '../services/runtimeSettingsService';
-import { isPasswordCompliant, updateSecuritySettingsSnapshot } from '../services/securityCenterService';
-import { upsertCredentialMirror } from '../services/credentialVaultService';
+import { calculatePasswordExpiryDate, getPasswordPolicyForRole, isPasswordCompliant } from '../services/securityCenterService';
+import { clearPersistentRateLimit, consumePersistentRateLimit } from '../services/securityRateLimitService';
+import { findValidSecurityToken, incrementSecurityTokenAttempts, invalidateSecurityTokens, issueSecurityToken, markSecurityTokenConsumed } from '../services/securityTokenService';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'secret';
 const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || process.env.REFRESH_SECRET || 'refresh_secret';
@@ -195,33 +194,7 @@ async function logLoginAttempt(params: {
 }
 
 const OTP_VERIFY_WINDOW_MS = 10 * 60 * 1000;
-const OTP_VERIFY_MAX_REQUESTS = 25;
 const OTP_RESEND_WINDOW_MS = 10 * 60 * 1000;
-const OTP_RESEND_MAX_REQUESTS = 8;
-
-const otpRateBuckets = new Map<string, { count: number; resetAt: number }>();
-
-function consumeRateLimit(bucketKey: string, maxRequests: number, windowMs: number): boolean {
-    const now = Date.now();
-    const bucket = otpRateBuckets.get(bucketKey);
-
-    if (!bucket || bucket.resetAt <= now) {
-        otpRateBuckets.set(bucketKey, { count: 1, resetAt: now + windowMs });
-        return true;
-    }
-
-    if (bucket.count >= maxRequests) {
-        return false;
-    }
-
-    bucket.count += 1;
-    otpRateBuckets.set(bucketKey, bucket);
-    return true;
-}
-
-function clearRateLimit(bucketKey: string): void {
-    otpRateBuckets.delete(bucketKey);
-}
 
 function setRefreshCookie(res: Response, refreshToken: string, ttlDays = 7): void {
     res.cookie('refresh_token', refreshToken, {
@@ -237,12 +210,100 @@ function isAdminRole(role: string): boolean {
 }
 
 function needsTwoFactor(user: IUser, security: SecurityConfig): boolean {
+    if (security.testingAccessMode) return false;
     return (
         user.twoFactorEnabled === true ||
         (isAdminRole(user.role) && security.enable2faAdmin) ||
         (user.role === 'student' && security.enable2faStudent) ||
         (user.role === 'superadmin' && security.force2faSuperAdmin)
     );
+}
+
+function shouldSendChallenge(method: TwoFactorMethod): boolean {
+    return method === 'email' || method === 'sms';
+}
+
+async function consumeOtpRateLimit(params: {
+    bucket: 'otp_verify' | 'otp_resend';
+    scopeKey: string;
+    maxAllowed: number;
+    windowMs: number;
+    metadata?: Record<string, unknown>;
+}): Promise<{ allowed: boolean; retryAfterMs: number }> {
+    const result = await consumePersistentRateLimit({
+        bucket: params.bucket,
+        scopeKey: params.scopeKey,
+        maxAllowed: params.maxAllowed,
+        windowMs: params.windowMs,
+        metadata: params.metadata,
+    });
+    return { allowed: result.allowed, retryAfterMs: result.retryAfterMs };
+}
+
+async function clearOtpRateLimits(userId: string): Promise<void> {
+    await Promise.all([
+        clearPersistentRateLimit('otp_verify', `otp_verify:${userId}`),
+        clearPersistentRateLimit('otp_resend', `otp_resend:${userId}`),
+    ]);
+}
+
+function getOtpMethodForUser(user: IUser, security: SecurityConfig): TwoFactorMethod {
+    const requested = normalizeTwoFactorMethod(user.two_factor_method, security.default2faMethod);
+    if (requested === 'authenticator' && user.twoFactorEnabled && user.twoFactorSecret) {
+        return 'authenticator';
+    }
+    if (requested === 'sms' && security.allowedTwoFactorMethods.includes('sms')) {
+        return 'sms';
+    }
+    if (requested === 'authenticator' && security.allowedTwoFactorMethods.includes('authenticator')) {
+        return 'authenticator';
+    }
+    return security.allowedTwoFactorMethods.includes('email') ? 'email' : security.default2faMethod;
+}
+
+async function applyPasswordSecurityState(
+    user: IUser,
+    nextPasswordHash: string,
+    source: 'admin' | 'user' | 'reset',
+    policy: ReturnType<typeof getPasswordPolicyForRole>,
+): Promise<void> {
+    const passwordHistory = Array.isArray(user.passwordHistory) ? user.passwordHistory.slice(0, 24) : [];
+    if (user.password) {
+        passwordHistory.unshift({
+            hash: user.password,
+            createdAt: new Date(),
+            source,
+        });
+    }
+    const keepCount = Math.max(0, policy.preventReuseCount || 0);
+    user.password = nextPasswordHash;
+    user.passwordHistory = keepCount > 0 ? passwordHistory.slice(0, keepCount) : [];
+    user.passwordExpiresAt = calculatePasswordExpiryDate(policy) || null;
+    user.mustChangePassword = false;
+    user.forcePasswordResetRequired = false;
+    user.password_updated_at = new Date();
+    user.passwordLastChangedAtUTC = new Date();
+    user.passwordChangedByType = source === 'admin' ? 'admin' : 'user';
+}
+
+function getPasswordPolicyForUserRole(security: SecurityConfig, role: string): typeof security.passwordPolicies.default {
+    const normalized = String(role || '').trim().toLowerCase();
+    if (normalized === 'student') return security.passwordPolicies.student;
+    if (normalized === 'superadmin' || normalized === 'admin') return security.passwordPolicies.admin;
+    if (isAdminRole(normalized) || normalized === 'chairman') return security.passwordPolicies.staff;
+    return security.passwordPolicies.default;
+}
+
+function getGenericAuthMessage(security: SecurityConfig, fallback: string): string {
+    return security.authentication.genericErrorMessages ? 'Invalid credentials' : fallback;
+}
+
+function isVerifiedEmailRequired(security: SecurityConfig, role: string): boolean {
+    if (security.testingAccessMode) return false;
+    const normalized = String(role || '').trim().toLowerCase();
+    if (normalized === 'student') return security.verificationRecovery.requireVerifiedEmailForStudents;
+    if (isAdminRole(normalized) || normalized === 'chairman') return security.verificationRecovery.requireVerifiedEmailForAdmins;
+    return false;
 }
 
 function isLegacyTokenBlocked(security: SecurityConfig): boolean {
@@ -316,6 +377,11 @@ async function buildUserPayload(user: IUser): Promise<Record<string, unknown>> {
         role: user.role,
         fullName,
         status: user.status,
+        emailVerified: Boolean(user.emailVerifiedAt),
+        phoneVerified: Boolean(user.phoneVerifiedAt),
+        twoFactorEnabled: Boolean(user.twoFactorEnabled),
+        twoFactorMethod: user.two_factor_method || null,
+        passwordExpiresAt: user.passwordExpiresAt || null,
         permissions: user.permissions,
         permissionsV2: resolvedPermissionsV2,
         mustChangePassword: user.mustChangePassword,
@@ -334,37 +400,34 @@ async function issueOtpChallenge(user: IUser, security: SecurityConfig): Promise
     maskedEmail: string;
     expiresInSeconds: number;
 }> {
-    const requestedMethod = normalizeTwoFactorMethod(user.two_factor_method, security.default2faMethod);
-    const otpCode = generateOtpCode();
+    const requestedMethod = getOtpMethodForUser(user, security);
     const expiresAt = new Date(Date.now() + security.otpExpiryMinutes * 60 * 1000);
-
-    await OtpVerification.deleteMany({ user_id: user._id, verified: false });
-    await OtpVerification.create({
-        user_id: user._id,
-        otp_code: hashOtpCode(otpCode),
-        method: requestedMethod,
-        expires_at: expiresAt,
-        attempt_count: 0,
-        verified: false,
+    const otpCode = shouldSendChallenge(requestedMethod) ? generateOtpCode() : '';
+    const { rawToken } = await issueSecurityToken({
+        userId: user._id,
+        purpose: 'two_factor_pending',
+        expiresAt,
+        channel: requestedMethod,
+        meta: shouldSendChallenge(requestedMethod)
+            ? { method: requestedMethod, otpHash: hashOtpCode(otpCode), maskedEmail: maskEmail(user.email) }
+            : { method: requestedMethod },
+        maxAttempts: security.maxOtpAttempts,
+        replaceExisting: true,
     });
 
-    const deliveredMethod = await sendOtpChallenge({
-        user,
-        method: requestedMethod,
-        otpCode,
-        expiryMinutes: security.otpExpiryMinutes,
-    });
-
-    const tempToken = jwt.sign(
-        { _id: String(user._id), purpose: '2fa_pending' },
-        JWT_SECRET,
-        { expiresIn: '10m' }
-    );
+    const deliveredMethod = shouldSendChallenge(requestedMethod)
+        ? await sendOtpChallenge({
+            user,
+            method: requestedMethod,
+            otpCode,
+            expiryMinutes: security.otpExpiryMinutes,
+        })
+        : requestedMethod;
 
     return {
-        tempToken,
+        tempToken: rawToken,
         method: deliveredMethod,
-        maskedEmail: maskEmail(user.email),
+        maskedEmail: deliveredMethod === 'email' ? maskEmail(user.email) : '',
         expiresInSeconds: security.otpExpiryMinutes * 60,
     };
 }
@@ -484,13 +547,14 @@ export async function login(req: Request, res: Response): Promise<void> {
             return;
         }
 
+        const security = await getSecurityConfig(true);
         const lookup = identifier.includes('@')
             ? { email: identifier }
             : { username: identifier };
 
-        const user = await User.findOne(lookup).select('+password');
+        const user = await User.findOne(lookup).select('+password +twoFactorSecret');
         if (!user) {
-            res.status(401).json({ message: 'Invalid credentials' });
+            res.status(401).json({ message: getGenericAuthMessage(security, 'Invalid credentials') });
             return;
         }
 
@@ -499,9 +563,7 @@ export async function login(req: Request, res: Response): Promise<void> {
             return;
         }
 
-        const security = await getSecurityConfig(true);
-
-        if (user.role === 'student' && security.panic.disableStudentLogins) {
+        if (user.role === 'student' && security.panic.disableStudentLogins && !security.testingAccessMode) {
             await logLoginAttempt({
                 user,
                 success: false,
@@ -517,7 +579,8 @@ export async function login(req: Request, res: Response): Promise<void> {
         }
 
         const status = normalizeStatus(user.status);
-        if (status === 'suspended' || status === 'blocked' || status === 'pending') {
+        const shouldBypassPendingVerification = security.testingAccessMode && status === 'pending';
+        if (status === 'suspended' || status === 'blocked' || (status === 'pending' && !shouldBypassPendingVerification)) {
             await logLoginAttempt({
                 user,
                 success: false,
@@ -532,7 +595,19 @@ export async function login(req: Request, res: Response): Promise<void> {
             return;
         }
 
-        if (user.lockUntil && user.lockUntil > new Date()) {
+        if (isVerifiedEmailRequired(security, user.role) && !user.emailVerifiedAt) {
+            await logLoginAttempt({
+                user,
+                success: false,
+                req,
+                identifier,
+                reason: 'email_not_verified',
+            });
+            res.status(403).json({ message: 'Email verification is required before login.' });
+            return;
+        }
+
+        if (!security.testingAccessMode && user.lockUntil && user.lockUntil > new Date()) {
             await logLoginAttempt({
                 user,
                 success: false,
@@ -548,9 +623,11 @@ export async function login(req: Request, res: Response): Promise<void> {
 
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
-            user.loginAttempts += 1;
-            if (user.loginAttempts >= security.loginProtection.maxAttempts) {
-                user.lockUntil = new Date(Date.now() + security.loginProtection.lockoutMinutes * 60 * 1000);
+            if (!security.testingAccessMode) {
+                user.loginAttempts += 1;
+                if (user.loginAttempts >= security.loginProtection.maxAttempts) {
+                    user.lockUntil = new Date(Date.now() + security.loginProtection.lockoutMinutes * 60 * 1000);
+                }
             }
             await user.save();
             await logLoginAttempt({
@@ -560,8 +637,12 @@ export async function login(req: Request, res: Response): Promise<void> {
                 identifier,
                 reason: 'invalid_password',
             });
-            res.status(401).json({ message: 'Invalid credentials' });
+            res.status(401).json({ message: getGenericAuthMessage(security, 'Invalid credentials') });
             return;
+        }
+
+        if (user.passwordExpiresAt && user.passwordExpiresAt.getTime() <= Date.now()) {
+            user.mustChangePassword = true;
         }
 
         const ipAddress = getClientIp(req);
@@ -580,7 +661,9 @@ export async function login(req: Request, res: Response): Promise<void> {
 
         user.loginAttempts = 0;
         user.lockUntil = undefined;
+        user.lockReason = null;
         user.lastLogin = new Date();
+        user.lastLoginAtUTC = new Date();
         user.ip_address = ipAddress;
         user.device_info = deviceInfo;
         if (!user.permissions) {
@@ -763,27 +846,28 @@ export async function verify2fa(req: Request, res: Response): Promise<void> {
             return;
         }
 
-        let decoded: { _id: string; purpose?: string };
-        try {
-            decoded = jwt.verify(tempToken, JWT_SECRET) as { _id: string; purpose?: string };
-        } catch {
+        const tokenDoc = await findValidSecurityToken(tempToken, 'two_factor_pending');
+        if (!tokenDoc) {
             respondOtpError(res, 401, 'OTP_SESSION_INVALID', 'Expired or invalid verification session. Please login again.');
             return;
         }
 
-        if (decoded.purpose !== '2fa_pending') {
-            respondOtpError(res, 400, 'OTP_SESSION_INVALID', 'Invalid verification token');
-            return;
-        }
-
-        const user = await User.findById(decoded._id);
+        const user = await User.findById(tokenDoc.userId).select('+twoFactorSecret +twoFactorBackupCodes');
         if (!user) {
             respondOtpError(res, 404, 'OTP_USER_NOT_FOUND', 'User not found');
             return;
         }
 
         const verifyBucket = `otp_verify:${String(user._id)}`;
-        if (!consumeRateLimit(verifyBucket, OTP_VERIFY_MAX_REQUESTS, OTP_VERIFY_WINDOW_MS)) {
+        const security = await getSecurityConfig(true);
+        const verifyLimit = await consumeOtpRateLimit({
+            bucket: 'otp_verify',
+            scopeKey: verifyBucket,
+            maxAllowed: security.authentication.otpVerifyLimit,
+            windowMs: OTP_VERIFY_WINDOW_MS,
+            metadata: { userId: String(user._id) },
+        });
+        if (!verifyLimit.allowed) {
             await logOtpFailure({ user, req, reason: 'otp_rate_limited' });
             respondOtpError(res, 429, 'OTP_RATE_LIMITED', 'Too many OTP verification requests. Please wait and try again.', {
                 attemptsRemaining: 0,
@@ -791,28 +875,12 @@ export async function verify2fa(req: Request, res: Response): Promise<void> {
             return;
         }
 
-        const security = await getSecurityConfig(true);
-        const otpDoc = await OtpVerification.findOne({
-            user_id: user._id,
-            verified: false,
-        }).sort({ createdAt: -1 });
-
-        if (!otpDoc) {
-            await logOtpFailure({ user, req, reason: 'otp_not_found' });
-            respondOtpError(res, 400, 'OTP_NOT_FOUND', 'No pending OTP found. Please login again.');
-            return;
-        }
-
-        if (otpDoc.expires_at.getTime() < Date.now()) {
-            await logOtpFailure({ user, req, reason: 'otp_expired' });
-            respondOtpError(res, 401, 'OTP_EXPIRED', 'OTP has expired. Please login again.');
-            return;
-        }
-
-        if (otpDoc.attempt_count >= security.maxOtpAttempts) {
+        if (tokenDoc.attempts >= Math.min(tokenDoc.maxAttempts, security.maxOtpAttempts)) {
             const lockMinutes = Math.max(1, security.loginProtection.lockoutMinutes);
             const lockUntil = new Date(Date.now() + lockMinutes * 60 * 1000);
             user.lockUntil = lockUntil;
+            user.lockReason = 'otp_max_attempts';
+            user.lastLockAt = new Date();
             await user.save();
             await logOtpFailure({ user, req, reason: 'otp_max_attempts' });
             respondOtpError(res, 423, 'OTP_MAX_ATTEMPTS', `Too many failed attempts. Account locked for ${lockMinutes} minutes.`, {
@@ -823,14 +891,28 @@ export async function verify2fa(req: Request, res: Response): Promise<void> {
         }
 
         const normalizedOtp = String(otp || '').replace(/\D/g, '');
-        const otpHash = hashOtpCode(normalizedOtp);
         const isDefaultTestOtp = security.allowTestOtp && normalizedOtp === security.testOtpCode;
+        const challengeMethod = normalizeTwoFactorMethod(tokenDoc.channel || tokenDoc.meta?.method, security.default2faMethod);
+        let verified = false;
 
-        if (otpHash !== otpDoc.otp_code && !isDefaultTestOtp) {
-            otpDoc.attempt_count += 1;
-            await otpDoc.save();
+        if (challengeMethod === 'authenticator') {
+            verified = Boolean(user.twoFactorSecret && verifyTotpCode(user.twoFactorSecret, normalizedOtp));
+            if (!verified) {
+                const backupResult = consumeBackupCode(user.twoFactorBackupCodes, normalizedOtp);
+                if (backupResult.ok) {
+                    user.twoFactorBackupCodes = backupResult.nextCodes;
+                    verified = true;
+                }
+            }
+        } else {
+            const expectedHash = String(tokenDoc.meta?.otpHash || '');
+            const otpHash = hashOtpCode(normalizedOtp);
+            verified = otpHash === expectedHash || isDefaultTestOtp;
+        }
 
-            const attemptsRemaining = Math.max(0, security.maxOtpAttempts - otpDoc.attempt_count);
+        if (!verified) {
+            const updatedToken = await incrementSecurityTokenAttempts(tokenDoc);
+            const attemptsRemaining = Math.max(0, Math.min(updatedToken.maxAttempts, security.maxOtpAttempts) - updatedToken.attempts);
             await logOtpFailure({
                 user,
                 req,
@@ -841,17 +923,18 @@ export async function verify2fa(req: Request, res: Response): Promise<void> {
             return;
         }
 
-        otpDoc.verified = true;
-        await otpDoc.save();
+        await markSecurityTokenConsumed(tokenDoc);
 
-        clearRateLimit(verifyBucket);
-        clearRateLimit(`otp_resend:${String(user._id)}`);
+        await clearOtpRateLimits(String(user._id));
 
         user.loginAttempts = 0;
         user.lockUntil = undefined;
+        user.lockReason = null;
         user.lastLogin = new Date();
+        user.lastLoginAtUTC = new Date();
         user.ip_address = getClientIp(req);
         user.device_info = getDeviceInfo(req);
+        user.twoFactorLastVerifiedAt = new Date();
         if (!user.permissions) {
             user.permissions = resolvePermissions(user.role);
         }
@@ -885,27 +968,28 @@ export async function resendOtp(req: Request, res: Response): Promise<void> {
             return;
         }
 
-        let decoded: { _id: string; purpose?: string };
-        try {
-            decoded = jwt.verify(tempToken, JWT_SECRET) as { _id: string; purpose?: string };
-        } catch {
+        const tokenDoc = await findValidSecurityToken(tempToken, 'two_factor_pending');
+        if (!tokenDoc) {
             respondOtpError(res, 401, 'OTP_SESSION_INVALID', 'Expired session. Please login again.');
             return;
         }
 
-        if (decoded.purpose !== '2fa_pending') {
-            respondOtpError(res, 400, 'OTP_SESSION_INVALID', 'Invalid verification token');
-            return;
-        }
-
-        const user = await User.findById(decoded._id);
+        const user = await User.findById(tokenDoc.userId).select('+twoFactorSecret');
         if (!user) {
             respondOtpError(res, 404, 'OTP_USER_NOT_FOUND', 'User not found');
             return;
         }
 
         const resendBucket = `otp_resend:${String(user._id)}`;
-        if (!consumeRateLimit(resendBucket, OTP_RESEND_MAX_REQUESTS, OTP_RESEND_WINDOW_MS)) {
+        const security = await getSecurityConfig(true);
+        const resendLimit = await consumeOtpRateLimit({
+            bucket: 'otp_resend',
+            scopeKey: resendBucket,
+            maxAllowed: security.authentication.otpResendLimit,
+            windowMs: OTP_RESEND_WINDOW_MS,
+            metadata: { userId: String(user._id) },
+        });
+        if (!resendLimit.allowed) {
             await logOtpFailure({ user, req, reason: 'otp_rate_limited' });
             respondOtpError(res, 429, 'OTP_RATE_LIMITED', 'Too many OTP resend requests. Please wait and try again.', {
                 attemptsRemaining: 0,
@@ -913,7 +997,6 @@ export async function resendOtp(req: Request, res: Response): Promise<void> {
             return;
         }
 
-        const security = await getSecurityConfig(true);
         const challenge = await issueOtpChallenge(user, security);
 
         res.json({
@@ -1066,149 +1149,6 @@ export async function forceLogoutUser(req: AuthRequest, res: Response): Promise<
     }
 }
 
-export async function getSecuritySettings(_req: Request, res: Response): Promise<void> {
-    try {
-        const config = await getSecurityConfig(true);
-        res.json({
-            security: {
-                singleBrowserLogin: config.singleBrowserLogin,
-                forceLogoutOnNewLogin: config.forceLogoutOnNewLogin,
-                enable2faAdmin: config.enable2faAdmin,
-                enable2faStudent: config.enable2faStudent,
-                force2faSuperAdmin: config.force2faSuperAdmin,
-                default2faMethod: config.default2faMethod,
-                otpExpiryMinutes: config.otpExpiryMinutes,
-                maxOtpAttempts: config.maxOtpAttempts,
-                ipChangeAlert: config.ipChangeAlert,
-                allowLegacyTokens: config.allowLegacyTokens,
-                strictExamTabLock: config.strictExamTabLock,
-                strictTokenHashValidation: config.strictTokenHashValidation,
-            },
-        });
-    } catch (error) {
-        console.error('getSecuritySettings error:', error);
-        res.status(500).json({ message: 'Server error' });
-    }
-}
-
-export async function updateSecuritySettings(req: AuthRequest, res: Response): Promise<void> {
-    try {
-        const updates = req.body as Record<string, unknown>;
-        const allowedFields = [
-            'singleBrowserLogin', 'forceLogoutOnNewLogin',
-            'enable2faAdmin', 'enable2faStudent', 'force2faSuperAdmin',
-            'default2faMethod', 'otpExpiryMinutes', 'maxOtpAttempts', 'ipChangeAlert',
-            'allowLegacyTokens', 'strictExamTabLock', 'strictTokenHashValidation',
-        ];
-        const booleanFields = [
-            'singleBrowserLogin', 'forceLogoutOnNewLogin',
-            'enable2faAdmin', 'enable2faStudent', 'force2faSuperAdmin',
-            'ipChangeAlert', 'allowLegacyTokens', 'strictExamTabLock', 'strictTokenHashValidation',
-        ];
-
-        const unknownKeys = Object.keys(updates).filter((key) => !allowedFields.includes(key));
-        if (unknownKeys.length) {
-            res.status(400).json({ message: `Unknown security keys: ${unknownKeys.join(', ')}` });
-            return;
-        }
-
-        for (const field of booleanFields) {
-            if (updates[field] !== undefined && typeof updates[field] !== 'boolean') {
-                res.status(400).json({ message: `${field} must be boolean` });
-                return;
-            }
-        }
-
-        if (updates.default2faMethod !== undefined) {
-            const method = String(updates.default2faMethod).trim().toLowerCase();
-            if (!['email', 'sms', 'authenticator'].includes(method)) {
-                res.status(400).json({ message: 'default2faMethod must be one of email|sms|authenticator' });
-                return;
-            }
-            updates.default2faMethod = method;
-        }
-
-        if (updates.otpExpiryMinutes !== undefined) {
-            const value = Number(updates.otpExpiryMinutes);
-            if (!Number.isInteger(value) || value <= 0) {
-                res.status(400).json({ message: 'otpExpiryMinutes must be a positive integer' });
-                return;
-            }
-            updates.otpExpiryMinutes = value;
-        }
-
-        if (updates.maxOtpAttempts !== undefined) {
-            const value = Number(updates.maxOtpAttempts);
-            if (!Number.isInteger(value) || value <= 0) {
-                res.status(400).json({ message: 'maxOtpAttempts must be a positive integer' });
-                return;
-            }
-            updates.maxOtpAttempts = value;
-        }
-
-        const securityUpdate: Record<string, unknown> = {};
-        if (updates.enable2faAdmin !== undefined || updates.force2faSuperAdmin !== undefined) {
-            securityUpdate.adminAccess = {
-                require2FAForAdmins: Boolean(updates.enable2faAdmin ?? updates.force2faSuperAdmin),
-            };
-        }
-        if (updates.otpExpiryMinutes !== undefined || updates.maxOtpAttempts !== undefined) {
-            securityUpdate.loginProtection = {
-                lockoutMinutes: Number(updates.otpExpiryMinutes || 5),
-                maxAttempts: Number(updates.maxOtpAttempts || 5),
-            };
-        }
-        if (updates.strictExamTabLock !== undefined) {
-            securityUpdate.examProtection = {
-                logTabSwitch: Boolean(updates.strictExamTabLock),
-            };
-        }
-
-        if (Object.keys(securityUpdate).length > 0) {
-            await updateSecuritySettingsSnapshot(
-                securityUpdate as {
-                    adminAccess?: { require2FAForAdmins: boolean };
-                    loginProtection?: { lockoutMinutes: number; maxAttempts: number };
-                    examProtection?: { logTabSwitch: boolean };
-                },
-                req.user?._id
-            );
-        }
-        invalidateSecurityConfigCache();
-
-        await AuditLog.create({
-            actor_id: req.user?._id,
-            actor_role: req.user?.role,
-            action: 'update_security_settings',
-            target_type: 'settings',
-            ip_address: getClientIp(req),
-            details: updates,
-        });
-
-        const newConfig = await getSecurityConfig(true);
-        res.json({
-            message: 'Security settings updated',
-            security: {
-                singleBrowserLogin: newConfig.singleBrowserLogin,
-                forceLogoutOnNewLogin: newConfig.forceLogoutOnNewLogin,
-                enable2faAdmin: newConfig.enable2faAdmin,
-                enable2faStudent: newConfig.enable2faStudent,
-                force2faSuperAdmin: newConfig.force2faSuperAdmin,
-                default2faMethod: newConfig.default2faMethod,
-                otpExpiryMinutes: newConfig.otpExpiryMinutes,
-                maxOtpAttempts: newConfig.maxOtpAttempts,
-                ipChangeAlert: newConfig.ipChangeAlert,
-                allowLegacyTokens: newConfig.allowLegacyTokens,
-                strictExamTabLock: newConfig.strictExamTabLock,
-                strictTokenHashValidation: newConfig.strictTokenHashValidation,
-            },
-        });
-    } catch (error) {
-        console.error('updateSecuritySettings error:', error);
-        res.status(500).json({ message: 'Server error' });
-    }
-}
-
 export async function getTwoFactorUsers(req: AuthRequest, res: Response): Promise<void> {
     try {
         const query = req.query as Record<string, string>;
@@ -1338,7 +1278,7 @@ export async function updateTwoFactorUser(req: AuthRequest, res: Response): Prom
 export async function resetTwoFactorUser(req: AuthRequest, res: Response): Promise<void> {
     try {
         const { id } = req.params;
-        const user = await User.findById(id).select('+twoFactorSecret');
+        const user = await User.findById(id).select('+twoFactorSecret +twoFactorBackupCodes');
         if (!user) {
             res.status(404).json({ message: 'User not found' });
             return;
@@ -1347,9 +1287,12 @@ export async function resetTwoFactorUser(req: AuthRequest, res: Response): Promi
         user.twoFactorEnabled = false;
         user.two_factor_method = null;
         user.twoFactorSecret = undefined;
+        user.twoFactorBackupCodes = [];
+        user.twoFactorRecoveryLastIssuedAt = null;
+        user.twoFactorLastVerifiedAt = null;
         await user.save();
 
-        await OtpVerification.deleteMany({ user_id: user._id, verified: false });
+        await invalidateSecurityTokens({ userId: user._id, purpose: 'two_factor_pending' });
 
         await AuditLog.create({
             actor_id: req.user?._id,
@@ -1474,7 +1417,7 @@ export async function register(req: Request, res: Response): Promise<void> {
             return;
         }
 
-        const passwordPolicyResult = isPasswordCompliant(password, security.passwordPolicy);
+        const passwordPolicyResult = isPasswordCompliant(password, security.passwordPolicies.student);
         if (!passwordPolicyResult.ok) {
             res.status(400).json({ message: passwordPolicyResult.message || 'Password does not meet policy requirements.' });
             return;
@@ -1499,6 +1442,8 @@ export async function register(req: Request, res: Response): Promise<void> {
             phone_number: phone || undefined,
             permissions: resolvePermissions('student'),
             permissionsV2: resolvePermissionsV2('student'),
+            emailVerificationPendingAt: new Date(),
+            passwordExpiresAt: calculatePasswordExpiryDate(security.passwordPolicies.student),
         });
 
         await StudentProfile.create({
@@ -1511,12 +1456,13 @@ export async function register(req: Request, res: Response): Promise<void> {
             profile_completion_percentage: 10,
         });
 
-        const verifyToken = crypto.randomBytes(32).toString('hex');
-        await PasswordReset.create({
-            user_id: newUser._id,
-            token: verifyToken,
-            expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        const { rawToken: verifyToken } = await issueSecurityToken({
+            userId: newUser._id,
             purpose: 'email_verification',
+            expiresAt: new Date(Date.now() + security.verificationRecovery.emailVerificationExpiryHours * 60 * 60 * 1000),
+            channel: 'email',
+            meta: { email },
+            replaceExisting: true,
         });
 
         const verifyUrl = `${APP_DOMAIN}/api/auth/verify?token=${verifyToken}`;
@@ -1524,7 +1470,7 @@ export async function register(req: Request, res: Response): Promise<void> {
             to: email,
             subject: 'CampusWay: Verify your email',
             text: `Verify your email: ${verifyUrl}`,
-            html: `<p>Hello ${fullName},</p><p>Please verify your email by clicking the link below:</p><p><a href="${verifyUrl}">${verifyUrl}</a></p><p>This link expires in 24 hours.</p>`,
+            html: `<p>Hello ${fullName},</p><p>Please verify your email by clicking the link below:</p><p><a href="${verifyUrl}">${verifyUrl}</a></p><p>This link expires in ${security.verificationRecovery.emailVerificationExpiryHours} hours.</p>`,
         });
 
         res.status(201).json({
@@ -1622,21 +1568,23 @@ export async function verifyEmail(req: Request, res: Response): Promise<void> {
             return;
         }
 
-        const tokenDoc = await PasswordReset.findOne({ token, purpose: 'email_verification' });
-        if (!tokenDoc || tokenDoc.expires_at < new Date()) {
+        const tokenDoc = await findValidSecurityToken(token, 'email_verification');
+        if (!tokenDoc) {
             res.status(400).json({ message: 'Invalid or expired token' });
             return;
         }
 
-        const user = await User.findById(tokenDoc.user_id);
+        const user = await User.findById(tokenDoc.userId);
         if (!user) {
             res.status(404).json({ message: 'User not found' });
             return;
         }
 
         user.status = 'active';
+        user.emailVerifiedAt = new Date();
+        user.emailVerificationPendingAt = null;
         await user.save();
-        await PasswordReset.deleteOne({ _id: tokenDoc._id });
+        await markSecurityTokenConsumed(tokenDoc);
 
         res.json({ message: 'Email verified successfully' });
     } catch (error) {
@@ -1665,13 +1613,14 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
             return;
         }
 
-        await PasswordReset.deleteMany({ user_id: user._id, purpose: 'reset_password' });
-        const resetToken = crypto.randomBytes(32).toString('hex');
-        await PasswordReset.create({
-            user_id: user._id,
-            token: resetToken,
-            expires_at: new Date(Date.now() + 60 * 60 * 1000),
-            purpose: 'reset_password',
+        const security = await getSecurityConfig(true);
+        const { rawToken: resetToken } = await issueSecurityToken({
+            userId: user._id,
+            purpose: 'password_reset',
+            expiresAt: new Date(Date.now() + security.verificationRecovery.passwordResetExpiryMinutes * 60 * 1000),
+            channel: 'email',
+            meta: { email: user.email, username: user.username },
+            replaceExisting: true,
         });
 
         const resetUrl = `${APP_DOMAIN}/student/reset-password?token=${resetToken}`;
@@ -1679,7 +1628,7 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
             to: user.email,
             subject: 'CampusWay: Password reset request',
             text: `Reset your password: ${resetUrl}`,
-            html: `<p>Hello ${user.full_name || user.username},</p><p>Use this link to reset your CampusWay password:</p><p><a href="${resetUrl}">${resetUrl}</a></p><p>This link expires in 1 hour.</p>`,
+            html: `<p>Hello ${user.full_name || user.username},</p><p>Use this link to reset your CampusWay password:</p><p><a href="${resetUrl}">${resetUrl}</a></p><p>This link expires in ${security.verificationRecovery.passwordResetExpiryMinutes} minutes.</p>`,
         });
 
         res.json({ message: 'If the account exists, a password reset link has been sent.' });
@@ -1693,37 +1642,41 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
     try {
         const token = String(req.body.token || '').trim();
         const newPassword = String(req.body.newPassword || '');
-        const security = await getSecurityConfig(true);
 
         if (!token) {
             res.status(400).json({ message: 'Valid token and new password are required' });
             return;
         }
 
-        const passwordPolicyResult = isPasswordCompliant(newPassword, security.passwordPolicy);
-        if (!passwordPolicyResult.ok) {
-            res.status(400).json({ message: passwordPolicyResult.message || 'Password does not meet policy requirements.' });
-            return;
-        }
-
-        const tokenDoc = await PasswordReset.findOne({ token, purpose: 'reset_password' });
-        if (!tokenDoc || tokenDoc.expires_at < new Date()) {
+        const tokenDoc =
+            await findValidSecurityToken(token, 'password_reset') ||
+            await findValidSecurityToken(token, 'set_password');
+        if (!tokenDoc) {
             res.status(400).json({ message: 'Invalid or expired token' });
             return;
         }
 
-        const user = await User.findById(tokenDoc.user_id).select('+password');
+        const user = await User.findById(tokenDoc.userId).select('+password +passwordHistory');
         if (!user) {
             res.status(404).json({ message: 'User not found' });
             return;
         }
 
-        user.password = await bcrypt.hash(newPassword, 12);
-        user.mustChangePassword = false;
+        const security = await getSecurityConfig(true);
+        const passwordPolicy = getPasswordPolicyForUserRole(security, user.role);
+        const passwordPolicyResult = isPasswordCompliant(newPassword, passwordPolicy);
+        if (!passwordPolicyResult.ok) {
+            res.status(400).json({ message: passwordPolicyResult.message || 'Password does not meet policy requirements.' });
+            return;
+        }
+
+        const nextPasswordHash = await bcrypt.hash(newPassword, 12);
+        await applyPasswordSecurityState(user, nextPasswordHash, 'reset', passwordPolicy);
         user.loginAttempts = 0;
         user.lockUntil = undefined;
-        user.password_updated_at = new Date();
         await user.save();
+        await markSecurityTokenConsumed(tokenDoc);
+        await invalidateSecurityTokens({ userId: user._id, purpose: tokenDoc.purpose });
         await terminateSessionsForUser(String(user._id), 'password_reset', {
             initiatedBy: String(user._id),
             meta: { trigger: 'reset_password' },
@@ -1785,6 +1738,11 @@ export async function getMe(req: AuthRequest, res: Response): Promise<void> {
                 role: user.role,
                 fullName,
                 status: user.status,
+                emailVerified: Boolean(user.emailVerifiedAt),
+                phoneVerified: Boolean(user.phoneVerifiedAt),
+                twoFactorEnabled: Boolean(user.twoFactorEnabled),
+                twoFactorMethod: user.two_factor_method || null,
+                passwordExpiresAt: user.passwordExpiresAt || null,
                 permissions: user.permissions,
                 permissionsV2: user.permissionsV2 || resolvePermissionsV2(user.role),
                 mustChangePassword: user.mustChangePassword,
@@ -1817,13 +1775,14 @@ export async function changePassword(req: AuthRequest, res: Response): Promise<v
         }
 
         const security = await getSecurityConfig(true);
-        const passwordPolicyResult = isPasswordCompliant(newPassword, security.passwordPolicy);
+        const passwordPolicy = getPasswordPolicyForUserRole(security, req.user.role);
+        const passwordPolicyResult = isPasswordCompliant(newPassword, passwordPolicy);
         if (!passwordPolicyResult.ok) {
             res.status(400).json({ message: passwordPolicyResult.message || 'Password does not meet policy requirements.' });
             return;
         }
 
-        const user = await User.findById(req.user._id).select('+password');
+        const user = await User.findById(req.user._id).select('+password +passwordHistory');
         if (!user || ['suspended', 'blocked'].includes(user.status)) {
             res.status(404).json({ message: 'User not found' });
             return;
@@ -1836,14 +1795,9 @@ export async function changePassword(req: AuthRequest, res: Response): Promise<v
             return;
         }
 
-        user.password = await bcrypt.hash(newPassword, 12);
-        user.mustChangePassword = false;
-        user.password_updated_at = new Date();
-        user.passwordLastChangedAtUTC = new Date();
-        user.passwordChangedByType = 'user';
-        user.forcePasswordResetRequired = false;
+        const nextPasswordHash = await bcrypt.hash(newPassword, 12);
+        await applyPasswordSecurityState(user, nextPasswordHash, 'user', passwordPolicy);
         await user.save();
-        await upsertCredentialMirror(user._id, newPassword, user._id);
         await terminateSessionsForUser(String(user._id), 'password_changed', {
             initiatedBy: String(user._id),
             meta: { trigger: 'change_password' },
@@ -1861,6 +1815,276 @@ export async function changePassword(req: AuthRequest, res: Response): Promise<v
         res.json({ message: 'Password changed successfully' });
     } catch (error) {
         console.error('changePassword error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+}
+
+export async function getMySecuritySessions(req: AuthRequest, res: Response): Promise<void> {
+    try {
+        if (!req.user) {
+            res.status(401).json({ message: 'Not authenticated' });
+            return;
+        }
+
+        const sessions = await ActiveSession.find({ user_id: req.user._id })
+            .sort({ last_activity: -1 })
+            .limit(25)
+            .lean();
+
+        res.json({
+            sessions: sessions.map((session) => ({
+                sessionId: session.session_id,
+                status: session.status,
+                current: session.session_id === req.user?.sessionId,
+                loginAt: session.login_time,
+                lastActiveAt: session.last_activity,
+                ipAddress: session.ip_address || '',
+                deviceInfo: session.device_type || '',
+                browser: session.browser || '',
+                platform: session.platform || '',
+                locationSummary: session.location_summary || '',
+                riskScore: session.risk_score || 0,
+                riskFlags: Array.isArray(session.risk_flags) ? session.risk_flags : [],
+            })),
+        });
+    } catch (error) {
+        console.error('getMySecuritySessions error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+}
+
+export async function revokeMySecuritySession(req: AuthRequest, res: Response): Promise<void> {
+    try {
+        if (!req.user) {
+            res.status(401).json({ message: 'Not authenticated' });
+            return;
+        }
+
+        const sessionId = String(req.params.sessionId || req.body?.sessionId || '').trim();
+        if (!sessionId) {
+            res.status(400).json({ message: 'sessionId is required' });
+            return;
+        }
+
+        const result = await terminateSessions({
+            filter: { user_id: req.user._id, session_id: sessionId },
+            reason: 'user_revoked_session',
+            initiatedBy: req.user._id,
+            meta: { trigger: 'self_security_session_revoke' },
+        });
+
+        await AuditLog.create({
+            actor_id: req.user._id,
+            actor_role: req.user.role,
+            action: 'self_session_revoked',
+            target_type: 'session',
+            ip_address: getClientIp(req),
+            details: { sessionId, terminatedCount: result.terminatedCount },
+        });
+
+        res.json({ message: 'Session revoked successfully', terminatedCount: result.terminatedCount });
+    } catch (error) {
+        console.error('revokeMySecuritySession error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+}
+
+export async function logoutAllMySessions(req: AuthRequest, res: Response): Promise<void> {
+    try {
+        if (!req.user) {
+            res.status(401).json({ message: 'Not authenticated' });
+            return;
+        }
+
+        const result = await terminateSessionsForUser(String(req.user._id), 'self_logout_all', {
+            initiatedBy: req.user._id,
+            meta: { trigger: 'self_security_logout_all' },
+        });
+
+        await AuditLog.create({
+            actor_id: req.user._id,
+            actor_role: req.user.role,
+            action: 'self_logout_all_sessions',
+            target_type: 'user',
+            ip_address: getClientIp(req),
+            details: { terminatedCount: result.terminatedCount },
+        });
+
+        res.json({ message: 'Logged out from all devices', terminatedCount: result.terminatedCount });
+    } catch (error) {
+        console.error('logoutAllMySessions error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+}
+
+export async function beginTotpSetup(req: AuthRequest, res: Response): Promise<void> {
+    try {
+        if (!req.user) {
+            res.status(401).json({ message: 'Not authenticated' });
+            return;
+        }
+
+        const currentPassword = String(req.body?.currentPassword || '');
+        const user = await User.findById(req.user._id).select('+password +twoFactorSecret +twoFactorBackupCodes');
+        if (!user) {
+            res.status(404).json({ message: 'User not found' });
+            return;
+        }
+
+        if (!currentPassword || !(await bcrypt.compare(currentPassword, user.password))) {
+            res.status(400).json({ message: 'Current password is incorrect' });
+            return;
+        }
+
+        const secret = generateTotpSecret();
+        const backupCodes = generateBackupCodes(8);
+        user.twoFactorEnabled = false;
+        user.two_factor_method = 'authenticator';
+        user.twoFactorSecret = secret;
+        user.twoFactorBackupCodes = backupCodes.hashedCodes;
+        user.twoFactorRecoveryLastIssuedAt = new Date();
+        await user.save();
+
+        await AuditLog.create({
+            actor_id: user._id,
+            actor_role: user.role,
+            action: 'two_factor_setup_started',
+            target_id: user._id,
+            target_type: 'user',
+            ip_address: getClientIp(req),
+        });
+
+        res.json({
+            secret,
+            otpAuthUrl: buildTotpOtpAuthUrl({
+                accountName: user.email || user.username,
+                secret,
+            }),
+            backupCodes: backupCodes.plainCodes,
+        });
+    } catch (error) {
+        console.error('beginTotpSetup error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+}
+
+export async function confirmTotpSetup(req: AuthRequest, res: Response): Promise<void> {
+    try {
+        if (!req.user) {
+            res.status(401).json({ message: 'Not authenticated' });
+            return;
+        }
+
+        const code = String(req.body?.code || '').trim();
+        const user = await User.findById(req.user._id).select('+twoFactorSecret +twoFactorBackupCodes');
+        if (!user || !user.twoFactorSecret) {
+            res.status(400).json({ message: 'No pending authenticator setup found' });
+            return;
+        }
+        if (!verifyTotpCode(user.twoFactorSecret, code)) {
+            res.status(400).json({ message: 'Invalid authenticator code' });
+            return;
+        }
+
+        user.twoFactorEnabled = true;
+        user.two_factor_method = 'authenticator';
+        user.twoFactorLastVerifiedAt = new Date();
+        await user.save();
+
+        await AuditLog.create({
+            actor_id: user._id,
+            actor_role: user.role,
+            action: 'two_factor_enabled',
+            target_id: user._id,
+            target_type: 'user',
+            ip_address: getClientIp(req),
+        });
+
+        res.json({ message: 'Authenticator app enabled successfully' });
+    } catch (error) {
+        console.error('confirmTotpSetup error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+}
+
+export async function regenerateBackupCodes(req: AuthRequest, res: Response): Promise<void> {
+    try {
+        if (!req.user) {
+            res.status(401).json({ message: 'Not authenticated' });
+            return;
+        }
+
+        const currentPassword = String(req.body?.currentPassword || '');
+        const user = await User.findById(req.user._id).select('+password +twoFactorBackupCodes +twoFactorSecret');
+        if (!user || !user.twoFactorEnabled) {
+            res.status(404).json({ message: 'User not found or 2FA is not enabled' });
+            return;
+        }
+        if (!currentPassword || !(await bcrypt.compare(currentPassword, user.password))) {
+            res.status(400).json({ message: 'Current password is incorrect' });
+            return;
+        }
+
+        const backupCodes = generateBackupCodes(8);
+        user.twoFactorBackupCodes = backupCodes.hashedCodes;
+        user.twoFactorRecoveryLastIssuedAt = new Date();
+        await user.save();
+
+        await AuditLog.create({
+            actor_id: user._id,
+            actor_role: user.role,
+            action: 'two_factor_backup_codes_regenerated',
+            target_id: user._id,
+            target_type: 'user',
+            ip_address: getClientIp(req),
+        });
+
+        res.json({ backupCodes: backupCodes.plainCodes });
+    } catch (error) {
+        console.error('regenerateBackupCodes error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+}
+
+export async function disableTwoFactor(req: AuthRequest, res: Response): Promise<void> {
+    try {
+        if (!req.user) {
+            res.status(401).json({ message: 'Not authenticated' });
+            return;
+        }
+
+        const currentPassword = String(req.body?.currentPassword || '');
+        const user = await User.findById(req.user._id).select('+password +twoFactorSecret +twoFactorBackupCodes');
+        if (!user) {
+            res.status(404).json({ message: 'User not found' });
+            return;
+        }
+        if (!currentPassword || !(await bcrypt.compare(currentPassword, user.password))) {
+            res.status(400).json({ message: 'Current password is incorrect' });
+            return;
+        }
+
+        user.twoFactorEnabled = false;
+        user.two_factor_method = null;
+        user.twoFactorSecret = undefined;
+        user.twoFactorBackupCodes = [];
+        user.twoFactorRecoveryLastIssuedAt = null;
+        user.twoFactorLastVerifiedAt = null;
+        await user.save();
+        await invalidateSecurityTokens({ userId: user._id, purpose: 'two_factor_pending' });
+
+        await AuditLog.create({
+            actor_id: user._id,
+            actor_role: user.role,
+            action: 'two_factor_disabled',
+            target_id: user._id,
+            target_type: 'user',
+            ip_address: getClientIp(req),
+        });
+
+        res.json({ message: 'Two-factor authentication disabled' });
+    } catch (error) {
+        console.error('disableTwoFactor error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 }

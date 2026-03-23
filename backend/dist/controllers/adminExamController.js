@@ -57,7 +57,6 @@ exports.adminDeleteQuestion = adminDeleteQuestion;
 exports.adminReorderQuestions = adminReorderQuestions;
 exports.adminImportQuestionsFromExcel = adminImportQuestionsFromExcel;
 exports.adminGetExamAnalytics = adminGetExamAnalytics;
-exports.adminMfaConfirm = adminMfaConfirm;
 exports.adminExportExamResults = adminExportExamResults;
 exports.adminDownloadExamResultsImportTemplate = adminDownloadExamResultsImportTemplate;
 exports.adminImportExamResults = adminImportExamResults;
@@ -77,7 +76,6 @@ exports.adminLiveAttemptAction = adminLiveAttemptAction;
 const XLSX = __importStar(require("xlsx"));
 const exceljs_1 = __importDefault(require("exceljs"));
 const pdfkit_1 = __importDefault(require("pdfkit"));
-const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const mongoose_1 = __importDefault(require("mongoose"));
 const Exam_1 = __importDefault(require("../models/Exam"));
 const Question_1 = __importDefault(require("../models/Question"));
@@ -91,6 +89,8 @@ const StudentProfile_1 = __importDefault(require("../models/StudentProfile"));
 const ExternalExamJoinLog_1 = __importDefault(require("../models/ExternalExamJoinLog"));
 const AnnouncementNotice_1 = __importDefault(require("../models/AnnouncementNotice"));
 const Notification_1 = __importDefault(require("../models/Notification"));
+const AuditLog_1 = __importDefault(require("../models/AuditLog"));
+const sensitiveAction_1 = require("../middlewares/sensitiveAction");
 const studentDashboardStream_1 = require("../realtime/studentDashboardStream");
 const examController_1 = require("./examController");
 const examAttemptStream_1 = require("../realtime/examAttemptStream");
@@ -99,6 +99,9 @@ const uploadProvider_1 = require("../services/uploadProvider");
 const examCardMetricsService_1 = require("../services/examCardMetricsService");
 const studentProfileScoreService_1 = require("../services/studentProfileScoreService");
 const externalExamAttemptService_1 = require("../services/externalExamAttemptService");
+const examProfileSyncEngine_1 = require("../services/examProfileSyncEngine");
+const subscriptionAccessService_1 = require("../services/subscriptionAccessService");
+const requestMeta_1 = require("../utils/requestMeta");
 function asStudent(s) { return s; }
 function asRecordObject(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -528,7 +531,7 @@ async function syncImportedStudentProfile(input) {
     }, { upsert: true });
     return Object.keys(userUpdates).length > 0 || Object.keys(profileUpdates).length > 0;
 }
-function isStudentEligibleForExamImport(exam, user, profile) {
+async function isStudentEligibleForExamImport(exam, user, profile) {
     const studentId = String(user._id || '');
     const accessControl = (exam.accessControl && typeof exam.accessControl === 'object')
         ? exam.accessControl
@@ -537,15 +540,9 @@ function isStudentEligibleForExamImport(exam, user, profile) {
     const requiredGroupIds = normalizeObjectIdArray(accessControl.allowedGroupIds);
     const requiredPlanCodes = asStringArray(accessControl.allowedPlanCodes).map((item) => item.toLowerCase());
     const studentGroupIds = normalizeObjectIdArray(profile?.groupIds || []);
-    const studentPlanCode = String(user.subscription?.planCode ||
-        user.subscription?.plan ||
-        '').toLowerCase();
-    const subscriptionExpiry = user.subscription?.expiryDate
-        ? new Date(String(user.subscription?.expiryDate)).getTime()
-        : 0;
-    const subscriptionActive = Boolean(user.subscription?.isActive &&
-        Number.isFinite(subscriptionExpiry) &&
-        subscriptionExpiry > Date.now());
+    const subscriptionSnapshot = await (0, subscriptionAccessService_1.getCanonicalSubscriptionSnapshot)(studentId, user.subscription);
+    const studentPlanCode = subscriptionSnapshot.planCode;
+    const subscriptionActive = subscriptionSnapshot.isActive && subscriptionSnapshot.allowsExams !== false;
     if (String(exam.accessMode || 'all') === 'specific') {
         const allowedUsers = Array.isArray(exam.allowedUsers) ? exam.allowedUsers.map((item) => String(item)) : [];
         if (!allowedUsers.includes(studentId)) {
@@ -1340,37 +1337,46 @@ async function adminGetExamAnalytics(req, res) {
         res.status(500).json({ message: 'Server error' });
     }
 }
-/* ─────── MFA CONFIRMATION ─────── */
-async function adminMfaConfirm(req, res) {
-    try {
-        const { password } = req.body;
-        if (!password) {
-            res.status(400).json({ message: 'Password required for MFA confirmation.' });
-            return;
-        }
-        const user = await User_1.default.findById(req.user._id).select('+password');
-        if (!user) {
-            res.status(404).json({ message: 'User not found' });
-            return;
-        }
-        const isMatch = await bcryptjs_1.default.compare(password, user.password);
-        if (!isMatch) {
-            res.status(401).json({ message: 'Invalid password. MFA failed.' });
-            return;
-        }
-        // Generate a simple short-lived token (Base64 encoded for simplicity)
-        const mfaToken = Buffer.from(`${user._id}:${Date.now() + 15 * 60 * 1000}`).toString('base64');
-        res.json({ message: 'MFA confirmed successfully.', mfaToken });
+async function writeExamExportAuditLog(req, params) {
+    const actorId = String(req.user?._id || '').trim();
+    if (!mongoose_1.default.Types.ObjectId.isValid(actorId)) {
+        return;
     }
-    catch (err) {
-        console.error('[adminMfaConfirm]', err);
-        res.status(500).json({ message: 'Server error' });
-    }
+    const sensitiveContext = (0, sensitiveAction_1.getSensitiveActionContext)(req);
+    await AuditLog_1.default.create({
+        actor_id: new mongoose_1.default.Types.ObjectId(actorId),
+        actor_role: String(req.user?.role || '').trim(),
+        action: params.action,
+        module: 'reports',
+        status: 'success',
+        target_id: mongoose_1.default.Types.ObjectId.isValid(params.examId) ? new mongoose_1.default.Types.ObjectId(params.examId) : undefined,
+        target_type: 'Exam',
+        requestId: String(req.requestId || '').trim(),
+        sessionId: String(req.user?.sessionId || '').trim(),
+        device: (0, requestMeta_1.getDeviceInfo)(req),
+        reason: sensitiveContext?.reason || '',
+        after: {
+            examId: params.examId,
+            examTitle: params.examTitle,
+            format: params.format,
+            exportedCount: params.exportedCount,
+            groupId: params.groupId || '',
+            usedTwoFactor: Boolean(sensitiveContext?.usedTwoFactor),
+        },
+        ip_address: (0, requestMeta_1.getClientIp)(req),
+        details: {
+            examId: params.examId,
+            examTitle: params.examTitle,
+            format: params.format,
+            exportedCount: params.exportedCount,
+            groupId: params.groupId || '',
+        },
+    });
 }
 /* ─────── EXCEL EXPORT ─────── */
 async function adminExportExamResults(req, res) {
     try {
-        const { examId } = req.params;
+        const examId = String(req.params.examId || '');
         const exam = await Exam_1.default.findById(examId).lean();
         if (!exam) {
             res.status(404).json({ message: 'Exam not found' });
@@ -1451,6 +1457,13 @@ async function adminExportExamResults(req, res) {
             { metric: 'Lowest Score', value: exam.lowestScore },
             { metric: 'Export Date', value: new Date().toLocaleString() }
         ]);
+        await writeExamExportAuditLog(req, {
+            action: 'exam_results_exported',
+            examId,
+            examTitle: String(exam.title || ''),
+            format: 'xlsx',
+            exportedCount: results.length,
+        });
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename="${exam.title.replace(/[^a-z0-9]/gi, '_')}_results.xlsx"`);
         await workbook.xlsx.write(res);
@@ -2028,7 +2041,7 @@ async function adminImportExternalExamResults(req, res) {
             if (!matchedLog) {
                 matchedLog = logByStudentAttempt.get(`${studentId}:${attemptNo}`) || null;
             }
-            const importEligibility = isStudentEligibleForExamImport(exam, user, profile);
+            const importEligibility = await isStudentEligibleForExamImport(exam, user, profile);
             if (!importEligibility.allowed) {
                 errors.push({ rowNo: row.rowNo, identifier, reason: importEligibility.reason || 'Matched student is outside the exam audience.' });
                 continue;
@@ -2072,6 +2085,8 @@ async function adminImportExternalExamResults(req, res) {
                     exam: new mongoose_1.default.Types.ObjectId(examId),
                     student: new mongoose_1.default.Types.ObjectId(studentId),
                     attemptNo,
+                    sourceType: 'external_import',
+                    syncStatus: syncProfileMode === 'none' ? 'pending' : 'synced',
                     answers: [],
                     totalMarks,
                     obtainedMarks,
@@ -2080,6 +2095,17 @@ async function adminImportExternalExamResults(req, res) {
                     unansweredCount,
                     percentage,
                     pointsEarned: Math.round(percentage),
+                    serialId: String(row.data.serial_id || ''),
+                    rollNumber: String(row.data.roll_number || ''),
+                    registrationNumber: String(row.data.registration_id || ''),
+                    admitCardNumber: String(row.data.admit_card_number || ''),
+                    attendanceStatus: String(row.data.attendance_status || ''),
+                    passFail: String(row.data.pass_fail || ''),
+                    resultNote: String(row.data.exam_result_note || ''),
+                    profileUpdateNote: String(row.data.profile_update_note || ''),
+                    examCenterName: String(row.data.exam_center || ''),
+                    examCenterCode: String(row.data.exam_center_code || ''),
+                    subjectMarks: Array.isArray(row.data.subject_marks) ? row.data.subject_marks : [],
                     timeTaken: timeTakenSec,
                     deviceInfo: 'external_import',
                     browserInfo: 'external_import',
@@ -2111,13 +2137,37 @@ async function adminImportExternalExamResults(req, res) {
                     matchedBy: matchedBy || 'attempt_ref',
                 });
             }
-            const profileChanged = await syncImportedStudentProfile({
-                user,
-                profile,
-                row: row.data,
-                mode: syncProfileMode,
+            const syncResult = await (0, examProfileSyncEngine_1.syncExamResultToStudentProfile)({
+                exam: exam,
+                result: resultDoc,
+                studentId,
+                source: 'external_import',
+                syncMode: syncProfileMode,
+                createdBy: String(req.user?._id || ''),
+                candidates: {
+                    serialId: row.data.serial_id,
+                    rollNumber: row.data.roll_number,
+                    registrationNumber: row.data.registration_id,
+                    admitCardNumber: row.data.admit_card_number,
+                    fullName: row.data.full_name,
+                    email: row.data.email,
+                    phoneNumber: row.data.phone_number,
+                    institutionName: row.data.institution_name,
+                    department: row.data.department,
+                    sscBatch: row.data.ssc_batch,
+                    hscBatch: row.data.hsc_batch,
+                    guardianName: row.data.guardian_name,
+                    guardianPhone: row.data.guardian_phone,
+                    examCenter: row.data.exam_center,
+                    examResultNote: row.data.exam_result_note,
+                    profileUpdateNote: row.data.profile_update_note,
+                    userUniqueId: row.data.user_unique_id,
+                    attendanceStatus: row.data.attendance_status,
+                    passFail: row.data.pass_fail,
+                },
+                notifyStudent: true,
             });
-            if (profileChanged)
+            if (syncResult.changed)
                 profileUpdates++;
         }
         if (inserted === 0 && updated === 0) {
@@ -2164,6 +2214,13 @@ async function adminExportExamReport(req, res) {
         const format = formatRaw === 'csv' || formatRaw === 'pdf' ? formatRaw : 'xlsx';
         const { rows, examTitle } = await buildExamReportRows(examId, groupId);
         const safeTitle = examTitle.replace(/[^a-z0-9]/gi, '_') || `exam_${examId}`;
+        const auditPayload = {
+            action: 'exam_report_exported',
+            examId,
+            examTitle,
+            exportedCount: rows.length,
+            groupId: groupId || undefined,
+        };
         if (format === 'csv') {
             const headers = [
                 'serialNo', 'registration_id', 'roll_number', 'studentId', 'username', 'fullName', 'email',
@@ -2176,12 +2233,20 @@ async function adminExportExamReport(req, res) {
             ];
             res.setHeader('Content-Type', 'text/csv; charset=utf-8');
             res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}_report.csv"`);
+            await writeExamExportAuditLog(req, {
+                ...auditPayload,
+                format: 'csv',
+            });
             res.send(csvRows.join('\n'));
             return;
         }
         if (format === 'pdf') {
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}_report.pdf"`);
+            await writeExamExportAuditLog(req, {
+                ...auditPayload,
+                format: 'pdf',
+            });
             const doc = new pdfkit_1.default({ size: 'A4', margin: 40 });
             doc.pipe(res);
             doc.fontSize(14).text(`Exam Report: ${examTitle}`, { underline: true });
@@ -2223,6 +2288,10 @@ async function adminExportExamReport(req, res) {
         rows.forEach((row) => sheet.addRow(row));
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}_report.xlsx"`);
+        await writeExamExportAuditLog(req, {
+            ...auditPayload,
+            format: 'xlsx',
+        });
         await workbook.xlsx.write(res);
         res.end();
     }

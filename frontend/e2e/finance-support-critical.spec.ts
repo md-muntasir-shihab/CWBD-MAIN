@@ -31,17 +31,12 @@ test.describe('Finance + Support Critical Flows', () => {
     let planCode = '';
     let backupJobId = '';
     let modulesAvailable = true;
-    let canRunPasswordReveal = false;
-    const strictPasswordReveal = process.env.E2E_STRICT_PASSWORD_REVEAL === 'true';
-    let activeAdminCreds = adminCredsCandidates[0];
 
     test.beforeAll(async ({ request }, workerInfo) => {
         test.skip(workerInfo.project.name.includes('mobile'), 'Finance/support critical suite is desktop-only.');
         const loginResult = await apiLoginWithFallback(request, adminCredsCandidates);
         const login = loginResult.login;
-        activeAdminCreds = loginResult.creds;
         adminToken = login.token;
-        canRunPasswordReveal = login.user?.role === 'superadmin';
         const probe = await request.get('/api/campusway-secure-admin/finance/summary', {
             headers: authHeader(adminToken),
         });
@@ -97,49 +92,17 @@ test.describe('Finance + Support Critical Flows', () => {
         expect(assignPlan.status()).toBe(200);
     });
 
-    test('superadmin password reveal requires MFA + reason', async ({ request }) => {
+    test('student password reveal endpoint stays disabled', async ({ request }) => {
         test.skip(!modulesAvailable, 'Finance/support/backup endpoints are not available in current backend runtime.');
-        test.skip(!canRunPasswordReveal, 'Seeded admin is not superadmin; reveal flow is superadmin-only.');
         expect(studentId).toBeTruthy();
-
-        const mfaRes = await request.post('/api/campusway-secure-admin/auth/mfa/confirm', {
-            headers: authHeader(adminToken),
-            data: { password: activeAdminCreds.password },
-        });
-        expect(mfaRes.status()).toBe(200);
-        const mfaBody = await mfaRes.json();
-        const mfaToken = String(mfaBody?.mfaToken || '');
-        expect(mfaToken).toBeTruthy();
 
         const revealRes = await request.post(`/api/campusway-secure-admin/students/${studentId}/password/reveal`, {
             headers: authHeader(adminToken),
             data: {
-                mfaToken,
-                reason: 'E2E validation for password reveal',
+                reason: 'E2E validation for disabled password reveal endpoint',
             },
         });
-
-        if (strictPasswordReveal) {
-            expect(revealRes.status()).toBe(200);
-            const revealBody = await revealRes.json();
-            expect(String(revealBody?.password || '')).toBe(studentPassword);
-            const auditRes = await request.get('/api/campusway-secure-admin/audit-logs?action=user_password_revealed&limit=5', {
-                headers: authHeader(adminToken),
-            });
-            expect(auditRes.status()).toBe(200);
-            return;
-        }
-
-        if (revealRes.status() === 500) {
-            const body = await revealRes.json().catch(async () => ({ message: await revealRes.text() }));
-            const msg = String(body?.message || '');
-            expect(msg).toMatch(/PASSWORD_VAULT_KEY_CURRENT|vault|configured/i);
-            return;
-        }
-
-        expect(revealRes.status()).toBe(200);
-        const revealBody = await revealRes.json();
-        expect(String(revealBody?.password || '')).toBe(studentPassword);
+        expect([404, 410]).toContain(revealRes.status());
     });
 
     test('manual payment and expense entries are accepted', async ({ request }) => {

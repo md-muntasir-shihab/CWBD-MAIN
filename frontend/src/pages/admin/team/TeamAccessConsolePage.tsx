@@ -168,6 +168,8 @@ export default function TeamAccessConsolePage() {
     module: 'news',
     action: 'publish',
     requiresApproval: true,
+    requiredApprovals: 1,
+    description: '',
     approverRoleIds: [] as string[],
   });
 
@@ -632,6 +634,20 @@ export default function TeamAccessConsolePage() {
                   <input type="checkbox" checked={newRule.requiresApproval} onChange={(e) => setNewRule((v) => ({ ...v, requiresApproval: e.target.checked }))} />
                   Requires approval
                 </label>
+                <input
+                  type="number"
+                  min={1}
+                  className="admin-input"
+                  placeholder="Required approvals"
+                  value={newRule.requiredApprovals}
+                  onChange={(e) => setNewRule((v) => ({ ...v, requiredApprovals: Math.max(1, Number(e.target.value || 1)) }))}
+                />
+                <input
+                  className="admin-input md:col-span-2"
+                  placeholder="Description (optional)"
+                  value={newRule.description}
+                  onChange={(e) => setNewRule((v) => ({ ...v, description: e.target.value }))}
+                />
                 <select className="admin-input" multiple value={newRule.approverRoleIds} onChange={(e) => {
                   const ids = Array.from(e.target.selectedOptions).map((item) => item.value);
                   setNewRule((v) => ({ ...v, approverRoleIds: ids }));
@@ -649,7 +665,9 @@ export default function TeamAccessConsolePage() {
                     <th className="px-3 py-2 text-left">Module</th>
                     <th className="px-3 py-2 text-left">Action</th>
                     <th className="px-3 py-2 text-left">Requires</th>
+                    <th className="px-3 py-2 text-left">Count</th>
                     <th className="px-3 py-2 text-left">Approvers</th>
+                    <th className="px-3 py-2 text-left">Description</th>
                     <th className="px-3 py-2 text-left">Actions</th>
                   </tr>
                 </thead>
@@ -659,7 +677,9 @@ export default function TeamAccessConsolePage() {
                       <td className="px-3 py-2">{rule.module}</td>
                       <td className="px-3 py-2">{rule.action}</td>
                       <td className="px-3 py-2">{rule.requiresApproval ? 'Yes' : 'No'}</td>
+                      <td className="px-3 py-2">{rule.requiredApprovals || 1}</td>
                       <td className="px-3 py-2">{rule.approverRoleIds.map((r) => typeof r === 'string' ? r : r.name).join(', ') || '-'}</td>
+                      <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{rule.description || '-'}</td>
                       <td className="px-3 py-2">
                         {canDeleteTeam ? (
                           <button className="rounded bg-rose-600 px-2 py-1 text-xs text-white" onClick={async () => { await teamApi.deleteApprovalRule(rule._id); toast.success('Rule deleted'); await loadApprovalRules(); }}>Delete</button>

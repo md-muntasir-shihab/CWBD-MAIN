@@ -57,7 +57,7 @@ export interface CreateStudentResult {
 }
 export declare function adminSetPassword(opts: AdminSetPasswordOpts): Promise<AdminSetPasswordResult>;
 export declare function createStudentWithPassword(opts: CreateStudentWithPasswordOpts): Promise<CreateStudentResult>;
-export declare function adminResendAccountInfo(studentId: string, channels: ('sms' | 'email')[], tempPassword: string, adminId: string): Promise<{
+export declare function adminResendAccountInfo(studentId: string, channels: ('sms' | 'email')[], adminId: string): Promise<{
     sent: number;
     failed: number;
 }>;
@@ -68,7 +68,13 @@ export declare function studentChangePassword(userId: string, currentPassword: s
     message: string;
 }>;
 export declare function getStudentSecurityMeta(studentId: string): Promise<{
+    userId: string;
+    fullName: string;
+    email: string;
+    phone: string;
+    role: import("../models/User").UserRole;
     passwordSetByAdminId: mongoose.Types.ObjectId | undefined;
+    passwordSetByAdmin: boolean;
     passwordLastChangedAtUTC: Date | undefined;
     passwordChangedByType: "admin" | "user" | undefined;
     forcePasswordResetRequired: boolean;
@@ -80,7 +86,14 @@ export declare function getStudentSecurityMeta(studentId: string): Promise<{
     lockUntil: Date | undefined;
     passwordUpdatedAt: Date | undefined;
     status: import("../models/User").UserStatus;
+    lastLoginAt: Date | undefined;
+    activeSessions: number;
     recentSecurityAudit: (mongoose.FlattenMaps<import("../models/AuditLog").IAuditLog> & Required<{
+        _id: mongoose.Types.ObjectId;
+    }> & {
+        __v: number;
+    })[];
+    recentAudit: (mongoose.FlattenMaps<import("../models/AuditLog").IAuditLog> & Required<{
         _id: mongoose.Types.ObjectId;
     }> & {
         __v: number;

@@ -1,7 +1,4 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const authController_1 = require("../controllers/authController");
@@ -26,15 +23,15 @@ const profileController_1 = require("../controllers/profileController");
 const serviceController_1 = require("../controllers/serviceController");
 const serviceCategoryController_1 = require("../controllers/serviceCategoryController");
 const adminSupportController_1 = require("../controllers/adminSupportController");
+const supportController_1 = require("../controllers/supportController");
 const studentController_1 = require("../controllers/studentController");
 const subscriptionController_1 = require("../controllers/subscriptionController");
 const newsV2Controller_1 = require("../controllers/newsV2Controller");
 const securityCenterController_1 = require("../controllers/securityCenterController");
 const studentHubController_1 = require("../controllers/studentHubController");
-const ContactMessage_1 = __importDefault(require("../models/ContactMessage"));
 const securityRateLimit_2 = require("../middlewares/securityRateLimit");
 const mediaController_1 = require("../controllers/mediaController");
-const adminAlertService_1 = require("../services/adminAlertService");
+const contactController_1 = require("../controllers/contactController");
 const cmsController_3 = require("../controllers/cmsController");
 const socialLinksController_1 = require("../controllers/socialLinksController");
 const analyticsController_1 = require("../controllers/analyticsController");
@@ -59,6 +56,13 @@ router.post('/auth/verify-2fa', authController_1.verify2fa);
 router.post('/auth/resend-otp', authController_1.resendOtp);
 router.get('/auth/session-check', auth_1.authenticate, authController_1.checkSession);
 router.get('/auth/session-stream', auth_1.authenticate, authController_1.sessionStream);
+router.get('/auth/security/sessions', auth_1.authenticate, authController_1.getMySecuritySessions);
+router.delete('/auth/security/sessions/:sessionId', auth_1.authenticate, authController_1.revokeMySecuritySession);
+router.post('/auth/security/logout-all', auth_1.authenticate, authController_1.logoutAllMySessions);
+router.post('/auth/security/2fa/setup', auth_1.authenticate, authController_1.beginTotpSetup);
+router.post('/auth/security/2fa/confirm', auth_1.authenticate, authController_1.confirmTotpSetup);
+router.post('/auth/security/2fa/backup-codes', auth_1.authenticate, authController_1.regenerateBackupCodes);
+router.post('/auth/security/2fa/disable', auth_1.authenticate, authController_1.disableTwoFactor);
 router.get('/auth/oauth/providers', authController_1.getOauthProviders);
 router.get('/auth/oauth/:provider/start', authController_1.startOauth);
 router.get('/auth/oauth/:provider/callback', authController_1.oauthCallback);
@@ -85,8 +89,9 @@ router.get('/settings/public', homeSystemController_1.getSettings);
 router.get('/settings/analytics', analyticsController_1.getPublicAnalyticsSettings);
 router.get('/security/public-config', securityCenterController_1.getPublicSecurityConfigController);
 router.get('/subscription-plans', subscriptionController_1.getPublicSubscriptionPlans);
-router.get('/subscription-plans/:id', subscriptionController_1.getPublicSubscriptionPlanById);
 router.get('/subscription-plans/public', subscriptionController_1.getPublicSubscriptionPlans);
+router.get('/subscription-plans/:slug', subscriptionController_1.getPublicSubscriptionPlanById);
+router.get('/home/subscription-plans', auth_1.optionalAuthenticate, subscriptionController_1.getHomeSubscriptionPlans);
 router.get('/home-settings/public', homeSettingsAdminController_1.getPublicHomeSettings);
 router.get('/social-links/public', socialLinksController_1.getPublicSocialLinks);
 /* ── Public — Dynamic Home System ── */
@@ -96,20 +101,18 @@ router.get('/home/alerts', homeAlertController_1.getPublicAlerts);
 router.get('/settings', homeSystemController_1.getSettings);
 router.get('/stats', homeSystemController_1.getStats);
 /* ── Public — News ── */
+router.get('/news/diagnostics/rss.xml', newsV2Controller_1.getPublicNewsV2DiagnosticFeed);
+router.get('/news/diagnostics/article/:slug', newsV2Controller_1.getPublicNewsV2DiagnosticArticle);
+router.post('/news/diagnostics/delivery/:channel', newsV2Controller_1.getPublicNewsV2DiagnosticDelivery);
 router.get('/news', newsV2Controller_1.getPublicNewsV2List);
 router.get('/news/settings', newsV2Controller_1.getPublicNewsV2Settings);
 router.get('/news/sources', newsV2Controller_1.getPublicNewsV2Sources);
+router.get('/news/appearance', newsV2Controller_1.getPublicNewsV2Appearance);
+router.get('/news/widgets', newsV2Controller_1.getPublicNewsV2Widgets);
 router.get('/news/featured', cmsController_3.getPublicFeaturedNews);
 router.get('/news/trending', cmsController_3.getTrendingNews);
 router.get('/news/categories', cmsController_3.getPublicNewsCategories);
 router.get('/news/:slug', newsV2Controller_1.getPublicNewsV2BySlug);
-router.get('/news-v2/list', newsV2Controller_1.getPublicNewsV2List);
-router.get('/news-v2/config/appearance', newsV2Controller_1.getPublicNewsV2Appearance);
-router.get('/news-v2/widgets', newsV2Controller_1.getPublicNewsV2Widgets);
-router.get('/news-v2/sources', newsV2Controller_1.getPublicNewsV2Sources);
-router.get('/news-v2/settings', newsV2Controller_1.getPublicNewsV2Settings);
-router.get('/news-v2/:slug', newsV2Controller_1.getPublicNewsV2BySlug);
-router.post('/news-v2/share/track', newsV2Controller_1.trackPublicNewsV2Share);
 router.post('/news/share/track', newsV2Controller_1.trackPublicNewsV2Share);
 router.post('/events/track', auth_1.optionalAuthenticate, analyticsController_1.trackEvent);
 /* ── Public — Help Center ── */
@@ -129,41 +132,11 @@ router.get('/services-config', cmsController_2.getPublicServiceConfig);
 router.get('/service-categories', serviceCategoryController_1.getCategories);
 router.get('/services/:id', serviceController_1.getServiceDetails);
 /* ── Public — Contact Submit ── */
-router.post('/contact', securityRateLimit_2.contactRateLimiter, async (req, res) => {
-    try {
-        const { name, email, subject, message, phone } = req.body;
-        if (!name || !email || !subject || !message) {
-            return res.status(400).json({ message: 'Missing required fields' });
-        }
-        if (email && !/^\S+@\S+\.\S+$/.test(email)) {
-            return res.status(400).json({ message: 'Invalid email format' });
-        }
-        const msg = await ContactMessage_1.default.create({
-            name: String(name).slice(0, 100),
-            email: String(email).toLowerCase(),
-            phone: phone ? String(phone).slice(0, 20) : undefined,
-            subject: String(subject).slice(0, 200),
-            message: String(message).slice(0, 5000),
-            ip: req.ip,
-            userAgent: req.headers['user-agent']
-        });
-        await (0, adminAlertService_1.createAdminAlert)({
-            title: 'New contact message',
-            message: `${msg.subject} from ${msg.name}`,
-            linkUrl: `/__cw_admin__/contact?focus=${String(msg._id)}`,
-            category: 'update',
-            targetRole: 'admin',
-        });
-        res.status(201).json({ message: 'Message sent successfully', id: msg._id });
-    }
-    catch (error) {
-        console.error('Contact form error:', error);
-        res.status(500).json({ message: 'Server error' });
-    }
-});
+router.post('/contact', securityRateLimit_2.contactRateLimiter, auth_1.optionalAuthenticate, contactController_1.submitPublicContactMessage);
 /* ── Protected — Student Exam Portal ── */
 router.get('/exams/public-list', auth_1.optionalAuthenticate, examController_1.getPublicExamList);
 router.get('/exams', ...examAccessMiddlewares, examController_1.getStudentExams);
+router.get('/exams/my-visible', ...examAccessMiddlewares, examController_1.getStudentExams);
 router.get('/exams/landing', ...examAccessMiddlewares, examController_1.getExamLanding);
 router.get('/exams/:id', ...examAccessMiddlewares, examController_1.getStudentExamById);
 router.get('/exams/:id/details', ...examAccessMiddlewares, examController_1.getStudentExamDetails);
@@ -185,13 +158,18 @@ router.post('/alerts/:alertId/ack', auth_1.authenticate, homeAlertController_1.a
 router.get('/qbank/picker', auth_1.authenticate, questionBankController_1.getQbankPicker);
 router.post('/qbank/usage/increment', auth_1.authenticate, questionBankController_1.incrementQbankUsage);
 router.get('/student/notices', auth_1.authenticate, adminSupportController_1.studentGetNotices);
-router.post('/student/support-tickets', auth_1.authenticate, adminSupportController_1.studentCreateSupportTicket);
-router.get('/student/support-tickets', auth_1.authenticate, adminSupportController_1.studentGetSupportTickets);
-router.get('/student/support-tickets/:id', auth_1.authenticate, adminSupportController_1.studentGetSupportTicketById);
-router.post('/student/support-tickets/:id/reply', auth_1.authenticate, adminSupportController_1.studentReplySupportTicket);
+router.get('/support/eligibility', auth_1.authenticate, supportController_1.studentGetSupportEligibility);
+router.get('/support/my-tickets', auth_1.authenticate, supportController_1.studentGetSupportTickets);
+router.post('/support/tickets', auth_1.authenticate, supportController_1.studentCreateSupportTicket);
+router.get('/support/tickets/:id', auth_1.authenticate, supportController_1.studentGetSupportTicketById);
+router.post('/support/tickets/:id/reply', auth_1.authenticate, supportController_1.studentReplySupportTicket);
+router.post('/student/support-tickets', auth_1.authenticate, supportController_1.studentCreateSupportTicket);
+router.get('/student/support-tickets', auth_1.authenticate, supportController_1.studentGetSupportTickets);
+router.get('/student/support-tickets/:id', auth_1.authenticate, supportController_1.studentGetSupportTicketById);
+router.post('/student/support-tickets/:id/reply', auth_1.authenticate, supportController_1.studentReplySupportTicket);
 router.get('/subscriptions/me', auth_1.authenticate, subscriptionController_1.getMySubscription);
 router.post('/subscriptions/:planId/request-payment', auth_1.authenticate, securityRateLimit_1.subscriptionActionRateLimiter, subscriptionController_1.requestSubscriptionPayment);
-router.post('/subscriptions/:planId/upload-proof', auth_1.authenticate, securityRateLimit_1.subscriptionActionRateLimiter, subscriptionController_1.uploadSubscriptionProof);
+router.post('/subscriptions/:planId/upload-proof', auth_1.authenticate, securityRateLimit_1.subscriptionActionRateLimiter, mediaController_1.uploadMiddleware.single('file'), subscriptionController_1.uploadSubscriptionProof);
 router.get('/users/me', auth_1.authenticate, studentHubController_1.getStudentMe);
 router.put('/users/me', auth_1.authenticate, studentController_1.updateStudentProfile);
 router.get('/students/me/exams', auth_1.authenticate, studentHubController_1.getStudentMeExams);

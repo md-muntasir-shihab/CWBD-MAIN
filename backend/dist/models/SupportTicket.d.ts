@@ -1,6 +1,8 @@
 import mongoose, { Document } from 'mongoose';
 export type SupportTicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
 export type SupportTicketPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type SupportTicketThreadState = 'pending' | 'replied' | 'idle' | 'resolved' | 'closed';
+export type SupportTicketMessageSenderType = 'student' | 'admin' | 'system';
 export interface ISupportTicketTimelineItem {
     actorId: mongoose.Types.ObjectId;
     actorRole: string;
@@ -15,6 +17,14 @@ export interface ISupportTicket extends Document {
     status: SupportTicketStatus;
     priority: SupportTicketPriority;
     assignedTo?: mongoose.Types.ObjectId | null;
+    subscriptionSnapshot?: Record<string, unknown>;
+    messageCount: number;
+    latestMessagePreview: string;
+    lastMessageAt?: Date | null;
+    lastMessageSenderType?: SupportTicketMessageSenderType | null;
+    unreadCountForAdmin: number;
+    unreadCountForUser: number;
+    threadState: SupportTicketThreadState;
     timeline: ISupportTicketTimelineItem[];
     createdAt: Date;
     updatedAt: Date;

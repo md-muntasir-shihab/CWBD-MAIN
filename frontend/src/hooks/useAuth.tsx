@@ -1,6 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import api, { getAuthSessionStreamUrl } from '../services/api';
+import api, {
+    clearAccessToken,
+    clearAuthSessionHint,
+    getAuthSessionStreamUrl,
+    markAuthSessionHint,
+    refreshAccessToken,
+    setAccessToken,
+    shouldAttemptAuthBootstrap,
+} from '../services/api';
 
 interface User {
     _id: string;
@@ -9,6 +17,11 @@ interface User {
     role: 'superadmin' | 'admin' | 'moderator' | 'editor' | 'viewer' | 'support_agent' | 'finance_agent' | 'student' | 'chairman';
     fullName: string;
     status?: string;
+    emailVerified?: boolean;
+    phoneVerified?: boolean;
+    twoFactorEnabled?: boolean;
+    twoFactorMethod?: string | null;
+    passwordExpiresAt?: string | null;
     permissions?: {
         canEditExams: boolean;
         canManageStudents: boolean;
@@ -82,35 +95,10 @@ const AuthContext = createContext<AuthContextType>({
 
 export const useAuth = () => useContext(AuthContext);
 
-const ACCESS_TOKEN_KEY = 'campusway-token';
-
-function readStoredToken(): string | null {
-    if (typeof window === 'undefined') return null;
-    const fromSession = window.sessionStorage.getItem(ACCESS_TOKEN_KEY);
-    if (fromSession) return fromSession;
-    const fromLocal = window.localStorage.getItem(ACCESS_TOKEN_KEY);
-    if (fromLocal) {
-        window.sessionStorage.setItem(ACCESS_TOKEN_KEY, fromLocal);
-    }
-    return fromLocal;
-}
-
-function writeStoredToken(token: string): void {
-    if (typeof window === 'undefined') return;
-    window.sessionStorage.setItem(ACCESS_TOKEN_KEY, token);
-    window.localStorage.setItem(ACCESS_TOKEN_KEY, token);
-}
-
-function clearStoredToken(): void {
-    if (typeof window === 'undefined') return;
-    window.sessionStorage.removeItem(ACCESS_TOKEN_KEY);
-    window.localStorage.removeItem(ACCESS_TOKEN_KEY);
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
     const queryClient = useQueryClient();
     const [user, setUser] = useState<User | null>(null);
-    const [token, setToken] = useState<string | null>(() => readStoredToken());
+    const [token, setToken] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [pending2FA, setPending2FA] = useState<Pending2FA | null>(null);
     const [forceLogoutAlert, setForceLogoutAlert] = useState(false);
@@ -119,8 +107,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setToken(null);
         setPending2FA(null);
-        clearStoredToken();
-        delete api.defaults.headers.common.Authorization;
+        clearAccessToken();
+        clearAuthSessionHint();
         queryClient.invalidateQueries({ queryKey: ['home'] }).catch(() => undefined);
         queryClient.invalidateQueries({ queryKey: ['home-settings'] }).catch(() => undefined);
     }, [queryClient]);
@@ -142,19 +130,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }, [clearAuthState]);
 
-    // Initial auth check
+    // Initial auth bootstrap from refresh cookie
     useEffect(() => {
-        if (!token) {
-            setIsLoading(false);
-            return;
-        }
+        let cancelled = false;
 
-        api.defaults.headers.common.Authorization = `Bearer ${token}`;
-        api.get('/auth/me')
-            .then((res) => setUser(res.data.user))
-            .catch(() => clearAuthState())
-            .finally(() => setIsLoading(false));
-    }, [token, clearAuthState]);
+        (async () => {
+            if (!shouldAttemptAuthBootstrap()) {
+                clearAuthState();
+                setIsLoading(false);
+                return;
+            }
+
+            const nextToken = await refreshAccessToken();
+            if (cancelled) return;
+            if (!nextToken) {
+                clearAuthState();
+                setIsLoading(false);
+                return;
+            }
+
+            setToken(nextToken);
+            try {
+                const res = await api.get('/auth/me');
+                if (!cancelled) setUser(res.data.user);
+            } catch {
+                if (!cancelled) clearAuthState();
+            } finally {
+                if (!cancelled) setIsLoading(false);
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [clearAuthState]);
 
     // Force logout signal from API interceptor
     useEffect(() => {
@@ -230,7 +239,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (stopped) return;
             closeSource();
 
-            source = new EventSource(getAuthSessionStreamUrl());
+            source = new EventSource(getAuthSessionStreamUrl(token || undefined));
 
             source.addEventListener('session-connected', () => {
                 reconnectAttempt = 0;
@@ -276,8 +285,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setToken(newToken);
         setUser(newUser);
         setPending2FA(null);
-        writeStoredToken(newToken);
-        api.defaults.headers.common.Authorization = `Bearer ${newToken}`;
+        setAccessToken(newToken);
+        markAuthSessionHint(newUser.role === 'chairman'
+            ? 'chairman'
+            : ['superadmin', 'admin', 'moderator', 'editor', 'viewer', 'support_agent', 'finance_agent'].includes(newUser.role)
+                ? 'admin'
+                : 'student');
         queryClient.invalidateQueries({ queryKey: ['home'] }).catch(() => undefined);
         queryClient.invalidateQueries({ queryKey: ['home-settings'] }).catch(() => undefined);
     }, [queryClient]);

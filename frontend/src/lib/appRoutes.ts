@@ -45,7 +45,7 @@ const ADMIN_TAB_ROUTE_MAP: Record<string, string> = {
     'student-settings': adminUi('settings/student-settings'),
     'subscriptions-v2': adminUi('subscriptions-v2'),
     'subscription-plans': adminUi('subscriptions/plans'),
-    news: adminUi('news/dashboard'),
+    news: adminUi('news/pending'),
     resources: adminUi('resources'),
     banners: adminUi('settings/banner-manager'),
     'home-control': adminUi('settings/home-control'),

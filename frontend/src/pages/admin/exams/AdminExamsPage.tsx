@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -86,7 +85,9 @@ import {
     adminGetExams,
     type AdminExamCard,
 } from '../../../services/api';
+import ModernToggle from '../../../components/ui/ModernToggle';
 import { downloadFile } from '../../../utils/download';
+import { promptForSensitiveActionProof } from '../../../utils/sensitiveAction';
 
 type AdminTab = 'list' | 'create' | 'edit' | 'questions' | 'results' | 'payments';
 type ExamCenterView = 'all' | 'external' | 'internal' | 'imports' | 'results' | 'templates' | 'centers' | 'sync-logs' | 'settings';
@@ -1098,7 +1099,13 @@ export function AdminExamsPage() {
         if (!selectedExamId) { toast.error('Select an exam first.'); return; }
         try {
             setBusy(true);
-            const response = await adminExportExamReport(selectedExamId, { format, groupId: groupId.trim() || undefined });
+            const proof = await promptForSensitiveActionProof({
+                actionLabel: `export ${format.toUpperCase()} exam report`,
+                defaultReason: `Export exam report ${selectedExamId}`,
+                requireOtpHint: true,
+            });
+            if (!proof) return;
+            const response = await adminExportExamReport(selectedExamId, { format, groupId: groupId.trim() || undefined }, proof);
             downloadFile(response, { filename: `exam_report.${format}` });
         } catch { toast.error('Export failed.'); } finally { setBusy(false); }
     };
@@ -1106,27 +1113,45 @@ export function AdminExamsPage() {
         if (!selectedExamId) { toast.error('Select an exam first.'); return; }
         try {
             setBusy(true);
-            const response = await adminExportExamResults(selectedExamId);
+            const proof = await promptForSensitiveActionProof({
+                actionLabel: 'export exam results',
+                defaultReason: `Export exam results ${selectedExamId}`,
+                requireOtpHint: true,
+            });
+            if (!proof) return;
+            const response = await adminExportExamResults(selectedExamId, proof);
             downloadFile(response, { filename: 'exam_results.xlsx' });
         } catch { toast.error('Legacy export failed.'); } finally { setBusy(false); }
     };
 
-    const renderFormField = (label: string, key: string, type: 'text' | 'number' | 'datetime-local' | 'select' | 'checkbox' | 'textarea' = 'text', options?: string[]) => (
-        <label key={key} className="block">
-            <span className="text-xs font-semibold text-text-muted dark:text-dark-text/65 uppercase tracking-wider">{label}</span>
-            {type === 'checkbox' ? (
-                <input type="checkbox" checked={Boolean(formData[key])} onChange={(e) => setField(key, e.target.checked)} className="ml-2 mt-1" />
-            ) : type === 'textarea' ? (
-                <textarea value={String(formData[key] ?? '')} onChange={(e) => setField(key, e.target.value)} className="admin-input mt-1" rows={3} />
-            ) : type === 'select' ? (
-                <select value={String(formData[key] ?? '')} onChange={(e) => setField(key, e.target.value)} className="admin-input mt-1">
-                    {options?.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-                </select>
-            ) : (
-                <input type={type} value={type === 'number' ? Number(formData[key] ?? 0) : String(formData[key] ?? '')} onChange={(e) => setField(key, type === 'number' ? Number(e.target.value) : e.target.value)} className="admin-input mt-1" />
-            )}
-        </label>
-    );
+    const renderFormField = (label: string, key: string, type: 'text' | 'number' | 'datetime-local' | 'select' | 'checkbox' | 'textarea' = 'text', options?: string[]) => {
+        if (type === 'checkbox') {
+            return (
+                <div key={key} className="pt-6">
+                    <ModernToggle
+                        label={label}
+                        checked={Boolean(formData[key])}
+                        onChange={(v) => setField(key, v)}
+                        size="sm"
+                    />
+                </div>
+            );
+        }
+        return (
+            <label key={key} className="block">
+                <span className="text-xs font-semibold text-text-muted dark:text-dark-text/65 uppercase tracking-wider">{label}</span>
+                {type === 'textarea' ? (
+                    <textarea value={String(formData[key] ?? '')} onChange={(e) => setField(key, e.target.value)} className="admin-input mt-1" rows={3} />
+                ) : type === 'select' ? (
+                    <select value={String(formData[key] ?? '')} onChange={(e) => setField(key, e.target.value)} className="admin-input mt-1">
+                        {options?.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                    </select>
+                ) : (
+                    <input type={type} value={type === 'number' ? Number(formData[key] ?? 0) : String(formData[key] ?? '')} onChange={(e) => setField(key, type === 'number' ? Number(e.target.value) : e.target.value)} className="admin-input mt-1" />
+                )}
+            </label>
+        );
+    };
 
     // ═══════════════════════════════════════════════
     // TAB: EXAM LIST
@@ -1208,7 +1233,7 @@ export function AdminExamsPage() {
                 {examsQuery.isError ? (
                     <div className="flex items-center gap-2 text-sm text-danger">
                         <AlertTriangle className="h-4 w-4" />Failed to load exams.
-                        <button type="button" onClick={() => examsQuery.refetch()} className="btn-ghost"><RefreshCw className="h-3.5 w-3.5" /></button>
+                        <button type="button" onClick={() => examsQuery.refetch()} className="btn-ghost" title="Retry loading exams"><RefreshCw className="h-3.5 w-3.5" /></button>
                     </div>
                 ) : null}
 
@@ -1428,10 +1453,12 @@ export function AdminExamsPage() {
                                     <input value={templateForm.recordOnlyFields} onChange={(e) => setTemplateForm((prev) => ({ ...prev, recordOnlyFields: e.target.value }))} className="admin-input mt-1" />
                                 </label>
                             </div>
-                            <label className="inline-flex items-center gap-2 text-sm text-text dark:text-dark-text">
-                                <input type="checkbox" checked={templateForm.isActive} onChange={(e) => setTemplateForm((prev) => ({ ...prev, isActive: e.target.checked }))} />
-                                Template active
-                            </label>
+                            <ModernToggle
+                                label="Template active"
+                                checked={templateForm.isActive}
+                                onChange={(isActive) => setTemplateForm((prev) => ({ ...prev, isActive }))}
+                                size="sm"
+                            />
                             <div className="flex flex-wrap gap-2">
                                 <button type="button" onClick={submitTemplateForm} className="btn-primary">
                                     {editingTemplateId ? 'Update Template' : 'Save Template'}
@@ -1460,7 +1487,7 @@ export function AdminExamsPage() {
                                                         recordOnlyFields: template.recordOnlyFields.join(', '),
                                                         isActive: template.isActive,
                                                     });
-                                                }} className="btn-ghost"><Edit3 className="h-4 w-4" /></button>
+                                                }} className="btn-ghost" title="Edit template"><Edit3 className="h-4 w-4" /></button>
                                                 <button type="button" onClick={() => createTemplateMutation.mutate({
                                                     name: `${template.name} Copy`,
                                                     description: template.description,
@@ -1471,8 +1498,8 @@ export function AdminExamsPage() {
                                                     profileUpdateFields: template.profileUpdateFields,
                                                     recordOnlyFields: template.recordOnlyFields,
                                                     isActive: template.isActive,
-                                                })} className="btn-ghost"><BookCopy className="h-4 w-4" /></button>
-                                                <button type="button" onClick={() => { if (window.confirm('Delete this template?')) deleteTemplateMutation.mutate(template._id); }} className="btn-ghost text-danger"><Trash2 className="h-4 w-4" /></button>
+                                                })} className="btn-ghost" title="Copy template"><BookCopy className="h-4 w-4" /></button>
+                                                <button type="button" onClick={() => { if (window.confirm('Delete this template?')) deleteTemplateMutation.mutate(template._id); }} className="btn-ghost text-danger" title="Delete template"><Trash2 className="h-4 w-4" /></button>
                                             </div>
                                         </div>
                                     </div>
@@ -1507,10 +1534,12 @@ export function AdminExamsPage() {
                                 <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">Field Mapping JSON</span>
                                 <textarea value={mappingProfileForm.fieldMappingJson} onChange={(e) => setMappingProfileForm((prev) => ({ ...prev, fieldMappingJson: e.target.value }))} className="admin-input mt-1 min-h-24" placeholder='{"roll_number":"Roll"}' />
                             </label>
-                            <label className="inline-flex items-center gap-2 text-sm text-text dark:text-dark-text">
-                                <input type="checkbox" checked={mappingProfileForm.isActive} onChange={(e) => setMappingProfileForm((prev) => ({ ...prev, isActive: e.target.checked }))} />
-                                Profile active
-                            </label>
+                            <ModernToggle
+                                label="Profile active"
+                                checked={mappingProfileForm.isActive}
+                                onChange={(isActive) => setMappingProfileForm((prev) => ({ ...prev, isActive }))}
+                                size="sm"
+                            />
                             <div className="flex flex-wrap gap-2">
                                 <button type="button" onClick={submitMappingProfileForm} className="btn-primary">
                                     {editingMappingProfileId ? 'Update Profile' : 'Save Profile'}
@@ -1536,8 +1565,8 @@ export function AdminExamsPage() {
                                                         requiredColumns: profile.requiredColumns.join(', '),
                                                         isActive: profile.isActive,
                                                     });
-                                                }} className="btn-ghost"><Edit3 className="h-4 w-4" /></button>
-                                                <button type="button" onClick={() => { if (window.confirm('Delete this mapping profile?')) deleteMappingProfileMutation.mutate(profile._id); }} className="btn-ghost text-danger"><Trash2 className="h-4 w-4" /></button>
+                                                }} className="btn-ghost" title="Edit mapping profile"><Edit3 className="h-4 w-4" /></button>
+                                                <button type="button" onClick={() => { if (window.confirm('Delete this mapping profile?')) deleteMappingProfileMutation.mutate(profile._id); }} className="btn-ghost text-danger" title="Delete mapping profile"><Trash2 className="h-4 w-4" /></button>
                                             </div>
                                         </div>
                                     </div>
@@ -1567,10 +1596,14 @@ export function AdminExamsPage() {
                                     <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">Center Code</span>
                                     <input value={examCenterForm.code} onChange={(e) => setExamCenterForm((prev) => ({ ...prev, code: e.target.value }))} className="admin-input mt-1" />
                                 </label>
-                                <label className="inline-flex items-center gap-2 self-end text-sm text-text dark:text-dark-text">
-                                    <input type="checkbox" checked={examCenterForm.isActive} onChange={(e) => setExamCenterForm((prev) => ({ ...prev, isActive: e.target.checked }))} />
-                                    Center active
-                                </label>
+                                <div className="self-end pb-1">
+                                    <ModernToggle
+                                        label="Center active"
+                                        checked={examCenterForm.isActive}
+                                        onChange={(isActive) => setExamCenterForm((prev) => ({ ...prev, isActive }))}
+                                        size="sm"
+                                    />
+                                </div>
                             </div>
                             <label className="block">
                                 <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">Note</span>
@@ -1608,8 +1641,8 @@ export function AdminExamsPage() {
                                                     note: center.note || '',
                                                     isActive: center.isActive,
                                                 });
-                                            }} className="btn-ghost"><Edit3 className="h-4 w-4" /></button>
-                                            <button type="button" onClick={() => { if (window.confirm('Delete this exam center?')) deleteExamCenterMutation.mutate(center._id); }} className="btn-ghost text-danger"><Trash2 className="h-4 w-4" /></button>
+                                            }} className="btn-ghost" title="Edit exam center"><Edit3 className="h-4 w-4" /></button>
+                                            <button type="button" onClick={() => { if (window.confirm('Delete this exam center?')) deleteExamCenterMutation.mutate(center._id); }} className="btn-ghost text-danger" title="Delete exam center"><Trash2 className="h-4 w-4" /></button>
                                         </div>
                                     </div>
                                 </div>
@@ -1718,23 +1751,31 @@ export function AdminExamsPage() {
                                     <option value="overwrite_mapped_fields">Overwrite mapped fields</option>
                                 </select>
                             </label>
-                            <div className="space-y-3 rounded-xl border border-card-border p-4">
-                                <label className="flex items-center gap-2 text-sm text-text dark:text-dark-text">
-                                    <input type="checkbox" checked={settingsForm.autoCreateExamCenters} onChange={(e) => setSettingsForm((prev) => ({ ...prev, autoCreateExamCenters: e.target.checked }))} />
-                                    Auto-create centers from import rows
-                                </label>
-                                <label className="flex items-center gap-2 text-sm text-text dark:text-dark-text">
-                                    <input type="checkbox" checked={settingsForm.notifyStudentsOnSync} onChange={(e) => setSettingsForm((prev) => ({ ...prev, notifyStudentsOnSync: e.target.checked }))} />
-                                    Notify students after sync
-                                </label>
-                                <label className="flex items-center gap-2 text-sm text-text dark:text-dark-text">
-                                    <input type="checkbox" checked={settingsForm.notifyGuardiansOnResult} onChange={(e) => setSettingsForm((prev) => ({ ...prev, notifyGuardiansOnResult: e.target.checked }))} />
-                                    Notify guardians on result
-                                </label>
-                                <label className="flex items-center gap-2 text-sm text-text dark:text-dark-text">
-                                    <input type="checkbox" checked={settingsForm.allowExternalImports} onChange={(e) => setSettingsForm((prev) => ({ ...prev, allowExternalImports: e.target.checked }))} />
-                                    Allow external import flows
-                                </label>
+                            <div className="space-y-4 rounded-xl border border-card-border p-5">
+                                <ModernToggle
+                                    label="Auto-create centers from import rows"
+                                    checked={settingsForm.autoCreateExamCenters}
+                                    onChange={(v) => setSettingsForm((prev) => ({ ...prev, autoCreateExamCenters: v }))}
+                                    size="sm"
+                                />
+                                <ModernToggle
+                                    label="Notify students after sync"
+                                    checked={settingsForm.notifyStudentsOnSync}
+                                    onChange={(v) => setSettingsForm((prev) => ({ ...prev, notifyStudentsOnSync: v }))}
+                                    size="sm"
+                                />
+                                <ModernToggle
+                                    label="Notify guardians on result"
+                                    checked={settingsForm.notifyGuardiansOnResult}
+                                    onChange={(v) => setSettingsForm((prev) => ({ ...prev, notifyGuardiansOnResult: v }))}
+                                    size="sm"
+                                />
+                                <ModernToggle
+                                    label="Allow external import flows"
+                                    checked={settingsForm.allowExternalImports}
+                                    onChange={(v) => setSettingsForm((prev) => ({ ...prev, allowExternalImports: v }))}
+                                    size="sm"
+                                />
                             </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -1923,9 +1964,9 @@ export function AdminExamsPage() {
                                     const g = allGroups.find((x) => String(x._id) === gId);
                                     const color = String(g?.color || '#6366f1');
                                     return (
-                                        <span key={gId} className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium" style={{ backgroundColor: `${color}20`, color }}>
+                                        <span key={gId} className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium" ref={(el) => { if (el) { el.style.backgroundColor = `${color}20`; el.style.color = color; } }}>
                                             {String(g?.name || gId)}
-                                            <button type="button" onClick={() => setField('targetGroupIds', (formData.targetGroupIds as string[]).filter((id) => id !== gId))} className="hover:opacity-70">
+                                            <button type="button" onClick={() => setField('targetGroupIds', (formData.targetGroupIds as string[]).filter((id) => id !== gId))} className="hover:opacity-70" title="Remove group">
                                                 <X className="h-3 w-3" />
                                             </button>
                                         </span>
@@ -1974,17 +2015,21 @@ export function AdminExamsPage() {
                         {renderFormField('Requires Payment', 'requiresPayment', 'checkbox')}
                     </div>
 
-                    <div className="flex flex-wrap gap-6">
-                        <label className="flex items-center gap-2 text-sm">
-                            <input type="checkbox" checked={Boolean(formData.displayOnDashboard)} onChange={(e) => setField('displayOnDashboard', e.target.checked)} />
-                            <Eye className="h-4 w-4 text-text-muted" />
-                            <span className="text-text dark:text-dark-text">Show on Dashboard</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-sm">
-                            <input type="checkbox" checked={Boolean(formData.displayOnPublicList)} onChange={(e) => setField('displayOnPublicList', e.target.checked)} />
-                            {formData.displayOnPublicList ? <Eye className="h-4 w-4 text-text-muted" /> : <EyeOff className="h-4 w-4 text-text-muted" />}
-                            <span className="text-text dark:text-dark-text">Show on Public List</span>
-                        </label>
+                    <div className="flex flex-wrap gap-8">
+                        <ModernToggle
+                            label="Show on Dashboard"
+                            helper="Display this exam prominently to active students"
+                            checked={Boolean(formData.displayOnDashboard)}
+                            onChange={(v) => setField('displayOnDashboard', v)}
+                            size="sm"
+                        />
+                        <ModernToggle
+                            label="Show on Public List"
+                            helper="Allow non-logged in users to see this exam"
+                            checked={Boolean(formData.displayOnPublicList)}
+                            onChange={(v) => setField('displayOnPublicList', v)}
+                            size="sm"
+                        />
                     </div>
                 </div>
 
@@ -2099,7 +2144,7 @@ export function AdminExamsPage() {
                             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">{idx + 1}</span>
                             <div className="flex-1 min-w-0">
                                 <p className="text-sm text-text dark:text-dark-text">{String(q.question_bn || q.question_en || q.question || 'No text')}</p>
-                                <p className="text-xs text-text-muted mt-1">Correct: {String(q.correctKey ?? q.correctAnswer ?? '-')} &middot; Marks: {String(q.marks)}</p>
+                                <p className="text-xs text-text-muted mt-1">Correct: {String(q.correctKey ?? q.correctAnswer ?? '-')} · Marks: {String(q.marks)}</p>
                             </div>
                             <div className="flex gap-1">
                                 <button type="button" onClick={() => {
@@ -2119,8 +2164,8 @@ export function AdminExamsPage() {
                                         explanation_bn: q.explanation_bn || '',
                                         orderIndex: q.orderIndex ?? q.order ?? 0,
                                     });
-                                }} className="btn-ghost"><Edit3 className="h-4 w-4" /></button>
-                                <button type="button" onClick={() => { if (window.confirm('Delete?')) deleteQuestionMutation.mutate(String(q._id)); }} className="btn-ghost text-danger"><Trash2 className="h-4 w-4" /></button>
+                                }} className="btn-ghost" title="Edit question"><Edit3 className="h-4 w-4" /></button>
+                                <button type="button" onClick={() => { if (window.confirm('Delete?')) deleteQuestionMutation.mutate(String(q._id)); }} className="btn-ghost text-danger" title="Delete question"><Trash2 className="h-4 w-4" /></button>
                             </div>
                         </div>
                     ))}

@@ -66,7 +66,6 @@ async function runMigration() {
         $setOnInsert: {
             featureFlags: {
                 studentRegistrationEnabled: false,
-                passwordRevealEnabled: true,
                 financeDashboardV1: false,
                 smsReminderEnabled: false,
                 emailReminderEnabled: true,

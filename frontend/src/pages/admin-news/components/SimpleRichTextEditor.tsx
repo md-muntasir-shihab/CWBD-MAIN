@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Bold, Italic, Link2, List, ListOrdered, Underline } from 'lucide-react';
 
 interface Props {
@@ -17,6 +17,8 @@ export default function SimpleRichTextEditor({
     placeholder = 'Write article content...',
 }: Props) {
     const editorRef = useRef<HTMLDivElement | null>(null);
+    const [linkDraft, setLinkDraft] = useState('');
+    const [linkPromptOpen, setLinkPromptOpen] = useState(false);
 
     useEffect(() => {
         const el = editorRef.current;
@@ -25,6 +27,19 @@ export default function SimpleRichTextEditor({
             el.innerHTML = value || '';
         }
     }, [value]);
+
+    function applyLink() {
+        const trimmed = linkDraft.trim();
+        if (!trimmed) {
+            setLinkPromptOpen(false);
+            setLinkDraft('');
+            return;
+        }
+        runCommand('createLink', trimmed);
+        setLinkPromptOpen(false);
+        setLinkDraft('');
+        editorRef.current?.focus();
+    }
 
     return (
         <div className="overflow-hidden rounded-xl border border-slate-300 dark:border-slate-700">
@@ -47,8 +62,8 @@ export default function SimpleRichTextEditor({
                 <ToolbarButton
                     label="Insert Link"
                     onClick={() => {
-                        const link = window.prompt('Enter URL');
-                        if (link) runCommand('createLink', link);
+                        setLinkPromptOpen(true);
+                        setLinkDraft('');
                     }}
                 >
                     <Link2 className="h-4 w-4" />
@@ -61,6 +76,35 @@ export default function SimpleRichTextEditor({
                     Clear
                 </button>
             </div>
+            {linkPromptOpen ? (
+                <div className="border-b border-slate-300 bg-white/90 p-3 dark:border-slate-700 dark:bg-slate-950/85">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <input
+                            className="input-field min-w-[220px] flex-1"
+                            placeholder="https://example.com/article"
+                            value={linkDraft}
+                            onChange={(event) => setLinkDraft(event.target.value)}
+                            autoFocus
+                        />
+                        <button type="button" className="btn-primary" onClick={applyLink}>
+                            Apply link
+                        </button>
+                        <button
+                            type="button"
+                            className="btn-outline"
+                            onClick={() => {
+                                setLinkPromptOpen(false);
+                                setLinkDraft('');
+                            }}
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                        Add a full URL to link the selected text without leaving the editor.
+                    </p>
+                </div>
+            ) : null}
 
             <div
                 ref={editorRef}

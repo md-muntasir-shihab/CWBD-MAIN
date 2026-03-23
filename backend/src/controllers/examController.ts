@@ -1107,6 +1107,12 @@ function normalizeObjectIdArray(input: unknown): string[] {
         .filter(Boolean);
 }
 
+function normalizeObjectIdParam(value: unknown): string {
+    const normalized = String(value || '').trim();
+    if (!normalized || normalized === 'null' || normalized === 'undefined') return '';
+    return mongoose.Types.ObjectId.isValid(normalized) ? normalized : '';
+}
+
 function hasAnyIntersection(left: string[], right: string[]): boolean {
     if (left.length === 0 || right.length === 0) return false;
     const rightSet = new Set(right);
@@ -2172,7 +2178,12 @@ export async function getExamAttemptState(req: AuthRequest, res: Response): Prom
     try {
         const studentId = req.user!._id;
         const examId = String(req.params.examId || req.params.id || '');
-        const attemptId = String(req.params.attemptId || '');
+        const attemptId = normalizeObjectIdParam(req.params.attemptId);
+
+        if (!attemptId) {
+            res.status(400).json({ message: 'Valid attemptId is required.' });
+            return;
+        }
 
         const [exam, session] = await Promise.all([
             Exam.findById(examId),
@@ -2239,7 +2250,7 @@ export async function logExamAttemptEvent(req: AuthRequest, res: Response): Prom
     try {
         const studentId = req.user!._id;
         const examId = String(req.params.examId || req.params.id || '');
-        const attemptId = String(req.params.attemptId || '');
+        const attemptId = normalizeObjectIdParam(req.params.attemptId);
         const body = (req.body || {}) as Record<string, unknown>;
         const eventType = String(body.eventType || '').trim() as AttemptEventType;
         const metadata = (body.metadata && typeof body.metadata === 'object'
@@ -2248,7 +2259,7 @@ export async function logExamAttemptEvent(req: AuthRequest, res: Response): Prom
         const expectedRevision = parseAttemptRevision(body.attemptRevision);
 
         if (!attemptId) {
-            res.status(400).json({ message: 'attemptId is required.' });
+            res.status(400).json({ message: 'Valid attemptId is required.' });
             return;
         }
         if (!ATTEMPT_EVENT_TYPES.has(eventType)) {
@@ -2839,10 +2850,10 @@ export async function streamExamAttempt(req: AuthRequest, res: Response): Promis
         const userId = req.user!._id;
         const userRole = String(req.user?.role || 'student');
         const examId = String(req.params.examId || req.params.id || '');
-        const attemptId = String(req.params.attemptId || '');
+        const attemptId = normalizeObjectIdParam(req.params.attemptId);
 
         if (!attemptId) {
-            res.status(400).json({ message: 'attemptId is required.' });
+            res.status(400).json({ message: 'Valid attemptId is required.' });
             return;
         }
 

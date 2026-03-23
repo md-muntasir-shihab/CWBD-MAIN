@@ -46,7 +46,6 @@ export interface ISiteSettings extends Document {
         strictExamTabLock: boolean;
         webNextEnabled: boolean;
         studentRegistrationEnabled: boolean;
-        passwordRevealEnabled: boolean;
         financeDashboardV1: boolean;
         smsReminderEnabled: boolean;
         emailReminderEnabled: boolean;
@@ -104,6 +103,17 @@ export interface ISiteSettings extends Document {
             subscriptionPlanClick: boolean;
             supportTicketCreated: boolean;
         };
+    };
+    examCenterSettings: {
+        defaultSyncMode: 'fill_missing_only' | 'overwrite_mapped_fields';
+        autoCreateExamCenters: boolean;
+        notifyStudentsOnSync: boolean;
+        notifyGuardiansOnResult: boolean;
+        allowExternalImports: boolean;
+    };
+    adminUiLayout: {
+        sidebarOrder: string[];
+        settingsCardOrder: string[];
     };
     runtimeVersion: number;
     updatedBy: mongoose.Types.ObjectId;

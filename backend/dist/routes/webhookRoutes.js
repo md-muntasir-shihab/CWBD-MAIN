@@ -6,13 +6,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const crypto_1 = __importDefault(require("crypto"));
 const ManualPayment_1 = __importDefault(require("../models/ManualPayment"));
-const User_1 = __importDefault(require("../models/User"));
-const SubscriptionPlan_1 = __importDefault(require("../models/SubscriptionPlan"));
 const PaymentWebhookEvent_1 = __importDefault(require("../models/PaymentWebhookEvent"));
 const financeStream_1 = require("../realtime/financeStream");
 const securityCenterService_1 = require("../services/securityCenterService");
 const logger_1 = require("../utils/logger");
 const financeCenterService_1 = require("../services/financeCenterService");
+const subscriptionLifecycleService_1 = require("../services/subscriptionLifecycleService");
 const router = (0, express_1.Router)();
 /**
  * Compute a deterministic hash from the raw request body for deduplication.
@@ -142,26 +141,8 @@ router.post('/sslcommerz/ipn', async (req, res) => {
             payment.paymentDetails = payload;
             payment.date = new Date();
             await payment.save();
-            // Sync subscription
             if (payment.entryType === 'subscription' && payment.subscriptionPlanId) {
-                const plan = await SubscriptionPlan_1.default.findById(payment.subscriptionPlanId);
-                if (plan) {
-                    const expiryDate = new Date();
-                    expiryDate.setDate(expiryDate.getDate() + plan.durationDays);
-                    await User_1.default.findByIdAndUpdate(payment.studentId, {
-                        $set: {
-                            subscription: {
-                                plan: String(plan._id),
-                                planCode: plan.code,
-                                planName: plan.name,
-                                isActive: true,
-                                startDate: new Date(),
-                                expiryDate,
-                                assignedAt: new Date(),
-                            },
-                        },
-                    });
-                }
+                await (0, subscriptionLifecycleService_1.activateSubscriptionFromPayment)(payment, String(payment.recordedBy || payment.studentId));
             }
             webhookEvent.status = 'processed';
             webhookEvent.paymentId = payment._id;
@@ -194,6 +175,9 @@ router.post('/sslcommerz/ipn', async (req, res) => {
             }
             catch (fcErr) {
                 logger_1.logger.error('[Webhook] Finance auto-post failed', req, { tran_id, error: String(fcErr) });
+            }
+            if (payment.entryType === 'subscription') {
+                await (0, subscriptionLifecycleService_1.recomputeStudentDueLedger)(String(payment.studentId), String(payment.recordedBy || payment.studentId), `Subscription payment settled via webhook ${tran_id}`);
             }
         }
         else if (status === 'FAILED' || status === 'CANCELLED') {

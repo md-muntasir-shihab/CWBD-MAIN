@@ -36,6 +36,9 @@ export interface CampaignSendOptions {
     adminId: string;
     triggerKey?: string;
     testSend?: boolean;
+    originModule?: 'campaign' | 'news' | 'notice' | 'trigger';
+    originEntityId?: string;
+    originAction?: string;
 }
 export interface PreviewEstimate {
     recipientCount: number;
@@ -62,6 +65,10 @@ export declare function executeCampaign(opts: CampaignSendOptions): Promise<{
     failed: number;
     skipped: number;
 }>;
+export declare function processQueuedNotificationJobs(limit?: number): Promise<{
+    processed: number;
+    failed: number;
+}>;
 export declare function retryFailedDeliveries(jobId: string, adminId: string): Promise<{
     retried: number;
     succeeded: number;
@@ -69,20 +76,6 @@ export declare function retryFailedDeliveries(jobId: string, adminId: string): P
 }>;
 export declare function triggerAutoSend(triggerKey: string, studentIds: string[], vars: Record<string, string>, adminId: string): Promise<{
     jobId: string;
-    sent: number;
-    failed: number;
-}>;
-export declare function sendAccountInfo(studentId: string, channels: ('sms' | 'email')[], credentials: {
-    username: string;
-    tempPassword: string;
-}, adminId: string): Promise<{
-    sent: number;
-    failed: number;
-}>;
-export declare function resendCredentials(studentId: string, channels: ('sms' | 'email')[], credentials: {
-    username: string;
-    tempPassword: string;
-}, adminId: string): Promise<{
     sent: number;
     failed: number;
 }>;

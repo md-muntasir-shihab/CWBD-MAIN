@@ -271,6 +271,16 @@ export async function getFinanceSummary(month?: string) {
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([date, vals]) => ({ date, ...vals, net: vals.income - vals.expense }));
 
+    // Compute month-over-month change percentages
+    const incomeChange = prevMonthIncome > 0
+        ? ((incomeTotal - prevMonthIncome) / prevMonthIncome) * 100
+        : (incomeTotal > 0 ? 100 : 0);
+    const expenseChange = prevMonthExpense > 0
+        ? ((expenseTotal - prevMonthExpense) / prevMonthExpense) * 100
+        : (expenseTotal > 0 ? 100 : 0);
+
+    const manualServiceRevenue = sourceMap['manual_income'] || 0;
+
     return {
         month: targetMonth,
         incomeTotal,
@@ -278,10 +288,15 @@ export async function getFinanceSummary(month?: string) {
         netProfit: incomeTotal - expenseTotal,
         subscriptionRevenue: sourceMap['subscription_payment'] || 0,
         examRevenue: sourceMap['exam_payment'] || 0,
-        manualRevenue: sourceMap['manual_income'] || 0,
+        manualRevenue: manualServiceRevenue,
+        manualServiceRevenue,
         refundTotal: sourceMap['refund'] || 0,
         prevMonthIncome,
         prevMonthExpense,
+        monthOverMonthChange: {
+            incomeChange: Number.isFinite(incomeChange) ? incomeChange : 0,
+            expenseChange: Number.isFinite(expenseChange) ? expenseChange : 0,
+        },
         receivablesTotal: receivables[0]?.total || 0,
         receivablesCount: receivables[0]?.count || 0,
         payablesTotal: payables[0]?.total || 0,

@@ -13,11 +13,13 @@ import SubscriptionPlan from '../models/SubscriptionPlan';
 import { AuthRequest } from '../middlewares/auth';
 import { addFinanceStreamClient, broadcastFinanceEvent } from '../realtime/financeStream';
 import { getRuntimeSettingsSnapshot } from '../services/runtimeSettingsService';
+import { ensureSecureUploadUrl } from '../services/secureUploadService';
 import { getClientIp } from '../utils/requestMeta';
 import { createIncomeFromPayment } from '../services/financeCenterService';
 import { activateSubscriptionFromPayment, recomputeStudentDueLedger } from '../services/subscriptionLifecycleService';
 
 type DateRange = { from?: Date; to?: Date };
+const SECURE_FINANCE_ACCESS_ROLES = ['superadmin', 'admin', 'finance_agent', 'moderator'];
 
 function parseDate(value: unknown): Date | null {
     if (!value) return null;
@@ -423,6 +425,19 @@ export async function adminCreatePayment(req: AuthRequest, res: Response): Promi
             : 'pending';
         const paidAt = status === 'paid' ? (parseDate(body.paidAt) || date) : null;
 
+        const rawProofUrl = String(body.proofFileUrl || body.proofUrl || '').trim();
+        const secureProofUrl = rawProofUrl
+            ? await ensureSecureUploadUrl({
+                url: rawProofUrl,
+                category: 'payment_proof',
+                visibility: 'protected',
+                ownerUserId: studentId,
+                ownerRole: 'student',
+                uploadedBy: recordedBy,
+                accessRoles: SECURE_FINANCE_ACCESS_ROLES,
+            })
+            : '';
+
         const created = await ManualPayment.create({
             studentId,
             ...(subscriptionPlanId ? { subscriptionPlanId } : {}),
@@ -436,8 +451,8 @@ export async function adminCreatePayment(req: AuthRequest, res: Response): Promi
             transactionId: String(body.transactionId || '').trim(),
             entryType,
             reference: String(body.reference || '').trim(),
-            proofFileUrl: String(body.proofFileUrl || body.proofUrl || '').trim(),
-            proofUrl: String(body.proofUrl || body.proofFileUrl || '').trim(),
+            proofFileUrl: secureProofUrl,
+            proofUrl: secureProofUrl,
             notes: String(body.notes || '').trim(),
             recordedBy,
         });
@@ -542,8 +557,22 @@ export async function adminUpdatePayment(req: AuthRequest, res: Response): Promi
         }
         if (body.currency !== undefined) update.currency = String(body.currency || 'BDT').trim() || 'BDT';
         if (body.transactionId !== undefined) update.transactionId = String(body.transactionId || '').trim();
-        if (body.proofFileUrl !== undefined) update.proofFileUrl = String(body.proofFileUrl || '').trim();
-        if (body.proofUrl !== undefined) update.proofUrl = String(body.proofUrl || '').trim();
+        if (body.proofFileUrl !== undefined || body.proofUrl !== undefined) {
+            const nextProofUrl = String(body.proofFileUrl || body.proofUrl || '').trim();
+            const secureProofUrl = nextProofUrl
+                ? await ensureSecureUploadUrl({
+                    url: nextProofUrl,
+                    category: 'payment_proof',
+                    visibility: 'protected',
+                    ownerUserId: existing.studentId,
+                    ownerRole: 'student',
+                    uploadedBy: req.user?._id || null,
+                    accessRoles: SECURE_FINANCE_ACCESS_ROLES,
+                })
+                : '';
+            update.proofFileUrl = secureProofUrl;
+            update.proofUrl = secureProofUrl;
+        }
 
         if (body.reference !== undefined) update.reference = String(body.reference || '').trim();
         if (body.notes !== undefined) update.notes = String(body.notes || '').trim();

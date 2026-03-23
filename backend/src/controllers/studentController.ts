@@ -11,6 +11,7 @@ import ExamResult from '../models/ExamResult';
 import ExamProfileSyncLog from '../models/ExamProfileSyncLog';
 import { createAdminAlert } from '../services/adminAlertService';
 import { computeStudentProfileScore } from '../services/studentProfileScoreService';
+import { buildSecureUploadUrl, registerSecureUpload } from '../services/secureUploadService';
 
 // Ensure the profile exists, if not create a default one
 const ensureProfile = async (userId: string) => {
@@ -476,11 +477,22 @@ export const uploadStudentDocument = async (req: AuthRequest, res: ExpressRespon
         if (!document_type) return res.status(400).json({ message: 'Document type is required' });
 
         const profile = await ensureProfile(req.user._id);
-
-        const docUrl = `/uploads/${req.file.filename}`;
+        const isProfilePhoto = String(document_type).trim().toLowerCase() === 'profile_photo';
+        const secureUpload = await registerSecureUpload({
+            file: req.file,
+            category: isProfilePhoto ? 'profile_photo' : 'student_document',
+            visibility: isProfilePhoto ? 'public' : 'protected',
+            ownerUserId: req.user._id,
+            ownerRole: req.user.role,
+            uploadedBy: req.user._id,
+            accessRoles: isProfilePhoto
+                ? ['student', 'superadmin', 'admin', 'moderator', 'editor', 'viewer', 'support_agent', 'finance_agent']
+                : ['student', 'superadmin', 'admin', 'moderator', 'support_agent', 'finance_agent'],
+        });
+        const docUrl = buildSecureUploadUrl(secureUpload.storedName);
 
         // Persist profile photo immediately so the student sees it without a second save action.
-        if (document_type === 'profile_photo') {
+        if (isProfilePhoto) {
             profile.profile_photo_url = docUrl;
             await profile.save();
             broadcastStudentDashboardEvent({ type: 'profile_updated', meta: { studentId: req.user._id } });
@@ -489,7 +501,8 @@ export const uploadStudentDocument = async (req: AuthRequest, res: ExpressRespon
         res.json({
             message: 'Document uploaded successfully',
             url: docUrl,
-            document_type
+            document_type,
+            visibility: secureUpload.visibility,
         });
     } catch (err: any) {
         res.status(500).json({ message: 'Failed to upload document', error: err.message });

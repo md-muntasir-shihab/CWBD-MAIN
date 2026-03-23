@@ -112,10 +112,10 @@ export default function DashboardHome({ universities, exams, users, onTabChange 
             {
                 key: 'news',
                 title: 'News',
-                description: `${valueText(summary.news.pendingReview)} pending review`,
+                description: `${valueText(summary.news.pendingReview)} items waiting for review`,
                 value: valueText(summary.news.publishedToday),
                 icon: BookOpen,
-                actionLabel: 'Open News',
+                actionLabel: 'Open Review Queue',
                 actionTab: 'news',
             },
             {

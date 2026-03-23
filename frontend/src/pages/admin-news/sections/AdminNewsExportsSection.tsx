@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import NewsHelpButton from '../../../components/admin/NewsHelpButton';
 import {
     adminNewsV2ExportLogs,
     adminNewsV2ExportNews,
@@ -36,7 +37,7 @@ export default function AdminNewsExportsSection() {
             return adminNewsV2ExportLogs(format);
         },
         onSuccess: (response, type) => {
-            downloadFile(response, { filename: `news-v2-${type}.${format}` });
+            downloadFile(response, { filename: `news-${type}.${format}` });
             toast.success(`${type} export downloaded`);
         },
         onError: (err: any) => toast.error(err?.response?.data?.message || 'Export failed'),
@@ -44,11 +45,25 @@ export default function AdminNewsExportsSection() {
 
     return (
         <div className="card-flat space-y-4 border border-cyan-500/20 p-4">
-            <div>
-                <h2 className="text-xl font-semibold">Exports</h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Download news items, source registry, and audit logs.</p>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
+                    <h2 className="text-xl font-semibold">Exports</h2>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Download news items, source registry, and audit logs.</p>
+                </div>
+                <NewsHelpButton
+                    title="Exports"
+                    content="Exports let admins download structured news data, sources, and logs."
+                    impact="This makes review, archival, and reporting easier without manually copying content."
+                    affected="Admins with export permission."
+                    publishNote="Exported news data reflects the current published and draft states at the moment of download."
+                    publishSendNote="If publish + send is part of the workflow, export records should later match the sent delivery history."
+                    enabledNote="Keeping exports in one place reduces duplicate download paths."
+                    disabledNote="Without a clear export panel, admins may copy data from the wrong source."
+                    bestPractice="Use filters before export so files stay focused and easier to audit."
+                    variant="full"
+                />
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <label className="space-y-1">
                     <span className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Format</span>
                     <select className="input-field" value={format} onChange={(e) => setFormat(e.target.value as ExportFormat)}>

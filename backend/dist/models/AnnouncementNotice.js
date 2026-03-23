@@ -39,11 +39,30 @@ const AnnouncementNoticeSchema = new mongoose_1.Schema({
     message: { type: String, required: true, trim: true },
     target: { type: String, enum: ['all', 'groups', 'students'], default: 'all', index: true },
     targetIds: { type: [String], default: [] },
+    sourceNewsId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'News', default: null },
+    priority: { type: String, enum: ['normal', 'priority', 'breaking'], default: 'normal', index: true },
+    classification: {
+        primaryCategory: { type: String, default: '' },
+        tags: [{ type: String }],
+        universityIds: [{ type: mongoose_1.Schema.Types.ObjectId }],
+        clusterIds: [{ type: mongoose_1.Schema.Types.ObjectId }],
+        groupIds: [{ type: mongoose_1.Schema.Types.ObjectId }],
+    },
+    deliveryMeta: {
+        lastJobId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'NotificationJob', default: null },
+        lastChannel: { type: String, enum: ['sms', 'email', 'both'], default: undefined },
+        lastAudienceSummary: { type: String, default: '' },
+        lastSentAt: { type: Date, default: null },
+    },
+    templateRef: { type: String, default: '' },
+    triggerRef: { type: String, default: '' },
     startAt: { type: Date, default: Date.now, index: true },
     endAt: { type: Date, default: null, index: true },
     isActive: { type: Boolean, default: true, index: true },
     createdBy: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: true },
 }, { timestamps: true, collection: 'announcement_notices' });
 AnnouncementNoticeSchema.index({ isActive: 1, startAt: -1, endAt: 1 });
+AnnouncementNoticeSchema.index({ sourceNewsId: 1 });
+AnnouncementNoticeSchema.index({ priority: 1, isActive: 1, startAt: -1 });
 exports.default = mongoose_1.default.model('AnnouncementNotice', AnnouncementNoticeSchema);
 //# sourceMappingURL=AnnouncementNotice.js.map

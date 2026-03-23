@@ -3,6 +3,10 @@ export interface IExamResult extends Document {
     exam: mongoose.Types.ObjectId;
     student: mongoose.Types.ObjectId;
     attemptNo: number;
+    sourceType?: 'internal_submission' | 'external_import';
+    importJobId?: mongoose.Types.ObjectId | null;
+    syncStatus?: 'pending' | 'synced' | 'failed';
+    profileSyncLogId?: mongoose.Types.ObjectId | null;
     answers: {
         question: mongoose.Types.ObjectId;
         questionType: 'mcq' | 'written';
@@ -18,6 +22,17 @@ export interface IExamResult extends Document {
     unansweredCount: number;
     percentage: number;
     rank?: number;
+    serialId?: string;
+    rollNumber?: string;
+    registrationNumber?: string;
+    admitCardNumber?: string;
+    attendanceStatus?: string;
+    passFail?: string;
+    resultNote?: string;
+    profileUpdateNote?: string;
+    examCenterName?: string;
+    examCenterCode?: string;
+    subjectMarks?: Array<Record<string, unknown>>;
     pointsEarned: number;
     timeTaken: number;
     deviceInfo: string;

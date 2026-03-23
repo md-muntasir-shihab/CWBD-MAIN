@@ -62,6 +62,7 @@ const NotificationJobSchema = new mongoose_1.Schema({
     templateIds: [{ type: mongoose_1.Schema.Types.ObjectId, ref: 'NotificationTemplate' }],
     payloadOverrides: { type: mongoose_1.Schema.Types.Mixed },
     customBody: { type: String },
+    customSubject: { type: String },
     selectedFieldMap: { type: mongoose_1.Schema.Types.Mixed },
     recipientMode: { type: String, trim: true },
     guardianTargeted: { type: Boolean, default: false },
@@ -73,6 +74,8 @@ const NotificationJobSchema = new mongoose_1.Schema({
     },
     scheduledAtUTC: { type: Date },
     processedAtUTC: { type: Date },
+    lastAttemptedAtUTC: { type: Date },
+    nextRetryAtUTC: { type: Date },
     totalTargets: { type: Number, default: 0, min: 0 },
     sentCount: { type: Number, default: 0, min: 0 },
     failedCount: { type: Number, default: 0, min: 0 },
@@ -80,6 +83,9 @@ const NotificationJobSchema = new mongoose_1.Schema({
     actualCost: { type: Number, default: 0, min: 0 },
     triggerKey: { type: String, trim: true, uppercase: true },
     duplicatePreventionKey: { type: String, trim: true, sparse: true },
+    originModule: { type: String, enum: ['campaign', 'news', 'notice', 'trigger'], default: 'campaign', index: true },
+    originEntityId: { type: String, trim: true, default: '' },
+    originAction: { type: String, trim: true, default: '' },
     quietHoursApplied: { type: Boolean, default: false },
     createdByAdminId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     errorMessage: { type: String },
@@ -91,5 +97,6 @@ const NotificationJobSchema = new mongoose_1.Schema({
 }, { timestamps: true, collection: 'notification_jobs' });
 NotificationJobSchema.index({ status: 1, scheduledAtUTC: 1 });
 NotificationJobSchema.index({ createdByAdminId: 1, createdAt: -1 });
+NotificationJobSchema.index({ originModule: 1, originEntityId: 1, createdAt: -1 });
 exports.default = mongoose_1.default.model('NotificationJob', NotificationJobSchema);
 //# sourceMappingURL=NotificationJob.js.map

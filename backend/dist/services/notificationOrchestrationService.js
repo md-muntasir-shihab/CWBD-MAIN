@@ -9,39 +9,6 @@
  * guardian combinations, duplicate prevention, quiet hours,
  * delayed scheduling, test-send, preview/estimate.
  */
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -49,10 +16,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.resolveAudience = resolveAudience;
 exports.previewAndEstimate = previewAndEstimate;
 exports.executeCampaign = executeCampaign;
+exports.processQueuedNotificationJobs = processQueuedNotificationJobs;
 exports.retryFailedDeliveries = retryFailedDeliveries;
 exports.triggerAutoSend = triggerAutoSend;
-exports.sendAccountInfo = sendAccountInfo;
-exports.resendCredentials = resendCredentials;
 const mongoose_1 = __importDefault(require("mongoose"));
 const NotificationJob_1 = __importDefault(require("../models/NotificationJob"));
 const NotificationDeliveryLog_1 = __importDefault(require("../models/NotificationDeliveryLog"));
@@ -61,6 +27,7 @@ const NotificationSettings_1 = __importDefault(require("../models/NotificationSe
 const StudentGroup_1 = __importDefault(require("../models/StudentGroup"));
 const StudentProfile_1 = __importDefault(require("../models/StudentProfile"));
 const User_1 = __importDefault(require("../models/User"));
+const UserSubscription_1 = __importDefault(require("../models/UserSubscription"));
 const FinanceSettings_1 = __importDefault(require("../models/FinanceSettings"));
 const FinanceTransaction_1 = __importDefault(require("../models/FinanceTransaction"));
 const AuditLog_1 = __importDefault(require("../models/AuditLog"));
@@ -143,6 +110,9 @@ async function resolveAudience(audienceType, opts) {
     });
 }
 async function resolveDynamicGroupUserIds(rules) {
+    const planCodes = Array.isArray(rules.planCodes)
+        ? rules.planCodes.map((value) => String(value || '').trim().toLowerCase()).filter(Boolean)
+        : [];
     const filter = { status: { $ne: 'deleted' } };
     if (Array.isArray(rules.batches) && rules.batches.length)
         filter.hsc_batch = { $in: rules.batches };
@@ -153,9 +123,13 @@ async function resolveDynamicGroupUserIds(rules) {
     if (Array.isArray(rules.statuses) && rules.statuses.length)
         filter.status = { $in: rules.statuses };
     const profiles = await StudentProfile_1.default.find(filter).select('user_id').lean();
-    return profiles.map((p) => p.user_id);
+    const userIds = profiles.map((p) => p.user_id);
+    return filterUserIdsByActivePlanCodes(userIds, planCodes);
 }
 async function resolveFilterUserIds(filters) {
+    const planCodes = Array.isArray(filters.planCodes)
+        ? filters.planCodes.map((value) => String(value || '').trim().toLowerCase()).filter(Boolean)
+        : [];
     const filter = { status: { $ne: 'deleted' } };
     if (filters.batches)
         filter.hsc_batch = { $in: filters.batches };
@@ -165,13 +139,61 @@ async function resolveFilterUserIds(filters) {
         filter.department = { $in: filters.departments };
     if (filters.statuses)
         filter.status = { $in: filters.statuses };
+    if (Array.isArray(filters.groupIds) && filters.groupIds.length > 0) {
+        filter.groupIds = {
+            $in: filters.groupIds
+                .map((id) => String(id || '').trim())
+                .filter((id) => mongoose_1.default.Types.ObjectId.isValid(id))
+                .map((id) => new mongoose_1.default.Types.ObjectId(id)),
+        };
+    }
+    const scoreRange = typeof filters.profileScoreRange === 'object' && filters.profileScoreRange !== null
+        ? filters.profileScoreRange
+        : null;
+    if (scoreRange && (scoreRange.min !== undefined || scoreRange.max !== undefined)) {
+        filter.points = {};
+        if (scoreRange.min !== undefined && Number.isFinite(Number(scoreRange.min))) {
+            filter.points.$gte = Number(scoreRange.min);
+        }
+        if (scoreRange.max !== undefined && Number.isFinite(Number(scoreRange.max))) {
+            filter.points.$lte = Number(scoreRange.max);
+        }
+    }
+    if (Array.isArray(filters.institutionNames) && filters.institutionNames.length > 0) {
+        filter.institution_name = { $in: filters.institutionNames };
+    }
     const profiles = await StudentProfile_1.default.find(filter).select('user_id').lean();
-    return profiles.map((p) => p.user_id);
+    const userIds = profiles.map((p) => p.user_id);
+    return filterUserIdsByActivePlanCodes(userIds, planCodes);
+}
+async function filterUserIdsByActivePlanCodes(userIds, planCodes) {
+    const normalizedPlanCodes = Array.from(new Set(planCodes.map((value) => value.trim().toLowerCase()).filter(Boolean)));
+    if (!userIds.length || !normalizedPlanCodes.length) {
+        return userIds;
+    }
+    const subscriptions = await UserSubscription_1.default.find({
+        userId: { $in: userIds },
+        status: 'active',
+        expiresAtUTC: { $gt: new Date() },
+    })
+        .populate('planId', 'code')
+        .select('userId planId')
+        .lean();
+    const allowedUserIds = new Set();
+    for (const subscription of subscriptions) {
+        const plan = subscription.planId || {};
+        const planCode = String(plan.code || '').trim().toLowerCase();
+        if (!planCode || !normalizedPlanCodes.includes(planCode))
+            continue;
+        allowedUserIds.add(String(subscription.userId || ''));
+    }
+    return userIds.filter((userId) => allowedUserIds.has(String(userId)));
 }
 /* ================================================================
    Duplicate prevention
    ================================================================ */
-async function isDuplicate(studentId, channel, templateKey, windowMinutes) {
+async function isDuplicate(params) {
+    const { studentId, channel, templateKey, windowMinutes, to, guardianTargeted, } = params;
     if (windowMinutes <= 0)
         return false;
     const cutoff = new Date(Date.now() - windowMinutes * 60 * 1000);
@@ -180,25 +202,91 @@ async function isDuplicate(studentId, channel, templateKey, windowMinutes) {
         channel,
         status: 'sent',
         sentAtUTC: { $gte: cutoff },
-        // match by template key stored in the job or duplicatePreventionKey
+        to,
+        guardianTargeted,
+        ...(templateKey ? { templateKey: String(templateKey).toUpperCase() } : {}),
     }).lean();
     return !!existing;
 }
-/* ================================================================
-   Quiet hours check
-   ================================================================ */
-function isInQuietHours(settings) {
-    if (!settings.quietHours?.enabled)
-        return false;
-    const { startHour, endHour } = settings.quietHours;
-    const now = new Date();
-    const hour = now.getUTCHours() + 6; // rough Asia/Dhaka offset
-    const normalizedHour = hour >= 24 ? hour - 24 : hour;
-    if (startHour <= endHour) {
-        return normalizedHour >= startHour && normalizedHour < endHour;
+function resolveOriginModule(opts) {
+    if (opts.originModule === 'news' || opts.originModule === 'notice' || opts.originModule === 'trigger') {
+        return opts.originModule;
     }
-    // wraps midnight: e.g. 22–7
-    return normalizedHour >= startHour || normalizedHour < endHour;
+    return opts.triggerKey ? 'trigger' : 'campaign';
+}
+function getTimeZoneParts(date, timeZone) {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+    });
+    const parts = Object.fromEntries(formatter
+        .formatToParts(date)
+        .filter((part) => part.type !== 'literal')
+        .map((part) => [part.type, part.value]));
+    return {
+        year: Number(parts.year),
+        month: Number(parts.month),
+        day: Number(parts.day),
+        hour: Number(parts.hour),
+        minute: Number(parts.minute),
+        second: Number(parts.second),
+    };
+}
+function getTimeZoneOffsetMs(date, timeZone) {
+    const parts = getTimeZoneParts(date, timeZone);
+    const utcMs = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+    return utcMs - date.getTime();
+}
+function zonedDateTimeToUtc(year, month, day, hour, minute, second, timeZone) {
+    const guess = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+    const offsetMs = getTimeZoneOffsetMs(guess, timeZone);
+    return new Date(Date.UTC(year, month - 1, day, hour, minute, second) - offsetMs);
+}
+function shiftCalendarDate(parts, days) {
+    const shifted = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + days));
+    return {
+        year: shifted.getUTCFullYear(),
+        month: shifted.getUTCMonth() + 1,
+        day: shifted.getUTCDate(),
+    };
+}
+function isQuietHourActive(hour, startHour, endHour) {
+    if (startHour <= endHour) {
+        return hour >= startHour && hour < endHour;
+    }
+    return hour >= startHour || hour < endHour;
+}
+function getQuietHoursState(settings, now = new Date()) {
+    if (!settings.quietHours?.enabled)
+        return { active: false };
+    const { startHour, endHour, timezone = 'Asia/Dhaka' } = settings.quietHours;
+    const localNow = getTimeZoneParts(now, timezone);
+    const active = isQuietHourActive(localNow.hour, startHour, endHour);
+    if (!active)
+        return { active: false };
+    let targetDate = { year: localNow.year, month: localNow.month, day: localNow.day };
+    if (startHour > endHour && localNow.hour >= startHour) {
+        targetDate = shiftCalendarDate(targetDate, 1);
+    }
+    let nextAllowedAtUTC = zonedDateTimeToUtc(targetDate.year, targetDate.month, targetDate.day, endHour, 0, 0, timezone);
+    if (nextAllowedAtUTC.getTime() <= now.getTime()) {
+        const nextDay = shiftCalendarDate(targetDate, 1);
+        nextAllowedAtUTC = zonedDateTimeToUtc(nextDay.year, nextDay.month, nextDay.day, endHour, 0, 0, timezone);
+    }
+    return { active: true, nextAllowedAtUTC };
+}
+function normalizeChannels(channels) {
+    const normalized = Array.from(new Set((channels ?? []).filter((channel) => channel === 'sms' || channel === 'email')));
+    return normalized.length > 0 ? normalized : ['email'];
+}
+function normalizeRecipientMode(mode) {
+    return mode === 'guardian' || mode === 'both' ? mode : 'student';
 }
 /* ================================================================
    Preview / Estimate
@@ -290,69 +378,124 @@ async function syncCostToFinance(channel, count, costPerMessage, sourceType, job
         createdByAdminId: new mongoose_1.default.Types.ObjectId(adminId),
     });
 }
-/* ================================================================
-   Core campaign execution
-   ================================================================ */
-async function executeCampaign(opts) {
-    const settings = await getSettings();
-    // Check quiet hours for non-test sends
-    if (!opts.testSend && !opts.scheduledAtUTC && isInQuietHours(settings)) {
-        // Defer: create a scheduled job instead
-        const manualStudentObjectIds = (opts.manualStudentIds ?? [])
-            .filter(id => mongoose_1.default.Types.ObjectId.isValid(id))
-            .map(id => new mongoose_1.default.Types.ObjectId(id));
-        const job = await NotificationJob_1.default.create({
-            type: 'scheduled',
-            campaignName: opts.campaignName,
-            status: 'queued',
-            channel: deriveJobChannel(opts.channels),
-            target: deriveJobTarget(opts.audienceType),
-            targetGroupId: opts.audienceGroupId && mongoose_1.default.Types.ObjectId.isValid(opts.audienceGroupId)
-                ? new mongoose_1.default.Types.ObjectId(opts.audienceGroupId)
-                : undefined,
-            targetStudentIds: manualStudentObjectIds.length > 0 ? manualStudentObjectIds : undefined,
-            targetFilterJson: opts.audienceFilters ? JSON.stringify(opts.audienceFilters) : undefined,
-            audienceType: opts.audienceType,
-            audienceRef: opts.audienceGroupId,
-            templateKey: (opts.templateKey || 'CUSTOM').toUpperCase(),
-            customBody: opts.customBody,
-            recipientMode: opts.recipientMode ?? 'student',
-            guardianTargeted: opts.guardianTargeted ?? false,
-            triggerKey: opts.triggerKey,
-            quietHoursApplied: true,
-            createdByAdminId: new mongoose_1.default.Types.ObjectId(opts.adminId),
-            totalTargets: 0,
-            sentCount: 0,
-            failedCount: 0,
-            estimatedCost: 0,
-            actualCost: 0,
-        });
-        return { jobId: String(job._id), sent: 0, failed: 0, skipped: 0 };
+function parseStoredAudienceFilters(raw) {
+    if (!raw)
+        return undefined;
+    try {
+        return JSON.parse(raw);
     }
+    catch {
+        return undefined;
+    }
+}
+function deriveAudienceTypeFromJob(job) {
+    if (job.audienceType === 'group' || job.audienceType === 'filter' || job.audienceType === 'manual' || job.audienceType === 'all') {
+        return job.audienceType;
+    }
+    if (job.target === 'group')
+        return 'group';
+    if (job.target === 'single' || job.target === 'selected')
+        return 'manual';
+    return 'filter';
+}
+function buildCampaignOptionsFromJob(job) {
+    const manualStudentIds = Array.from(new Set([
+        ...(job.targetStudentId ? [String(job.targetStudentId)] : []),
+        ...((job.targetStudentIds ?? []).map((studentId) => String(studentId))),
+    ]));
+    return {
+        campaignName: String(job.campaignName || job.templateKey || 'Queued Notification'),
+        channels: job.channel === 'both' ? ['sms', 'email'] : [job.channel],
+        templateKey: job.templateKey && job.templateKey !== 'CUSTOM' ? job.templateKey : undefined,
+        customBody: job.customBody,
+        customSubject: job.customSubject,
+        vars: job.payloadOverrides,
+        audienceType: deriveAudienceTypeFromJob(job),
+        audienceGroupId: job.targetGroupId ? String(job.targetGroupId) : undefined,
+        audienceFilters: parseStoredAudienceFilters(job.targetFilterJson),
+        manualStudentIds: manualStudentIds.length > 0 ? manualStudentIds : undefined,
+        guardianTargeted: Boolean(job.guardianTargeted),
+        recipientMode: normalizeRecipientMode(job.recipientMode),
+        scheduledAtUTC: job.scheduledAtUTC ?? undefined,
+        adminId: String(job.createdByAdminId),
+        triggerKey: job.triggerKey,
+        testSend: Boolean(job.isTestSend),
+        originModule: job.originModule,
+        originEntityId: job.originEntityId,
+        originAction: job.originAction,
+    };
+}
+async function resolveTemplateForCampaign(opts) {
+    if (!opts.templateKey)
+        return null;
+    const template = await NotificationTemplate_1.default.findOne({
+        key: opts.templateKey.toUpperCase(),
+        isEnabled: true,
+    })
+        .select('_id key body subject')
+        .lean();
+    return template ? { _id: template._id, body: template.body, subject: template.subject, key: template.key } : null;
+}
+function renderCampaignContent(template, opts, recipient) {
+    const mergedVars = {
+        student_name: recipient.fullName,
+        guardian_name: recipient.guardianName || '',
+        ...(opts.vars ?? {}),
+    };
+    const body = template
+        ? (0, notificationProviderService_1.renderTemplate)(template.body, mergedVars)
+        : opts.customBody
+            ? (0, notificationProviderService_1.renderTemplate)(opts.customBody, mergedVars)
+            : '';
+    const subject = template?.subject
+        ? (0, notificationProviderService_1.renderTemplate)(template.subject, mergedVars)
+        : opts.customSubject ?? '';
+    return { body, subject };
+}
+function buildDeliveryTargets(recipient, channels, recipientMode) {
+    const targets = [];
+    for (const channel of channels) {
+        if (recipientMode === 'student' || recipientMode === 'both') {
+            const address = channel === 'sms' ? recipient.phone : recipient.email;
+            if (address)
+                targets.push({ to: address, channel, isGuardian: false });
+        }
+        if (recipientMode === 'guardian' || recipientMode === 'both') {
+            const address = channel === 'sms' ? recipient.guardianPhone : recipient.guardianEmail;
+            if (address)
+                targets.push({ to: address, channel, isGuardian: true });
+        }
+    }
+    return targets;
+}
+async function resolveAudienceForCampaign(opts) {
     const recipients = await resolveAudience(opts.audienceType, {
         groupId: opts.audienceGroupId,
         filters: opts.audienceFilters,
         manualStudentIds: opts.manualStudentIds,
     });
-    // For test send, limit to 1 recipient
-    const targetRecipients = opts.testSend ? recipients.slice(0, 1) : recipients;
-    // Get finance rates
-    const finSettings = await FinanceSettings_1.default.findOne().lean();
-    const smsCost = finSettings?.smsCostPerMessageBDT ?? 0.35;
-    const emailCost = finSettings?.emailCostPerMessageBDT ?? 0.05;
-    // Estimate cost
-    const estimatedCost = targetRecipients.length * opts.channels.length *
-        ((opts.channels.includes('sms') ? smsCost : 0) + (opts.channels.includes('email') ? emailCost : 0));
-    // Create the job record
+    return opts.testSend ? recipients.slice(0, 1) : recipients;
+}
+function estimateNotificationCost(recipients, channels, recipientMode, smsCost, emailCost) {
+    let total = 0;
+    for (const recipient of recipients) {
+        for (const target of buildDeliveryTargets(recipient, channels, recipientMode)) {
+            total += target.channel === 'sms' ? smsCost : emailCost;
+        }
+    }
+    return total;
+}
+async function createNotificationJobRecord(opts, state) {
     const manualStudentObjectIds = (opts.manualStudentIds ?? [])
-        .filter(id => mongoose_1.default.Types.ObjectId.isValid(id))
-        .map(id => new mongoose_1.default.Types.ObjectId(id));
-    const job = await NotificationJob_1.default.create({
-        type: opts.scheduledAtUTC ? 'scheduled' : opts.triggerKey ? 'triggered' : 'bulk',
+        .filter((id) => mongoose_1.default.Types.ObjectId.isValid(id))
+        .map((id) => new mongoose_1.default.Types.ObjectId(id));
+    return NotificationJob_1.default.create({
+        type: state.scheduledAtUTC ? 'scheduled' : opts.triggerKey ? 'triggered' : opts.testSend ? 'test_send' : 'bulk',
         campaignName: opts.campaignName,
-        status: 'processing',
-        channel: deriveJobChannel(opts.channels),
+        status: state.status,
+        channel: deriveJobChannel(normalizeChannels(opts.channels)),
         target: deriveJobTarget(opts.audienceType),
+        targetStudentId: manualStudentObjectIds.length === 1 ? manualStudentObjectIds[0] : undefined,
         targetGroupId: opts.audienceGroupId && mongoose_1.default.Types.ObjectId.isValid(opts.audienceGroupId)
             ? new mongoose_1.default.Types.ObjectId(opts.audienceGroupId)
             : undefined,
@@ -360,105 +503,160 @@ async function executeCampaign(opts) {
         targetFilterJson: opts.audienceFilters ? JSON.stringify(opts.audienceFilters) : undefined,
         audienceType: opts.audienceType,
         audienceRef: opts.audienceGroupId,
-        totalTargets: targetRecipients.length,
-        recipientMode: opts.recipientMode ?? 'student',
-        guardianTargeted: opts.guardianTargeted ?? false,
-        estimatedCost,
         templateKey: (opts.templateKey || 'CUSTOM').toUpperCase(),
-        triggerKey: opts.triggerKey,
+        payloadOverrides: opts.vars,
         customBody: opts.customBody,
-        scheduledAtUTC: opts.scheduledAtUTC,
+        customSubject: opts.customSubject,
+        recipientMode: normalizeRecipientMode(opts.recipientMode),
+        guardianTargeted: opts.guardianTargeted ?? false,
+        scheduledAtUTC: state.scheduledAtUTC,
+        totalTargets: state.recipientsCount,
+        sentCount: 0,
+        failedCount: 0,
+        estimatedCost: state.estimatedCost,
+        actualCost: 0,
+        triggerKey: opts.triggerKey,
+        originModule: resolveOriginModule(opts),
+        originEntityId: String(opts.originEntityId || '').trim(),
+        originAction: String(opts.originAction || '').trim(),
+        quietHoursApplied: Boolean(state.quietHoursApplied),
         createdByAdminId: new mongoose_1.default.Types.ObjectId(opts.adminId),
+        errorMessage: state.errorMessage,
+        isTestSend: Boolean(opts.testSend),
+        lastAttemptedAtUTC: state.status === 'processing' ? new Date() : undefined,
+        nextRetryAtUTC: state.status === 'queued' ? state.scheduledAtUTC : undefined,
     });
-    const jobId = String(job._id);
+}
+async function finalizeNotificationJob(jobId, opts, settings, stats) {
+    const actualCost = stats.smsSentCount * stats.smsCost + stats.emailSentCount * stats.emailCost;
+    const totalAttempts = stats.sent + stats.failed;
+    const finalStatus = totalAttempts === 0
+        ? 'done'
+        : stats.sent === 0 && stats.failed > 0
+            ? 'failed'
+            : stats.failed > 0
+                ? 'partial'
+                : 'done';
+    await NotificationJob_1.default.findByIdAndUpdate(jobId, {
+        status: finalStatus,
+        sentCount: stats.sent,
+        failedCount: stats.failed,
+        actualCost,
+        processedAtUTC: new Date(),
+        nextRetryAtUTC: undefined,
+        errorMessage: undefined,
+    });
+    if (settings.autoSyncCostToFinance && !opts.testSend) {
+        const sourceType = opts.triggerKey
+            ? 'auto_notification_cost'
+            : opts.guardianTargeted
+                ? 'guardian_notification_cost'
+                : normalizeChannels(opts.channels).includes('sms')
+                    ? 'sms_campaign_cost'
+                    : 'email_campaign_cost';
+        if (stats.smsSentCount > 0) {
+            await syncCostToFinance('sms', stats.smsSentCount, stats.smsCost, sourceType, String(jobId), opts.adminId, `SMS campaign: ${opts.campaignName}`);
+        }
+        if (stats.emailSentCount > 0) {
+            await syncCostToFinance('email', stats.emailSentCount, stats.emailCost, sourceType, String(jobId), opts.adminId, `Email campaign: ${opts.campaignName}`);
+        }
+    }
+    await AuditLog_1.default.create({
+        actor_id: new mongoose_1.default.Types.ObjectId(opts.adminId),
+        action: opts.testSend ? 'notification_test_send' : 'notification_campaign_sent',
+        target_id: jobId,
+        target_type: 'NotificationJob',
+        details: {
+            campaignName: opts.campaignName,
+            channels: normalizeChannels(opts.channels),
+            recipientCount: stats.recipientsCount,
+            sent: stats.sent,
+            failed: stats.failed,
+            skipped: stats.skipped,
+            actualCost,
+            originModule: resolveOriginModule(opts),
+            originEntityId: String(opts.originEntityId || '').trim(),
+            originAction: String(opts.originAction || '').trim(),
+        },
+    });
+}
+async function dispatchNotificationJob(jobId, opts, settings) {
+    const recipients = await resolveAudienceForCampaign(opts);
+    const channels = normalizeChannels(opts.channels);
+    const recipientMode = normalizeRecipientMode(opts.recipientMode);
+    const financeSettings = await FinanceSettings_1.default.findOne().lean();
+    const smsCost = financeSettings?.smsCostPerMessageBDT ?? 0.35;
+    const emailCost = financeSettings?.emailCostPerMessageBDT ?? 0.05;
+    const template = await resolveTemplateForCampaign(opts);
+    if (template?._id) {
+        await NotificationJob_1.default.updateOne({ _id: jobId }, { $set: { templateIds: [template._id], templateKey: template.key } });
+    }
     let sent = 0;
     let failed = 0;
     let skipped = 0;
     let smsSentCount = 0;
     let emailSentCount = 0;
-    // Resolve template(s)
-    let template = null;
-    if (opts.templateKey) {
-        const tpl = await NotificationTemplate_1.default.findOne({
-            key: opts.templateKey.toUpperCase(),
-            isEnabled: true,
-        }).lean();
-        if (tpl)
-            template = { body: tpl.body, subject: tpl.subject, key: tpl.key };
-    }
-    for (const recipient of targetRecipients) {
-        const recipientMode = opts.recipientMode ?? 'student';
-        const targets = [];
-        // Build send targets
-        for (const ch of opts.channels) {
-            if (recipientMode === 'student' || recipientMode === 'both') {
-                const addr = ch === 'sms' ? recipient.phone : recipient.email;
-                if (addr)
-                    targets.push({ to: addr, channel: ch, isGuardian: false, name: recipient.fullName });
-            }
-            if (recipientMode === 'guardian' || recipientMode === 'both') {
-                const addr = ch === 'sms' ? recipient.guardianPhone : recipient.guardianEmail;
-                if (addr)
-                    targets.push({ to: addr, channel: ch, isGuardian: true, name: recipient.guardianName || recipient.fullName });
-            }
-        }
+    for (const recipient of recipients) {
+        const targets = buildDeliveryTargets(recipient, channels, recipientMode);
         for (const target of targets) {
-            // Duplicate check
             if (!opts.testSend && settings.duplicatePreventionWindowMinutes > 0) {
-                const dup = await isDuplicate(recipient.userId, target.channel, opts.templateKey ?? opts.campaignName, settings.duplicatePreventionWindowMinutes);
-                if (dup) {
+                const duplicate = await isDuplicate({
+                    studentId: recipient.userId,
+                    channel: target.channel,
+                    templateKey: opts.templateKey ?? opts.campaignName,
+                    windowMinutes: settings.duplicatePreventionWindowMinutes,
+                    to: target.to,
+                    guardianTargeted: target.isGuardian,
+                });
+                if (duplicate) {
                     skipped++;
                     continue;
                 }
             }
-            // Get provider
             const provider = await (0, notificationProviderService_1.getActiveProvider)(target.channel);
             if (!provider) {
                 failed++;
                 continue;
             }
-            // Render body
-            const mergedVars = {
-                student_name: recipient.fullName,
-                guardian_name: recipient.guardianName || '',
-                ...(opts.vars ?? {}),
-            };
-            const body = template
-                ? (0, notificationProviderService_1.renderTemplate)(template.body, mergedVars)
-                : opts.customBody
-                    ? (0, notificationProviderService_1.renderTemplate)(opts.customBody, mergedVars)
-                    : '';
-            const subject = template?.subject
-                ? (0, notificationProviderService_1.renderTemplate)(template.subject, mergedVars)
-                : opts.customSubject ?? '';
+            const rendered = renderCampaignContent(template, opts, recipient);
             let result;
             try {
                 if (target.channel === 'sms') {
-                    result = await (0, notificationProviderService_1.sendSMS)({ to: target.to, body }, provider);
+                    result = await (0, notificationProviderService_1.sendSMS)({ to: target.to, body: rendered.body }, provider);
                 }
                 else {
-                    result = await (0, notificationProviderService_1.sendEmail)({ to: target.to, subject, html: body, text: body }, provider);
+                    result = await (0, notificationProviderService_1.sendEmail)({ to: target.to, subject: rendered.subject, html: rendered.body, text: rendered.body }, provider);
                 }
             }
-            catch (err) {
-                result = { success: false, error: err instanceof Error ? err.message : String(err) };
+            catch (error) {
+                result = { success: false, error: error instanceof Error ? error.message : String(error) };
             }
-            // Create delivery log
             await NotificationDeliveryLog_1.default.create({
-                jobId: job._id,
-                campaignId: job._id,
+                jobId,
+                campaignId: jobId,
                 studentId: recipient.userId,
+                guardianTargeted: target.isGuardian,
                 channel: target.channel,
                 providerUsed: provider.provider,
+                templateKey: template?.key || '',
+                templateId: template?._id || undefined,
                 to: target.to,
                 status: result.success ? 'sent' : 'failed',
                 providerMessageId: result.messageId,
                 errorMessage: result.error,
+                originModule: resolveOriginModule(opts),
+                originEntityId: String(opts.originEntityId || '').trim(),
+                originAction: String(opts.originAction || '').trim(),
                 sentAtUTC: result.success ? new Date() : undefined,
-                guardianTargeted: target.isGuardian,
-                costAmount: result.success
-                    ? (target.channel === 'sms' ? smsCost : emailCost)
-                    : 0,
+                costAmount: result.success ? (target.channel === 'sms' ? smsCost : emailCost) : 0,
+                recipientMode,
+                messageMode: template ? 'template' : 'custom',
+                recipientDisplay: target.isGuardian
+                    ? (recipient.guardianName || recipient.fullName || target.to)
+                    : (recipient.fullName || target.to),
+                renderedPreview: target.channel === 'email'
+                    ? `${rendered.subject}\n\n${rendered.body}`.slice(0, 1200)
+                    : rendered.body.slice(0, 600),
             });
             if (result.success) {
                 sent++;
@@ -472,60 +670,127 @@ async function executeCampaign(opts) {
             }
         }
     }
-    // Update job with final stats
-    const actualCost = smsSentCount * smsCost + emailSentCount * emailCost;
-    const totalAttempts = sent + failed;
-    const finalStatus = totalAttempts === 0
-        ? 'done'
-        : sent === 0 && failed > 0
-            ? 'failed'
-            : failed > 0
-                ? 'partial'
-                : 'done';
-    await NotificationJob_1.default.findByIdAndUpdate(job._id, {
-        status: finalStatus,
-        sentCount: sent,
-        failedCount: failed,
-        actualCost,
-        processedAtUTC: new Date(),
+    await finalizeNotificationJob(jobId, opts, settings, {
+        recipientsCount: recipients.length,
+        sent,
+        failed,
+        skipped,
+        smsSentCount,
+        emailSentCount,
+        smsCost,
+        emailCost,
     });
-    // Finance sync
-    if (settings.autoSyncCostToFinance && !opts.testSend) {
-        const sourceType = opts.triggerKey
-            ? 'auto_notification_cost'
-            : opts.guardianTargeted
-                ? 'guardian_notification_cost'
-                : opts.channels.includes('sms')
-                    ? 'sms_campaign_cost'
-                    : 'email_campaign_cost';
-        if (smsSentCount > 0) {
-            await syncCostToFinance('sms', smsSentCount, smsCost, sourceType, jobId, opts.adminId, `SMS campaign: ${opts.campaignName}`);
+    return { sent, failed, skipped };
+}
+/* ================================================================
+   Core campaign execution
+   ================================================================ */
+async function executeCampaign(opts) {
+    const settings = await getSettings();
+    const normalizedOptions = {
+        ...opts,
+        channels: normalizeChannels(opts.channels),
+        recipientMode: normalizeRecipientMode(opts.recipientMode),
+    };
+    const quietHoursState = !normalizedOptions.testSend && !normalizedOptions.scheduledAtUTC
+        ? getQuietHoursState(settings)
+        : { active: false };
+    if (quietHoursState.active) {
+        const job = await createNotificationJobRecord(normalizedOptions, {
+            status: 'queued',
+            scheduledAtUTC: quietHoursState.nextAllowedAtUTC,
+            quietHoursApplied: true,
+            recipientsCount: 0,
+            estimatedCost: 0,
+        });
+        return { jobId: String(job._id), sent: 0, failed: 0, skipped: 0 };
+    }
+    if (normalizedOptions.scheduledAtUTC && normalizedOptions.scheduledAtUTC.getTime() > Date.now()) {
+        const job = await createNotificationJobRecord(normalizedOptions, {
+            status: 'queued',
+            scheduledAtUTC: normalizedOptions.scheduledAtUTC,
+            quietHoursApplied: false,
+            recipientsCount: 0,
+            estimatedCost: 0,
+        });
+        return { jobId: String(job._id), sent: 0, failed: 0, skipped: 0 };
+    }
+    const recipients = await resolveAudienceForCampaign(normalizedOptions);
+    const financeSettings = await FinanceSettings_1.default.findOne().lean();
+    const smsCost = financeSettings?.smsCostPerMessageBDT ?? 0.35;
+    const emailCost = financeSettings?.emailCostPerMessageBDT ?? 0.05;
+    const estimatedCost = estimateNotificationCost(recipients, normalizeChannels(normalizedOptions.channels), normalizeRecipientMode(normalizedOptions.recipientMode), smsCost, emailCost);
+    const job = await createNotificationJobRecord(normalizedOptions, {
+        status: 'processing',
+        recipientsCount: recipients.length,
+        estimatedCost,
+    });
+    const result = await dispatchNotificationJob(job._id, normalizedOptions, settings);
+    return { jobId: String(job._id), ...result };
+}
+async function processQueuedNotificationJobs(limit = 10) {
+    const settings = await getSettings();
+    const now = new Date();
+    const jobs = await NotificationJob_1.default.find({
+        status: 'queued',
+        $and: [
+            {
+                $or: [
+                    { scheduledAtUTC: { $exists: false } },
+                    { scheduledAtUTC: null },
+                    { scheduledAtUTC: { $lte: now } },
+                ],
+            },
+            {
+                $or: [
+                    { nextRetryAtUTC: { $exists: false } },
+                    { nextRetryAtUTC: null },
+                    { nextRetryAtUTC: { $lte: now } },
+                ],
+            },
+        ],
+    })
+        .sort({ scheduledAtUTC: 1, createdAt: 1 })
+        .limit(limit)
+        .lean();
+    let processed = 0;
+    let failed = 0;
+    for (const job of jobs) {
+        const locked = await NotificationJob_1.default.findOneAndUpdate({ _id: job._id, status: 'queued' }, {
+            status: 'processing',
+            lastAttemptedAtUTC: new Date(),
+            errorMessage: undefined,
+            nextRetryAtUTC: undefined,
+        }, { new: true }).lean();
+        if (!locked)
+            continue;
+        try {
+            const jobOptions = buildCampaignOptionsFromJob(locked);
+            await dispatchNotificationJob(locked._id, jobOptions, settings);
+            processed++;
         }
-        if (emailSentCount > 0) {
-            await syncCostToFinance('email', emailSentCount, emailCost, sourceType, jobId, opts.adminId, `Email campaign: ${opts.campaignName}`);
+        catch (error) {
+            failed++;
+            await NotificationJob_1.default.findByIdAndUpdate(locked._id, {
+                status: 'queued',
+                errorMessage: error instanceof Error ? error.message : String(error),
+                nextRetryAtUTC: new Date(Date.now() + settings.retryDelayMinutes * 60000),
+            });
         }
     }
-    // Audit log
-    await AuditLog_1.default.create({
-        actor_id: new mongoose_1.default.Types.ObjectId(opts.adminId),
-        action: opts.testSend ? 'notification_test_send' : 'notification_campaign_sent',
-        target_id: job._id,
-        target_type: 'NotificationJob',
-        details: {
-            campaignName: opts.campaignName,
-            channels: opts.channels,
-            recipientCount: targetRecipients.length,
-            sent, failed, skipped,
-            actualCost,
-        },
-    });
-    return { jobId, sent, failed, skipped };
+    return { processed, failed };
 }
 /* ================================================================
    Retry failed deliveries
    ================================================================ */
 async function retryFailedDeliveries(jobId, adminId) {
     const settings = await getSettings();
+    const job = await NotificationJob_1.default.findById(jobId).lean();
+    if (!job) {
+        throw new Error('Notification job not found');
+    }
+    const opts = buildCampaignOptionsFromJob(job);
+    const template = await resolveTemplateForCampaign(opts);
     const failedLogs = await NotificationDeliveryLog_1.default.find({
         jobId: new mongoose_1.default.Types.ObjectId(jobId),
         status: 'failed',
@@ -540,17 +805,25 @@ async function retryFailedDeliveries(jobId, adminId) {
             failedCount++;
             continue;
         }
+        const [recipient] = await resolveAudience('manual', {
+            manualStudentIds: [String(log.studentId)],
+        });
+        if (!recipient) {
+            failedCount++;
+            continue;
+        }
+        const rendered = renderCampaignContent(template, opts, recipient);
         let result;
         try {
             if (log.channel === 'sms') {
-                result = await (0, notificationProviderService_1.sendSMS)({ to: log.to, body: '' }, provider);
+                result = await (0, notificationProviderService_1.sendSMS)({ to: log.to, body: rendered.body }, provider);
             }
             else {
-                result = await (0, notificationProviderService_1.sendEmail)({ to: log.to, subject: '', html: '', text: '' }, provider);
+                result = await (0, notificationProviderService_1.sendEmail)({ to: log.to, subject: rendered.subject, html: rendered.body, text: rendered.body }, provider);
             }
         }
-        catch (err) {
-            result = { success: false, error: err instanceof Error ? err.message : String(err) };
+        catch (error) {
+            result = { success: false, error: error instanceof Error ? error.message : String(error) };
         }
         retried++;
         await NotificationDeliveryLog_1.default.findByIdAndUpdate(log._id, {
@@ -565,6 +838,18 @@ async function retryFailedDeliveries(jobId, adminId) {
         else
             failedCount++;
     }
+    const [sentTotal, failedTotal] = await Promise.all([
+        NotificationDeliveryLog_1.default.countDocuments({ jobId: job._id, status: 'sent' }),
+        NotificationDeliveryLog_1.default.countDocuments({ jobId: job._id, status: 'failed' }),
+    ]);
+    await NotificationJob_1.default.findByIdAndUpdate(job._id, {
+        status: failedTotal === 0 ? 'done' : sentTotal > 0 ? 'partial' : 'failed',
+        sentCount: sentTotal,
+        failedCount: failedTotal,
+        processedAtUTC: new Date(),
+        lastAttemptedAtUTC: new Date(),
+        nextRetryAtUTC: failedTotal > 0 ? new Date(Date.now() + settings.retryDelayMinutes * 60000) : undefined,
+    });
     await AuditLog_1.default.create({
         actor_id: new mongoose_1.default.Types.ObjectId(adminId),
         action: 'notification_retry',
@@ -595,65 +880,5 @@ async function triggerAutoSend(triggerKey, studentIds, vars, adminId) {
         adminId,
         triggerKey,
     });
-}
-/* ================================================================
-   Send account info to student (onboarding)
-   ================================================================ */
-async function sendAccountInfo(studentId, channels, credentials, adminId) {
-    let sent = 0;
-    let failed = 0;
-    for (const channel of channels) {
-        const result = await (await Promise.resolve().then(() => __importStar(require('./notificationProviderService')))).sendNotificationToStudent(studentId, 'ACCOUNT_CREATED', channel, {
-            username: credentials.username,
-            temp_password: credentials.tempPassword,
-            login_url: process.env.LOGIN_URL ?? '',
-        });
-        if (result.success)
-            sent++;
-        else
-            failed++;
-    }
-    // Update user record
-    await User_1.default.findByIdAndUpdate(studentId, {
-        accountInfoLastSentAtUTC: new Date(),
-        accountInfoLastSentChannels: channels,
-    });
-    await AuditLog_1.default.create({
-        actor_id: new mongoose_1.default.Types.ObjectId(adminId),
-        action: 'account_info_sent',
-        target_id: new mongoose_1.default.Types.ObjectId(studentId),
-        target_type: 'User',
-        details: { channels, sent, failed },
-    });
-    return { sent, failed };
-}
-/* ================================================================
-   Resend credentials
-   ================================================================ */
-async function resendCredentials(studentId, channels, credentials, adminId) {
-    let sent = 0;
-    let failed = 0;
-    for (const channel of channels) {
-        const result = await (await Promise.resolve().then(() => __importStar(require('./notificationProviderService')))).sendNotificationToStudent(studentId, 'CREDENTIALS_RESEND', channel, {
-            username: credentials.username,
-            temp_password: credentials.tempPassword,
-            login_url: process.env.LOGIN_URL ?? '',
-        });
-        if (result.success)
-            sent++;
-        else
-            failed++;
-    }
-    await User_1.default.findByIdAndUpdate(studentId, {
-        credentialsLastResentAtUTC: new Date(),
-    });
-    await AuditLog_1.default.create({
-        actor_id: new mongoose_1.default.Types.ObjectId(adminId),
-        action: 'credentials_resent',
-        target_id: new mongoose_1.default.Types.ObjectId(studentId),
-        target_type: 'User',
-        details: { channels, sent, failed },
-    });
-    return { sent, failed };
 }
 //# sourceMappingURL=notificationOrchestrationService.js.map

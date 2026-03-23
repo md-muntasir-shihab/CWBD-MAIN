@@ -86,7 +86,6 @@ router.post('/students/:id/resend-account-info', ...adminAuth, async (req: AuthR
         const result = await adminResendAccountInfo(
             String(req.params.id),
             req.body.channels ?? ['sms'],
-            req.body.tempPassword,
             req.user!._id,
         );
         res.json(result);

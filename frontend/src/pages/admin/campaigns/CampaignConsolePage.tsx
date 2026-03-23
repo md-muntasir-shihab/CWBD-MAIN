@@ -2,6 +2,10 @@ import { useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import AdminGuardShell from '../../../components/admin/AdminGuardShell';
+import AdminGuideButton, { type AdminGuideButtonProps } from '../../../components/admin/AdminGuideButton';
+import ProvidersPanel from './ProvidersPanel';
+import SmartTriggersPanel from './SmartTriggersPanel';
+import ExportCopyPanel from './ExportCopyPanel';
 import { ADMIN_PATHS } from '../../../routes/adminPaths';
 import {
   listCampaigns, getCampaign, previewCampaign, sendCampaign, retryCampaign,
@@ -12,7 +16,8 @@ import {
 } from '../../../api/adminNotificationCampaignApi';
 import { getStudentGroups } from '../../../api/adminStudentApi';
 
-type Tab = 'dashboard' | 'campaigns' | 'new' | 'templates' | 'logs' | 'settings';
+type Tab = 'dashboard' | 'campaigns' | 'new' | 'templates' | 'logs' | 'settings' | 'providers' | 'triggers' | 'export';
+type InlineGuide = Omit<AdminGuideButtonProps, 'variant' | 'tone'>;
 
 const CAMPAIGN_TAB_TO_PATH: Record<Tab, string> = {
   dashboard: ADMIN_PATHS.campaignsDashboard,
@@ -21,19 +26,95 @@ const CAMPAIGN_TAB_TO_PATH: Record<Tab, string> = {
   templates: ADMIN_PATHS.campaignsTemplates,
   logs: ADMIN_PATHS.campaignsLogs,
   settings: ADMIN_PATHS.campaignsSettings,
+  providers: ADMIN_PATHS.campaignsSettings + '#providers',
+  triggers: ADMIN_PATHS.campaignsSettings + '#triggers',
+  export: ADMIN_PATHS.campaignsSettings + '#export',
 };
 
-function getTabFromPath(pathname: string): Tab {
+const CAMPAIGN_GUIDES: Record<string, InlineGuide> = {
+  dashboard: {
+    title: 'Campaign Dashboard',
+    content: 'Review campaign health, counts, and recent activity before drilling into specific operations.',
+    affected: 'Campaign operators and notification delivery oversight.',
+  },
+  campaigns: {
+    title: 'All Campaigns',
+    content: 'Review created campaigns, inspect status, and retry failed sends when needed.',
+    affected: 'Campaign operations and delivery follow-up.',
+  },
+  new: {
+    title: 'New Campaign',
+    content: 'Build and send a new campaign using the current audience, template, and schedule settings.',
+    affected: 'Notification recipients and campaign delivery workflows.',
+  },
+  templates: {
+    title: 'Templates',
+    content: 'Manage reusable campaign templates for future sends.',
+    affected: 'Campaign composition and consistency.',
+  },
+  logs: {
+    title: 'Delivery Logs',
+    content: 'Inspect delivery outcomes and cost-related activity for sent campaigns.',
+    affected: 'Campaign debugging, support, and audit review.',
+  },
+  settings: {
+    title: 'Campaign Settings',
+    content: 'Adjust default behaviour used by the campaign platform.',
+    affected: 'Campaign operators and delivery routing.',
+  },
+  providers: {
+    title: 'Providers',
+    content: 'Manage the provider connections that campaigns rely on for delivery.',
+    affected: 'Campaign sending infrastructure and provider routing.',
+  },
+  triggers: {
+    title: 'Smart Triggers',
+    content: 'Manage automatic trigger rules used by the campaign system.',
+    affected: 'Automated campaign delivery.',
+  },
+  export: {
+    title: 'Export / Copy',
+    content: 'Prepare export-ready audience or campaign copy data for reuse and reporting.',
+    affected: 'Campaign reporting and external handoff workflows.',
+  },
+  createCampaign: {
+    title: 'New Campaign',
+    content: 'Jump into the new-campaign flow and prepare a new send.',
+    affected: 'Campaign operators and targeted recipients.',
+  },
+  viewAll: {
+    title: 'View All Campaigns',
+    content: 'Open the full campaign list to inspect individual sends in more detail.',
+    affected: 'Campaign review workflows.',
+  },
+  view: {
+    title: 'View Campaign',
+    content: 'Open the selected campaign details without changing its delivery data.',
+    affected: 'The current admin review only.',
+  },
+  retry: {
+    title: 'Retry Campaign',
+    content: 'Retry a failed campaign delivery attempt using the existing configuration.',
+    affected: 'Failed delivery targets and campaign logs.',
+  },
+};
+
+function getTabFromPath(pathname: string, hash?: string): Tab {
   const normalized = String(pathname || '').trim();
+  // Check hash-based sub-tabs first
+  const h = String(hash || '').replace('#', '').toLowerCase();
+  if (h === 'providers') return 'providers';
+  if (h === 'triggers' || h === 'smart_triggers') return 'triggers';
+  if (h === 'export' || h === 'export_copy') return 'export';
   const match = (Object.entries(CAMPAIGN_TAB_TO_PATH) as Array<[Tab, string]>)
-    .find(([, path]) => normalized === path);
+    .find(([, p]) => normalized === p.split('#')[0] && !p.includes('#'));
   return match?.[0] ?? 'dashboard';
 }
 
 export default function CampaignConsolePage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const tab = getTabFromPath(location.pathname);
+  const tab = getTabFromPath(location.pathname, location.hash);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' }>({ show: false, message: '', type: 'success' });
   const qc = useQueryClient();
@@ -50,20 +131,27 @@ export default function CampaignConsolePage() {
     { key: 'templates', label: 'Templates' },
     { key: 'logs', label: 'Delivery Logs' },
     { key: 'settings', label: 'Settings' },
+    { key: 'providers', label: 'Providers' },
+    { key: 'triggers', label: 'Smart Triggers' },
+    { key: 'export', label: 'Export / Copy' },
   ];
 
   const navigateToTab = (nextTab: Tab) => {
     if (nextTab !== 'campaigns') setSelectedCampaignId(null);
-    const nextPath = CAMPAIGN_TAB_TO_PATH[nextTab];
-    if (location.pathname !== nextPath) {
-      navigate(nextPath);
+    const rawPath = CAMPAIGN_TAB_TO_PATH[nextTab];
+    const [pathname, hash] = rawPath.split('#');
+    if (hash) {
+      // Hash-based sub-tab: navigate to settings path with hash
+      navigate({ pathname, hash: '#' + hash });
+    } else if (location.pathname !== pathname) {
+      navigate(pathname);
     }
   };
 
   return (
     <AdminGuardShell
-      title="Campaign Platform"
-      description="Send targeted SMS & email campaigns, manage templates, view delivery logs."
+      title="Communication Hub"
+      description="Unified messaging center — campaigns, smart triggers, providers, audience export, and delivery logs."
       requiredModule="notifications"
     >
       {toast.show && (
@@ -71,23 +159,30 @@ export default function CampaignConsolePage() {
           {toast.message}
         </div>
       )}
-      <div className="mb-6 flex flex-wrap gap-2 border-b border-slate-200 pb-3 dark:border-slate-700">
-        {TABS.map(t => (
-          <button
-            key={t.key}
-            onClick={() => navigateToTab(t.key)}
-            className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${tab === t.key ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'}`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+        <div className="mb-6 border-b border-slate-200 pb-3 dark:border-slate-700">
+          <div className="flex flex-wrap gap-1.5">
+            {TABS.map(t => (
+            <div key={t.key} className="flex items-center gap-1">
+              <button
+                onClick={() => navigateToTab(t.key)}
+                className={`rounded-lg px-3.5 py-2 text-sm font-medium transition-all ${tab === t.key ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'}`}
+              >
+                {t.label}
+              </button>
+              <AdminGuideButton {...CAMPAIGN_GUIDES[t.key]} tone="indigo" />
+            </div>
+            ))}
+          </div>
+        </div>
       {tab === 'dashboard' && <DashboardPanel onNavigate={navigateToTab} />}
       {tab === 'campaigns' && <CampaignsListPanel onView={id => { setSelectedCampaignId(id); }} onRetry={id => retryCampaign(id).then(() => { showToast('Retry initiated'); qc.invalidateQueries({ queryKey: ['campaigns'] }); }).catch(() => showToast('Retry failed', 'error'))} />}
       {tab === 'new' && <NewCampaignPanel showToast={showToast} onSent={() => { navigateToTab('campaigns'); qc.invalidateQueries({ queryKey: ['campaigns'] }); }} />}
       {tab === 'templates' && <TemplatesPanel showToast={showToast} />}
       {tab === 'logs' && <LogsPanel />}
       {tab === 'settings' && <SettingsPanel showToast={showToast} />}
+      {tab === 'providers' && <ProvidersPanel showToast={showToast} />}
+      {tab === 'triggers' && <SmartTriggersPanel showToast={showToast} />}
+      {tab === 'export' && <ExportCopyPanel showToast={showToast} />}
       {selectedCampaignId && <CampaignDetailModal id={selectedCampaignId} onClose={() => setSelectedCampaignId(null)} />}
     </AdminGuardShell>
   );
@@ -114,12 +209,18 @@ function DashboardPanel({ onNavigate }: { onNavigate: (t: Tab) => void }) {
         ))}
       </div>
       <div className="flex gap-3">
-        <button onClick={() => onNavigate('new')} className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700">
-          + New Campaign
-        </button>
-        <button onClick={() => onNavigate('campaigns')} className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800">
-          View All
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={() => onNavigate('new')} className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700">
+            + New Campaign
+          </button>
+          <AdminGuideButton {...CAMPAIGN_GUIDES.createCampaign} tone="indigo" />
+        </div>
+        <div className="flex items-center gap-1">
+          <button onClick={() => onNavigate('campaigns')} className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800">
+            View All
+          </button>
+          <AdminGuideButton {...CAMPAIGN_GUIDES.viewAll} tone="indigo" />
+        </div>
       </div>
       {campaigns.length > 0 && (
         <div className="rounded-2xl bg-white shadow-sm dark:bg-slate-900">
@@ -191,9 +292,15 @@ function CampaignsListPanel({ onView, onRetry }: { onView: (id: string) => void;
                 <td className="px-5 py-3 text-xs text-slate-500">{new Date(c.createdAt).toLocaleDateString()}</td>
                 <td className="px-5 py-3">
                   <div className="flex gap-1">
-                    <button onClick={() => onView(c._id)} className="rounded-lg px-2 py-1 text-xs text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-900/20">View</button>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => onView(c._id)} className="rounded-lg px-2 py-1 text-xs text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-900/20">View</button>
+                      <AdminGuideButton {...CAMPAIGN_GUIDES.view} tone="indigo" />
+                    </div>
                     {(c.failedCount ?? 0) > 0 && (
-                      <button onClick={() => onRetry(c._id)} className="rounded-lg px-2 py-1 text-xs text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20">Retry</button>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => onRetry(c._id)} className="rounded-lg px-2 py-1 text-xs text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20">Retry</button>
+                        <AdminGuideButton {...CAMPAIGN_GUIDES.retry} tone="indigo" />
+                      </div>
                     )}
                   </div>
                 </td>
@@ -533,9 +640,11 @@ function LogsPanel() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs font-medium uppercase text-slate-500 dark:border-slate-700">
-              <th className="px-5 py-3">User</th>
+              <th className="px-5 py-3">Recipient</th>
               <th className="px-5 py-3">Channel</th>
               <th className="px-5 py-3">Status</th>
+              <th className="px-5 py-3">Provider / Template</th>
+              <th className="px-5 py-3">Origin</th>
               <th className="px-5 py-3">Cost</th>
               <th className="px-5 py-3">Retries</th>
               <th className="px-5 py-3">Guardian</th>
@@ -544,17 +653,35 @@ function LogsPanel() {
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {isLoading ? (
-              <tr><td colSpan={7} className="px-5 py-8 text-center text-slate-400">Loading...</td></tr>
+              <tr><td colSpan={9} className="px-5 py-8 text-center text-slate-400">Loading...</td></tr>
             ) : logs.length === 0 ? (
-              <tr><td colSpan={7} className="px-5 py-8 text-center text-slate-400">No logs found</td></tr>
+              <tr><td colSpan={9} className="px-5 py-8 text-center text-slate-400">No logs found</td></tr>
             ) : logs.map(l => (
               <tr key={l._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                <td className="px-5 py-3 text-xs font-mono text-slate-500">{l.userId}</td>
+                <td className="px-5 py-3">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-medium text-slate-700 dark:text-slate-200">{l.recipientDisplay || l.userId}</p>
+                    <p className="font-mono text-[11px] text-slate-500">{l.userId}</p>
+                  </div>
+                </td>
                 <td className="px-5 py-3">{l.channel}</td>
                 <td className="px-5 py-3">
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${l.status === 'sent' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : l.status === 'failed' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-amber-100 text-amber-700'}`}>
                     {l.status}
                   </span>
+                </td>
+                <td className="px-5 py-3">
+                  <div className="space-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+                    <p>{l.providerUsed || 'unresolved provider'}</p>
+                    <p className="font-mono">{l.templateKey || (l.messageMode === 'custom' ? 'CUSTOM' : '—')}</p>
+                  </div>
+                </td>
+                <td className="px-5 py-3">
+                  <div className="space-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+                    <p>{l.originModule || 'campaign'}</p>
+                    <p className="font-mono">{l.originEntityId || '—'}</p>
+                    <p>{l.guardianTargeted ? 'guardian' : (l.recipientMode || 'student')}</p>
+                  </div>
                 </td>
                 <td className="px-5 py-3">৳{l.costAmount.toFixed(2)}</td>
                 <td className="px-5 py-3">{l.retryCount}</td>

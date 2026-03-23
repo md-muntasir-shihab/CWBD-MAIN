@@ -10,6 +10,7 @@ import StudentProfile from '../models/StudentProfile';
 import ExamResult from '../models/ExamResult';
 import { AuthRequest } from '../middlewares/auth';
 import { broadcastStudentDashboardEvent } from '../realtime/studentDashboardStream';
+import { ensureSecureUploadUrl } from '../services/secureUploadService';
 
 function hashOtp(code: string): string {
     return crypto.createHash('sha256').update(code).digest('hex');
@@ -35,6 +36,7 @@ const DEFAULT_CELEBRATION_RULES = {
     dismissible: true,
     maxShowsPerDay: 2,
 };
+const NOTIFICATION_ATTACHMENT_ACCESS_ROLES = ['student', 'superadmin', 'admin', 'moderator', 'editor', 'viewer', 'support_agent', 'finance_agent', 'chairman'];
 
 function normalizeCelebrationRules(raw: unknown) {
     const input = (raw && typeof raw === 'object') ? (raw as Record<string, unknown>) : {};
@@ -71,8 +73,16 @@ export async function adminGetNotifications(_req: Request, res: Response): Promi
 
 export async function adminCreateNotification(req: AuthRequest, res: Response): Promise<void> {
     try {
+        const attachmentUrl = await ensureSecureUploadUrl({
+            url: String(req.body?.attachmentUrl || '').trim(),
+            category: 'admin_upload',
+            visibility: 'protected',
+            uploadedBy: req.user?._id || null,
+            accessRoles: NOTIFICATION_ATTACHMENT_ACCESS_ROLES,
+        });
         const payload = {
             ...req.body,
+            attachmentUrl,
             createdBy: toObjectIdOrUndefined(req.user?._id),
             updatedBy: toObjectIdOrUndefined(req.user?._id),
         };
@@ -87,9 +97,19 @@ export async function adminCreateNotification(req: AuthRequest, res: Response): 
 
 export async function adminUpdateNotification(req: AuthRequest, res: Response): Promise<void> {
     try {
+        const nextBody = { ...req.body } as Record<string, unknown>;
+        if (nextBody.attachmentUrl !== undefined) {
+            nextBody.attachmentUrl = await ensureSecureUploadUrl({
+                url: String(nextBody.attachmentUrl || '').trim(),
+                category: 'admin_upload',
+                visibility: 'protected',
+                uploadedBy: req.user?._id || null,
+                accessRoles: NOTIFICATION_ATTACHMENT_ACCESS_ROLES,
+            });
+        }
         const item = await Notification.findByIdAndUpdate(
             req.params.id,
-            { ...req.body, updatedBy: toObjectIdOrUndefined(req.user?._id) },
+            { ...nextBody, updatedBy: toObjectIdOrUndefined(req.user?._id) },
             { new: true, runValidators: true }
         );
         if (!item) {

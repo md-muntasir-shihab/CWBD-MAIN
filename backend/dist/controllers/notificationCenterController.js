@@ -28,6 +28,9 @@ const NotificationDeliveryLog_1 = __importDefault(require("../models/Notificatio
 const Notification_1 = __importDefault(require("../models/Notification"));
 const AuditLog_1 = __importDefault(require("../models/AuditLog"));
 const requestMeta_1 = require("../utils/requestMeta");
+const cryptoService_1 = require("../services/cryptoService");
+const notificationOrchestrationService_1 = require("../services/notificationOrchestrationService");
+const securityAlertController_1 = require("./securityAlertController");
 /* ── helpers ── */
 function asObjectId(value) {
     const raw = String(value || '').trim();
@@ -46,6 +49,15 @@ async function createAudit(req, action, details) {
         ip_address: (0, requestMeta_1.getClientIp)(req),
         details: details || {},
     });
+}
+function sanitizeProvider(doc) {
+    const plain = { ...doc };
+    const credentialsConfigured = Boolean(plain.credentialsEncrypted);
+    delete plain.credentialsEncrypted;
+    return {
+        ...plain,
+        credentialsConfigured,
+    };
 }
 /* ═══════════════════════════════════════════════════════════
    SUMMARY
@@ -70,7 +82,8 @@ async function adminGetProviders(_req, res) {
     const items = await NotificationProvider_1.default.find()
         .select('-credentialsEncrypted')
         .sort({ createdAt: -1 })
-        .lean();
+        .lean()
+        .then((rows) => rows.map((row) => sanitizeProvider(row)));
     res.json({ items });
 }
 async function adminCreateProvider(req, res) {
@@ -84,14 +97,13 @@ async function adminCreateProvider(req, res) {
         provider,
         displayName,
         isEnabled: isEnabled !== false,
-        credentialsEncrypted: credentials ? JSON.stringify(credentials) : '{}',
+        credentialsEncrypted: (0, cryptoService_1.encrypt)(JSON.stringify(credentials || {})),
         senderConfig: senderConfig || {},
         rateLimit: rateLimit || {},
     });
     await createAudit(req, 'notification_provider_created', { providerId: doc._id, type, provider });
-    const plain = doc.toObject();
-    delete plain.credentialsEncrypted;
-    res.status(201).json({ data: plain, message: 'Provider created' });
+    await (0, securityAlertController_1.createSecurityAlert)('provider_credentials_changed', 'warning', 'Notification provider added', `${displayName} credentials were added or updated.`, { providerId: String(doc._id), provider, type, actorUserId: req.user?._id || null });
+    res.status(201).json({ data: sanitizeProvider(doc.toObject()), message: 'Provider created' });
 }
 async function adminUpdateProvider(req, res) {
     const id = asObjectId(req.params.id);
@@ -110,16 +122,19 @@ async function adminUpdateProvider(req, res) {
     if (rateLimit !== undefined)
         update.rateLimit = rateLimit;
     if (credentials !== undefined)
-        update.credentialsEncrypted = JSON.stringify(credentials);
+        update.credentialsEncrypted = (0, cryptoService_1.encrypt)(JSON.stringify(credentials || {}));
     const doc = await NotificationProvider_1.default.findByIdAndUpdate(id, { $set: update }, { new: true })
-        .select('-credentialsEncrypted')
+        .select('+credentialsEncrypted')
         .lean();
     if (!doc) {
         res.status(404).json({ message: 'Provider not found' });
         return;
     }
     await createAudit(req, 'notification_provider_updated', { providerId: id });
-    res.json({ data: doc, message: 'Provider updated' });
+    if (credentials !== undefined) {
+        await (0, securityAlertController_1.createSecurityAlert)('provider_credentials_changed', 'warning', 'Notification provider credentials changed', `${String(doc.displayName || doc.provider || 'Provider')} credentials were changed.`, { providerId: String(id), actorUserId: req.user?._id || null });
+    }
+    res.json({ data: sanitizeProvider(doc), message: 'Provider updated' });
 }
 async function adminDeleteProvider(req, res) {
     const id = asObjectId(req.params.id);
@@ -133,6 +148,7 @@ async function adminDeleteProvider(req, res) {
         return;
     }
     await createAudit(req, 'notification_provider_deleted', { providerId: id });
+    await (0, securityAlertController_1.createSecurityAlert)('provider_credentials_changed', 'warning', 'Notification provider deleted', `${String(doc.displayName || doc.provider || 'Provider')} was removed from the communication hub.`, { providerId: String(id), actorUserId: req.user?._id || null });
     res.json({ message: 'Provider deleted' });
 }
 async function adminTestProvider(req, res) {
@@ -254,26 +270,48 @@ async function adminSendNotification(req, res) {
         res.status(401).json({ message: 'Unauthorized' });
         return;
     }
-    const { channel, target, templateKey, targetStudentId, targetGroupId, targetStudentIds, targetFilterJson, payloadOverrides, scheduledAtUTC } = req.body;
+    const { channel, target, templateKey, targetStudentId, targetGroupId, targetStudentIds, targetFilterJson, payloadOverrides, scheduledAtUTC, customBody, customSubject, campaignName, guardianTargeted, recipientMode } = req.body;
     if (!channel || !target || !templateKey) {
         res.status(400).json({ message: 'channel, target, templateKey required' });
         return;
     }
-    const job = await NotificationJob_1.default.create({
-        type: scheduledAtUTC ? 'scheduled' : 'bulk',
-        channel,
-        target,
-        targetStudentId: targetStudentId ? new mongoose_1.default.Types.ObjectId(targetStudentId) : undefined,
-        targetGroupId: targetGroupId ? new mongoose_1.default.Types.ObjectId(targetGroupId) : undefined,
-        targetStudentIds: targetStudentIds?.map((id) => new mongoose_1.default.Types.ObjectId(id)),
-        targetFilterJson: targetFilterJson ? JSON.stringify(targetFilterJson) : undefined,
-        templateKey: templateKey.toUpperCase(),
-        payloadOverrides,
+    let audienceFilters;
+    if (target === 'filter' && targetFilterJson) {
+        try {
+            audienceFilters = typeof targetFilterJson === 'string'
+                ? JSON.parse(targetFilterJson)
+                : targetFilterJson;
+        }
+        catch {
+            res.status(400).json({ message: 'Invalid targetFilterJson' });
+            return;
+        }
+    }
+    const result = await (0, notificationOrchestrationService_1.executeCampaign)({
+        campaignName: String(campaignName || templateKey),
+        channels: channel === 'both' ? ['sms', 'email'] : [channel],
+        templateKey: String(templateKey).toUpperCase(),
+        customBody,
+        customSubject,
+        vars: payloadOverrides,
+        audienceType: target === 'group' ? 'group' : target === 'filter' ? 'filter' : 'manual',
+        audienceGroupId: target === 'group' ? String(targetGroupId || '') : undefined,
+        audienceFilters,
+        manualStudentIds: target === 'single'
+            ? [String(targetStudentId || '')].filter(Boolean)
+            : Array.isArray(targetStudentIds)
+                ? targetStudentIds.map((value) => String(value || '')).filter(Boolean)
+                : undefined,
+        guardianTargeted: Boolean(guardianTargeted),
+        recipientMode: recipientMode === 'guardian' || recipientMode === 'both' ? recipientMode : 'student',
         scheduledAtUTC: scheduledAtUTC ? new Date(scheduledAtUTC) : undefined,
-        createdByAdminId: new mongoose_1.default.Types.ObjectId(String(req.user._id)),
+        adminId: String(req.user._id),
     });
-    await createAudit(req, 'notification_job_created', { jobId: job._id, templateKey, target });
-    res.status(201).json({ data: job, message: 'Notification job created' });
+    await createAudit(req, 'notification_job_created', { jobId: result.jobId, templateKey, target });
+    res.status(201).json({
+        data: { jobId: result.jobId, sent: result.sent, failed: result.failed, skipped: result.skipped },
+        message: scheduledAtUTC ? 'Notification job scheduled' : 'Notification job queued or processed',
+    });
 }
 async function adminRetryFailedJob(req, res) {
     const id = asObjectId(req.params.id);
@@ -290,11 +328,9 @@ async function adminRetryFailedJob(req, res) {
         res.status(400).json({ message: 'Only failed or partial jobs can be retried' });
         return;
     }
-    job.status = 'queued';
-    job.errorMessage = undefined;
-    await job.save();
-    await createAudit(req, 'notification_job_retried', { jobId: id });
-    res.json({ data: job, message: 'Job queued for retry' });
+    const result = await (0, notificationOrchestrationService_1.retryFailedDeliveries)(String(id), String(req.user._id));
+    await createAudit(req, 'notification_job_retried', { jobId: id, ...result });
+    res.json({ data: result, message: 'Failed deliveries retried' });
 }
 /* ═══════════════════════════════════════════════════════════
    DELIVERY  LOGS

@@ -42,7 +42,10 @@ const TeamAuditLog_1 = __importDefault(require("../models/TeamAuditLog"));
 const TeamInvite_1 = __importDefault(require("../models/TeamInvite"));
 const ActiveSession_1 = __importDefault(require("../models/ActiveSession"));
 const defaults_1 = require("../teamAccess/defaults");
+const securityTokenService_1 = require("../services/securityTokenService");
+const mailer_1 = require("../utils/mailer");
 const TEAM_USER_ROLES = ['superadmin', 'admin', 'moderator', 'editor', 'viewer', 'support_agent', 'finance_agent'];
+const APP_DOMAIN = process.env.APP_DOMAIN || process.env.FRONTEND_URL || 'http://localhost:5173';
 function normalizeEmail(value) {
     return String(value || '').trim().toLowerCase();
 }
@@ -51,6 +54,82 @@ function asObjectId(id) {
 }
 function randomPassword() {
     return crypto_1.default.randomBytes(8).toString('hex');
+}
+function isRecord(value) {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+function parseRequiredApprovals(value, fallback = 1) {
+    if (value === undefined || value === null || String(value).trim() === '')
+        return fallback;
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < 1)
+        return null;
+    return parsed;
+}
+async function resolveApproverRoleIds(body) {
+    const rawValues = [
+        ...(Array.isArray(body.approverRoleIds) ? body.approverRoleIds : []),
+        ...(Array.isArray(body.approverRoles) ? body.approverRoles : []),
+    ]
+        .map((value) => String(value || '').trim())
+        .filter(Boolean);
+    const uniqueValues = Array.from(new Set(rawValues));
+    if (uniqueValues.length === 0) {
+        return { ids: [], invalid: [] };
+    }
+    const resolvedIds = new Map();
+    const unresolved = [];
+    uniqueValues.forEach((value) => {
+        if (mongoose_1.default.Types.ObjectId.isValid(value)) {
+            resolvedIds.set(value, asObjectId(value));
+            return;
+        }
+        unresolved.push(value);
+    });
+    if (unresolved.length === 0) {
+        return { ids: Array.from(resolvedIds.values()), invalid: [] };
+    }
+    const roleMatches = await TeamRole_1.default.find({
+        $or: [
+            { slug: { $in: unresolved.map((value) => value.toLowerCase()) } },
+            { name: { $in: unresolved } },
+        ],
+    })
+        .select('_id slug name')
+        .lean();
+    const matchedKeys = new Set();
+    roleMatches.forEach((role) => {
+        resolvedIds.set(String(role._id), asObjectId(String(role._id)));
+        matchedKeys.add(String(role.slug || '').trim().toLowerCase());
+        matchedKeys.add(String(role.name || '').trim());
+    });
+    return {
+        ids: Array.from(resolvedIds.values()),
+        invalid: unresolved.filter((value) => !matchedKeys.has(value) && !matchedKeys.has(value.toLowerCase())),
+    };
+}
+async function issueMemberSetPasswordInvite(user, createdBy) {
+    const email = normalizeEmail(user.email);
+    if (!email)
+        return false;
+    const { rawToken } = await (0, securityTokenService_1.issueSecurityToken)({
+        userId: user._id,
+        purpose: 'set_password',
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        channel: 'email',
+        replaceExisting: true,
+        createdBy: createdBy && mongoose_1.default.Types.ObjectId.isValid(createdBy)
+            ? new mongoose_1.default.Types.ObjectId(createdBy)
+            : null,
+        meta: { email, teamMember: true },
+    });
+    const setPasswordUrl = `${APP_DOMAIN}/student/reset-password?token=${rawToken}`;
+    return (0, mailer_1.sendCampusMail)({
+        to: email,
+        subject: 'CampusWay: Set your team account password',
+        text: `Set your CampusWay password: ${setPasswordUrl}`,
+        html: `<p>Hello ${user.full_name || user.username},</p><p>Your CampusWay team account is ready.</p><p><a href="${setPasswordUrl}">Set your password</a></p><p>This link expires in 24 hours and can be used once.</p>`,
+    });
 }
 function pickModulePermissions(input) {
     const source = (typeof input === 'object' && input) ? input : {};
@@ -181,8 +260,7 @@ async function teamCreateMember(req, res) {
             res.status(404).json({ message: 'Role not found' });
             return;
         }
-        const rawPassword = String(body.password || '').trim() || randomPassword();
-        const passwordHash = await bcryptjs_1.default.hash(rawPassword, 10);
+        const passwordHash = await bcryptjs_1.default.hash(randomPassword(), 10);
         const user = await User_1.default.create({
             full_name: fullName,
             email,
@@ -195,8 +273,12 @@ async function teamCreateMember(req, res) {
             forcePasswordResetRequired: requirePasswordReset,
             notes,
         });
-        const inviteStatus = mode === 'draft' ? 'draft' : mode === 'without_send' ? 'pending' : 'sent';
         const authReq = req;
+        const shouldSendInvite = mode !== 'draft' && mode !== 'without_send';
+        const inviteSent = shouldSendInvite
+            ? await issueMemberSetPasswordInvite(user, authReq.user?._id)
+            : false;
+        const inviteStatus = mode === 'draft' ? 'draft' : inviteSent ? 'sent' : 'pending';
         await TeamInvite_1.default.create({
             memberId: user._id,
             fullName,
@@ -213,15 +295,16 @@ async function teamCreateMember(req, res) {
             role: role.slug,
             status,
             inviteMode: mode,
+            inviteSent,
         });
         res.status(201).json({
-            message: 'Team member created',
+            message: inviteSent ? 'Team member created and invite sent' : 'Team member created',
             item: {
                 _id: user._id,
                 fullName: user.full_name,
                 email: user.email,
                 roleId,
-                tempPassword: mode === 'invite' ? undefined : rawPassword,
+                inviteSent,
             },
         });
     }
@@ -353,12 +436,20 @@ async function teamResetPassword(req, res) {
             res.status(404).json({ message: 'Member not found' });
             return;
         }
-        const password = randomPassword();
-        member.password = await bcryptjs_1.default.hash(password, 10);
+        member.password = await bcryptjs_1.default.hash(randomPassword(), 10);
         member.forcePasswordResetRequired = true;
+        member.mustChangePassword = true;
         await member.save();
-        await writeAudit(req, 'member_password_reset', 'team_member', req.params.id, undefined, { forcePasswordResetRequired: true });
-        res.json({ message: 'Password reset complete', tempPassword: password });
+        const authReq = req;
+        const inviteSent = await issueMemberSetPasswordInvite(member, authReq.user?._id);
+        await writeAudit(req, 'member_password_reset', 'team_member', req.params.id, undefined, {
+            forcePasswordResetRequired: true,
+            inviteSent,
+        });
+        res.json({
+            message: inviteSent ? 'Password reset link sent' : 'Password reset prepared',
+            inviteSent,
+        });
     }
     catch (error) {
         console.error('teamResetPassword error:', error);
@@ -627,10 +718,26 @@ async function teamUpdateMemberOverride(req, res) {
             return;
         }
         const body = req.body;
+        if (body.allow === undefined && body.deny === undefined) {
+            res.status(400).json({ message: 'allow or deny permission matrix is required' });
+            return;
+        }
+        if (body.allow !== undefined && !isRecord(body.allow)) {
+            res.status(400).json({ message: 'allow must be a permission matrix object' });
+            return;
+        }
+        if (body.deny !== undefined && !isRecord(body.deny)) {
+            res.status(400).json({ message: 'deny must be a permission matrix object' });
+            return;
+        }
+        const member = await User_1.default.findById(memberId).select('teamRoleId').lean();
+        if (!member) {
+            res.status(404).json({ message: 'Member not found' });
+            return;
+        }
         const allow = pickModulePermissions(body.allow);
         const deny = pickModulePermissions(body.deny);
         await MemberPermissionOverride_1.default.updateOne({ memberId: asObjectId(memberId) }, { $set: { allow, deny } }, { upsert: true });
-        const member = await User_1.default.findById(memberId).select('teamRoleId').lean();
         if (member?.teamRoleId) {
             const base = await RolePermissionSet_1.default.findOne({ roleId: member.teamRoleId }).lean();
             const merged = applyOverride((base?.modulePermissions || {}), allow, deny);
@@ -659,23 +766,40 @@ async function teamCreateApprovalRule(req, res) {
         const body = req.body;
         const module = String(body.module || '').trim().toLowerCase();
         const action = String(body.action || '').trim().toLowerCase();
-        const approverRoleIds = Array.isArray(body.approverRoleIds) ? body.approverRoleIds.filter((id) => mongoose_1.default.Types.ObjectId.isValid(String(id))).map((id) => asObjectId(String(id))) : [];
+        const requiresApproval = body.requiresApproval !== false;
+        const requiredApprovals = parseRequiredApprovals(body.requiredApprovals, 1);
+        const description = String(body.description || '').trim();
+        const { ids: approverRoleIds, invalid } = await resolveApproverRoleIds(body);
         if (!module || !action) {
             res.status(400).json({ message: 'module and action are required' });
+            return;
+        }
+        if (requiredApprovals === null) {
+            res.status(400).json({ message: 'requiredApprovals must be an integer greater than 0' });
+            return;
+        }
+        if (invalid.length > 0) {
+            res.status(400).json({ message: `Unknown approver roles: ${invalid.join(', ')}` });
             return;
         }
         const item = await TeamApprovalRule_1.default.create({
             module,
             action,
-            requiresApproval: body.requiresApproval !== false,
+            requiresApproval,
+            requiredApprovals,
+            description,
             approverRoleIds,
         });
+        const populatedItem = await TeamApprovalRule_1.default.findById(item._id).populate('approverRoleIds', 'name slug').lean();
         await writeAudit(req, 'approval_rule_created', 'approval_rule', String(item._id), undefined, {
             module,
             action,
+            requiresApproval,
+            requiredApprovals,
+            description,
             approverRoleIds: approverRoleIds.map((id) => String(id)),
         });
-        res.status(201).json({ item, message: 'Approval rule created' });
+        res.status(201).json({ item: populatedItem || item, message: 'Approval rule created' });
     }
     catch (error) {
         console.error('teamCreateApprovalRule error:', error);
@@ -690,21 +814,39 @@ async function teamUpdateApprovalRule(req, res) {
             res.status(404).json({ message: 'Approval rule not found' });
             return;
         }
+        const requiredApprovals = parseRequiredApprovals(body.requiredApprovals, item.requiredApprovals || 1);
+        const { ids: approverRoleIds, invalid } = await resolveApproverRoleIds(body);
+        if (requiredApprovals === null) {
+            res.status(400).json({ message: 'requiredApprovals must be an integer greater than 0' });
+            return;
+        }
+        if (invalid.length > 0) {
+            res.status(400).json({ message: `Unknown approver roles: ${invalid.join(', ')}` });
+            return;
+        }
         if (body.module)
             item.module = String(body.module).trim().toLowerCase();
         if (body.action)
             item.action = String(body.action).trim().toLowerCase();
         if (body.requiresApproval !== undefined)
             item.requiresApproval = Boolean(body.requiresApproval);
-        if (Array.isArray(body.approverRoleIds)) {
-            item.approverRoleIds = body.approverRoleIds.filter((id) => mongoose_1.default.Types.ObjectId.isValid(String(id))).map((id) => asObjectId(String(id)));
+        if (body.requiredApprovals !== undefined)
+            item.requiredApprovals = requiredApprovals;
+        if (body.description !== undefined)
+            item.description = String(body.description || '').trim();
+        if (Array.isArray(body.approverRoleIds) || Array.isArray(body.approverRoles)) {
+            item.approverRoleIds = approverRoleIds;
         }
         await item.save();
+        const populatedItem = await TeamApprovalRule_1.default.findById(item._id).populate('approverRoleIds', 'name slug').lean();
         await writeAudit(req, 'approval_rule_updated', 'approval_rule', req.params.id, undefined, {
             module: item.module,
             action: item.action,
+            requiresApproval: item.requiresApproval,
+            requiredApprovals: item.requiredApprovals,
+            description: item.description,
         });
-        res.json({ message: 'Approval rule updated', item });
+        res.json({ message: 'Approval rule updated', item: populatedItem || item });
     }
     catch (error) {
         console.error('teamUpdateApprovalRule error:', error);

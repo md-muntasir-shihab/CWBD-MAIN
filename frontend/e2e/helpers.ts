@@ -104,7 +104,7 @@ export async function loginAsAdmin(page: Page, variant: CredentialVariant = 'aut
 
     for (let i = 0; i < attempts.length; i += 1) {
         const creds = attempts[i];
-        await page.goto('/__cw_admin__/login');
+        await page.goto('/__cw_admin__/login', { waitUntil: 'domcontentloaded' });
         await page.locator('input#identifier, input[name="identifier"], input[type="text"], input[type="email"]').first().fill(creds.email);
         await page.locator('input#password, input[name="password"], input[type="password"]').first().fill(creds.password);
         await page.getByRole('button', { name: /Sign In/i }).first().click();
@@ -128,7 +128,7 @@ export async function loginAsAdmin(page: Page, variant: CredentialVariant = 'aut
 
 export async function loginAsStudent(page: Page, variant: CredentialVariant = 'auto'): Promise<void> {
     const creds = getStudentCreds(page, variant);
-    await page.goto('/login');
+    await page.goto('/login', { waitUntil: 'domcontentloaded' });
     await page.locator('input#identifier, input[name="identifier"], input[type="text"], input[type="email"]').first().fill(creds.email);
     await page.locator('input#password, input[name="password"], input[type="password"]').first().fill(creds.password);
     await page.getByRole('button', { name: /(Sign in|Access Dashboard)/i }).first().click();

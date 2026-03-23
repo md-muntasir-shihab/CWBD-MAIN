@@ -10,6 +10,7 @@ const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const crypto_1 = __importDefault(require("crypto"));
 const firebaseAdmin_1 = require("../config/firebaseAdmin");
+const secureUploadService_1 = require("../services/secureUploadService");
 // Ensure the upload directory exists
 const uploadDir = path_1.default.join(__dirname, '../../public/uploads');
 if (!fs_1.default.existsSync(uploadDir)) {
@@ -22,6 +23,7 @@ const ALLOWED_MIME_TYPES = new Set([
     'image/gif',
     'application/pdf',
 ]);
+const SECURE_CATEGORIES = new Set(['profile_photo', 'student_document', 'payment_proof', 'support_attachment', 'exam_upload', 'admin_upload']);
 // Configure multer storage
 const storage = multer_1.default.diskStorage({
     destination: (_req, _file, cb) => {
@@ -62,8 +64,17 @@ async function uploadMedia(req, res) {
             return;
         }
         const origin = `${req.protocol}://${req.get('host')}`;
+        const requestedVisibility = String(req.body?.visibility || req.query.visibility || '').trim().toLowerCase() === 'protected'
+            ? 'protected'
+            : 'public';
+        const requestedCategoryRaw = String(req.body?.category || req.query.category || '').trim().toLowerCase();
+        const requestedCategory = SECURE_CATEGORIES.has(requestedCategoryRaw) ? requestedCategoryRaw : 'admin_upload';
+        const accessRoles = String(req.body?.accessRoles || req.query.accessRoles || '')
+            .split(',')
+            .map((role) => role.trim().toLowerCase())
+            .filter(Boolean);
         const firebaseBucket = (0, firebaseAdmin_1.getFirebaseStorageBucket)();
-        if (firebaseBucket) {
+        if (firebaseBucket && requestedVisibility !== 'protected') {
             const ext = path_1.default.extname(req.file.originalname || '').toLowerCase() || path_1.default.extname(req.file.filename || '');
             const safeExt = ext && ext.length <= 10 ? ext : '';
             const objectKey = `media/${Date.now()}-${crypto_1.default.randomBytes(8).toString('hex')}${safeExt}`;
@@ -88,6 +99,28 @@ async function uploadMedia(req, res) {
             });
             return;
         }
+        if (requestedVisibility === 'protected') {
+            const secureUpload = await (0, secureUploadService_1.registerSecureUpload)({
+                file: req.file,
+                category: requestedCategory,
+                visibility: 'protected',
+                ownerUserId: req.user?._id || null,
+                ownerRole: req.user?.role || null,
+                uploadedBy: req.user?._id || null,
+                accessRoles,
+            });
+            const url = (0, secureUploadService_1.buildSecureUploadUrl)(secureUpload.storedName);
+            res.status(201).json({
+                message: 'File uploaded successfully.',
+                url,
+                absoluteUrl: `${origin}${url}`,
+                filename: secureUpload.storedName,
+                mimetype: secureUpload.mimeType,
+                size: secureUpload.sizeBytes,
+                visibility: secureUpload.visibility,
+            });
+            return;
+        }
         // Construct the public URL for the uploaded file
         // For development, it will be served from the local Node server e.g. /uploads/filename.ext
         const fileUrl = `/uploads/${req.file.filename}`;
@@ -98,7 +131,8 @@ async function uploadMedia(req, res) {
             absoluteUrl,
             filename: req.file.filename,
             mimetype: req.file.mimetype,
-            size: req.file.size
+            size: req.file.size,
+            visibility: 'public',
         });
     }
     catch (err) {

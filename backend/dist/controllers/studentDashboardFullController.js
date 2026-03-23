@@ -16,6 +16,7 @@ const ManualPayment_1 = __importDefault(require("../models/ManualPayment"));
 const StudentDueLedger_1 = __importDefault(require("../models/StudentDueLedger"));
 const Resource_1 = __importDefault(require("../models/Resource"));
 const securityConfigService_1 = require("../services/securityConfigService");
+const subscriptionAccessService_1 = require("../services/subscriptionAccessService");
 const studentDashboardService_1 = require("../services/studentDashboardService");
 function ensureStudent(req, res) {
     if (!req.user) {
@@ -216,7 +217,11 @@ async function getWatchlistSummary(studentId) {
     };
 }
 async function getRecommendedResources(_studentId, weakSubjects = []) {
-    const allResources = await Resource_1.default.find({ isPublic: true })
+    const subscriptionSnapshot = await (0, subscriptionAccessService_1.getCanonicalSubscriptionSnapshot)(_studentId);
+    const resourceFilter = subscriptionSnapshot.allowsPremiumResources === true
+        ? {}
+        : { isPublic: true };
+    const allResources = await Resource_1.default.find(resourceFilter)
         .sort({ isFeatured: -1, publishDate: -1 })
         .limit(20)
         .select('title description type category tags fileUrl externalUrl thumbnailUrl isFeatured')

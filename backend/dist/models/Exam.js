@@ -45,6 +45,7 @@ const ScheduleWindowSchema = new mongoose_1.Schema({
 }, { _id: false });
 const ExamSchema = new mongoose_1.Schema({
     title: { type: String, required: true, trim: true },
+    slug: { type: String, default: '', trim: true },
     title_bn: { type: String, default: '' },
     type: { type: String, enum: ['Science', 'Arts', 'Commerce', 'Mixed'], default: 'Mixed' },
     group_category: { type: String, enum: ['SSC', 'HSC', 'Admission', 'Custom'], default: 'Custom' },
@@ -78,6 +79,15 @@ const ExamSchema = new mongoose_1.Schema({
     answerEditLimitPerQuestion: { type: Number, default: undefined },
     deliveryMode: { type: String, enum: ['internal', 'external_link'], default: 'internal' },
     externalExamUrl: { type: String, default: null },
+    examCenterId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'ExamCenter', default: null },
+    examCenterSnapshot: {
+        name: { type: String, default: '' },
+        address: { type: String, default: '' },
+        code: { type: String, default: '' },
+        note: { type: String, default: '' },
+    },
+    templateId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'ExamImportTemplate', default: null },
+    importProfileId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'ExamMappingProfile', default: null },
     logoUrl: { type: String, default: '' },
     share_link: { type: String, default: '', trim: true },
     short_link: { type: String, default: '', trim: true },
@@ -153,10 +163,22 @@ ExamSchema.index({ status: 1 });
 ExamSchema.index({ group_category: 1, startDate: 1 });
 ExamSchema.index({ isPublished: 1, startDate: 1, endDate: 1, group_category: 1 });
 ExamSchema.index({ share_link: 1 }, { unique: true, sparse: true });
+ExamSchema.index({ slug: 1 }, { unique: true, sparse: true });
 ExamSchema.pre('validate', function validateExternalExamConfig(next) {
     const doc = this;
     const deliveryMode = String(doc.deliveryMode || 'internal').trim().toLowerCase();
     const externalExamUrl = String(doc.externalExamUrl || '').trim();
+    const slugSeed = String(doc.slug || doc.title || '')
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+    if (!doc.slug) {
+        doc.slug = slugSeed || `exam-${Date.now()}`;
+    }
+    else {
+        doc.slug = slugSeed || doc.slug;
+    }
     if (deliveryMode === 'external_link') {
         if (!externalExamUrl) {
             next(new Error('externalExamUrl is required when deliveryMode is external_link.'));

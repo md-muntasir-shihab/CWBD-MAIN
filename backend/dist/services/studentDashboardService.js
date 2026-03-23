@@ -23,6 +23,7 @@ const StudentDashboardConfig_1 = __importDefault(require("../models/StudentDashb
 const StudentBadge_1 = __importDefault(require("../models/StudentBadge"));
 const StudentApplication_1 = __importDefault(require("../models/StudentApplication"));
 const StudentDueLedger_1 = __importDefault(require("../models/StudentDueLedger"));
+const UserSubscription_1 = __importDefault(require("../models/UserSubscription"));
 const examCardMetricsService_1 = require("./examCardMetricsService");
 const externalExamAttemptService_1 = require("./externalExamAttemptService");
 const securityConfigService_1 = require("./securityConfigService");
@@ -98,12 +99,19 @@ async function getOverallRankForStudent(studentId) {
     return idx + 1;
 }
 async function getStudentDashboardHeader(studentId) {
-    const [user, profile, config, overallRank, security] = await Promise.all([
+    const [user, profile, config, overallRank, security, activeSubscription] = await Promise.all([
         User_1.default.findById(studentId).select('_id username email full_name profile_photo subscription').lean(),
         StudentProfile_1.default.findOne({ user_id: studentId }).lean(),
         ensureDashboardConfig(),
         getOverallRankForStudent(studentId),
         (0, securityConfigService_1.getSecurityConfig)(true),
+        UserSubscription_1.default.findOne({
+            userId: studentId,
+            status: 'active',
+            expiresAtUTC: { $gt: new Date() },
+        })
+            .populate('planId', 'name code slug ctaLabel ctaUrl ctaMode')
+            .lean(),
     ]);
     if (!user || !profile) {
         throw new Error('Student not found');
@@ -114,7 +122,29 @@ async function getStudentDashboardHeader(studentId) {
     const welcomeMessage = messageTemplate
         .replace('{{name}}', String(profile.full_name || user.full_name || user.username))
         .replace('{{completion}}', String(completion));
-    const subscription = user.subscription || { isActive: false };
+    const persistedSubscription = (user.subscription || {});
+    const activePlan = activeSubscription?.planId || null;
+    const expiryDate = activeSubscription?.expiresAtUTC
+        ? new Date(activeSubscription.expiresAtUTC).toISOString()
+        : (persistedSubscription.expiryDate ? new Date(persistedSubscription.expiryDate).toISOString() : null);
+    const expiryTime = expiryDate ? new Date(expiryDate).getTime() : 0;
+    const subscriptionIsActive = Boolean(activeSubscription || (persistedSubscription.isActive &&
+        Number.isFinite(expiryTime) &&
+        expiryTime > Date.now()));
+    const subscription = {
+        isActive: subscriptionIsActive,
+        planId: activeSubscription?.planId ? String(activeSubscription.planId) : String(persistedSubscription.planId || ''),
+        planSlug: String(activePlan?.slug || persistedSubscription.planSlug || ''),
+        planCode: String(activePlan?.code || persistedSubscription.planCode || persistedSubscription.plan || ''),
+        planName: String(activePlan?.name || persistedSubscription.planName || persistedSubscription.plan || ''),
+        expiryDate,
+        daysLeft: expiryDate
+            ? Math.max(0, Math.ceil((new Date(expiryDate).getTime() - Date.now()) / 86400000))
+            : null,
+        ctaLabel: String(activePlan?.ctaLabel || persistedSubscription.ctaLabel || (subscriptionIsActive ? 'Renew Plan' : 'View Plans')),
+        ctaUrl: String(activePlan?.ctaUrl || persistedSubscription.ctaUrl || '/subscription-plans'),
+        ctaMode: String(activePlan?.ctaMode || persistedSubscription.ctaMode || 'contact'),
+    };
     // Calculate Group Rank if student is in any groups
     let groupRank = null;
     if (profile?.groupIds && Array.isArray(profile.groupIds) && profile.groupIds.length > 0) {
@@ -157,11 +187,7 @@ async function getStudentDashboardHeader(studentId) {
         overallRank,
         groupRank,
         welcomeMessage,
-        subscription: {
-            isActive: Boolean(subscription.isActive),
-            planName: subscription.planName || subscription.plan || '',
-            expiryDate: subscription.expiryDate ? new Date(subscription.expiryDate).toISOString() : null,
-        },
+        subscription,
         guardian_phone_verification_status: profile.guardianPhoneVerificationStatus || 'unverified',
         guardian_phone_verified_at: profile.guardianPhoneVerifiedAt || null,
         profile: {
@@ -206,10 +232,17 @@ async function getStudentDashboardHeader(studentId) {
     };
 }
 async function getUpcomingExamCards(studentId) {
-    const [profile, config, user, exams, results, activeSessions, security] = await Promise.all([
+    const [profile, config, user, activeSubscription, exams, results, activeSessions, security] = await Promise.all([
         StudentProfile_1.default.findOne({ user_id: studentId }).lean(),
         ensureDashboardConfig(),
         User_1.default.findById(studentId).select('subscription').lean(),
+        UserSubscription_1.default.findOne({
+            userId: studentId,
+            status: 'active',
+            expiresAtUTC: { $gt: new Date() },
+        })
+            .populate('planId', 'code')
+            .lean(),
         Exam_1.default.find({ isPublished: true }).sort({ startDate: 1 }).lean(),
         ExamResult_1.default.find({ student: studentId }).select('exam attemptNo').lean(),
         ExamSession_1.default.find({ student: studentId, isActive: true }).select('exam sessionLocked').lean(),
@@ -222,15 +255,21 @@ async function getUpcomingExamCards(studentId) {
         ? Number(security.examProtection.profileScoreThreshold || 70)
         : Number(config?.profileCompletionThreshold || 70);
     const now = new Date();
+    const activePlan = activeSubscription?.planId;
     const studentGroupIds = Array.isArray(profile.groupIds) ? profile.groupIds.map((id) => String(id)) : [];
-    const studentPlanCode = String(user?.subscription?.planCode ||
+    const studentPlanCode = String(activePlan?.code ||
+        user?.subscription?.planCode ||
         user?.subscription?.plan ||
         '').toLowerCase();
-    const subscriptionExpiryRaw = user?.subscription?.expiryDate;
-    const subscriptionExpiryTime = subscriptionExpiryRaw ? new Date(String(subscriptionExpiryRaw)).getTime() : 0;
-    const subscriptionActive = Boolean(user?.subscription?.isActive &&
-        Number.isFinite(subscriptionExpiryTime) &&
-        subscriptionExpiryTime > Date.now());
+    const subscriptionExpiryTime = activeSubscription?.expiresAtUTC
+        ? new Date(activeSubscription.expiresAtUTC).getTime()
+        : (user?.subscription?.expiryDate
+            ? new Date(String(user?.subscription?.expiryDate)).getTime()
+            : 0);
+    const subscriptionActive = Boolean(activeSubscription
+        || (user?.subscription?.isActive &&
+            Number.isFinite(subscriptionExpiryTime) &&
+            subscriptionExpiryTime > Date.now()));
     const examIds = exams.map((exam) => String(exam._id || '')).filter(Boolean);
     const [metricsMap, externalAttemptCountMap] = await Promise.all([
         (0, examCardMetricsService_1.getExamCardMetrics)(exams),

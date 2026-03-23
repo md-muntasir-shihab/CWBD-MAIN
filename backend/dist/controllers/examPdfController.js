@@ -13,6 +13,7 @@ const ExamSession_1 = __importDefault(require("../models/ExamSession"));
 const exam_model_1 = require("../models/exam.model");
 const examQuestion_model_1 = require("../models/examQuestion.model");
 const answer_model_1 = require("../models/answer.model");
+const examController_1 = require("./examController");
 function safeText(value) {
     return typeof value === "string" ? value.trim() : "";
 }
@@ -77,6 +78,7 @@ async function resolveExamContext(examId) {
         return {
             kind: "modern",
             examId,
+            rawExam: modernExam,
             title: safeText(modernExam.title) || "Exam",
             subject: safeText(modernExam.subject) || "N/A",
             category: safeText(modernExam.examCategory) || "N/A",
@@ -94,6 +96,7 @@ async function resolveExamContext(examId) {
     return {
         kind: "legacy",
         examId,
+        rawExam: legacyExam,
         title: safeText(legacyExam.title) || "Exam",
         subject: safeText(legacyExam.subject) || "N/A",
         category: safeText(legacyExam.examCategory) || "N/A",
@@ -207,6 +210,52 @@ function solutionsLocked(context, now = new Date()) {
     }
     return false;
 }
+async function requireStudentExamEligibility(req, res, context, options = {}) {
+    const authReq = req;
+    const studentId = String(authReq.user?._id || authReq.user?.id || "").trim();
+    if (!studentId) {
+        res.status(401).json({ message: "Authentication required" });
+        return null;
+    }
+    const eligibility = await (0, examController_1.getEligibilitySummary)(context.rawExam, studentId);
+    if (!eligibility.accessAllowed) {
+        res.status(403).json({
+            message: "You are not allowed to access this exam document.",
+            eligibility,
+        });
+        return null;
+    }
+    if (eligibility.paymentRequired && !eligibility.paymentCleared) {
+        res.status(402).json({
+            message: "Payment pending. Please complete your payment to access this exam document.",
+            paymentPending: true,
+            eligibility,
+        });
+        return null;
+    }
+    if (options.requireProfileComplete && !eligibility.profileComplete) {
+        res.status(403).json({
+            message: "Profile completion is required before accessing this exam document.",
+            eligibility,
+        });
+        return null;
+    }
+    if (options.requireLiveWindow && !eligibility.windowOpen) {
+        res.status(403).json({
+            message: "This exam document is not available outside the exam window.",
+            eligibility,
+        });
+        return null;
+    }
+    if (options.requireRemainingAttempts && eligibility.attemptsLeft <= 0) {
+        res.status(403).json({
+            message: "Maximum attempt limit reached for this exam.",
+            eligibility,
+        });
+        return null;
+    }
+    return eligibility;
+}
 async function generateQuestionsPdf(req, res) {
     try {
         const context = await resolveExamContext(String(req.params.examId || ""));
@@ -216,6 +265,14 @@ async function generateQuestionsPdf(req, res) {
         }
         if (!context.isPublished) {
             res.status(403).json({ message: "Exam not published" });
+            return;
+        }
+        const eligibility = await requireStudentExamEligibility(req, res, context, {
+            requireProfileComplete: true,
+            requireLiveWindow: true,
+            requireRemainingAttempts: true,
+        });
+        if (!eligibility) {
             return;
         }
         const questions = await loadQuestionsForPdf(context);
@@ -250,6 +307,10 @@ async function generateSolutionsPdf(req, res) {
         }
         if (solutionsLocked(context)) {
             res.status(403).json({ message: "Solutions not released yet" });
+            return;
+        }
+        const eligibility = await requireStudentExamEligibility(req, res, context);
+        if (!eligibility) {
             return;
         }
         const questions = await loadQuestionsForPdf(context);

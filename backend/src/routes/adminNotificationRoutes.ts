@@ -56,10 +56,14 @@ router.get('/notifications/campaigns', ...adminAuth, async (req: AuthRequest, re
         const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? '20'), 10)));
         const status = req.query.status as string | undefined;
         const type = req.query.type as string | undefined;
+        const originModule = req.query.originModule as string | undefined;
+        const originEntityId = req.query.originEntityId as string | undefined;
 
         const query: Record<string, unknown> = {};
         if (status) query.status = status;
         if (type) query.type = type;
+        if (originModule) query.originModule = originModule;
+        if (originEntityId) query.originEntityId = originEntityId;
 
         const [jobs, total] = await Promise.all([
             NotificationJob.find(query)
@@ -168,6 +172,8 @@ router.get('/notifications/delivery-logs', ...adminAuth, async (req: AuthRequest
         if (req.query.jobId) query.jobId = req.query.jobId;
         if (req.query.status) query.status = req.query.status;
         if (req.query.channel) query.channel = req.query.channel;
+        if (req.query.originModule) query.originModule = String(req.query.originModule);
+        if (req.query.originEntityId) query.originEntityId = String(req.query.originEntityId);
 
         const [logs, total] = await Promise.all([
             NotificationDeliveryLog.find(query)

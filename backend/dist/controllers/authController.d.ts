@@ -11,8 +11,6 @@ export declare function checkSession(req: AuthRequest, res: Response): Promise<v
 export declare function sessionStream(req: AuthRequest, res: Response): void;
 export declare function getActiveSessions(req: AuthRequest, res: Response): Promise<void>;
 export declare function forceLogoutUser(req: AuthRequest, res: Response): Promise<void>;
-export declare function getSecuritySettings(_req: Request, res: Response): Promise<void>;
-export declare function updateSecuritySettings(req: AuthRequest, res: Response): Promise<void>;
 export declare function getTwoFactorUsers(req: AuthRequest, res: Response): Promise<void>;
 export declare function updateTwoFactorUser(req: AuthRequest, res: Response): Promise<void>;
 export declare function resetTwoFactorUser(req: AuthRequest, res: Response): Promise<void>;
@@ -26,4 +24,11 @@ export declare function forgotPassword(req: Request, res: Response): Promise<voi
 export declare function resetPassword(req: Request, res: Response): Promise<void>;
 export declare function getMe(req: AuthRequest, res: Response): Promise<void>;
 export declare function changePassword(req: AuthRequest, res: Response): Promise<void>;
+export declare function getMySecuritySessions(req: AuthRequest, res: Response): Promise<void>;
+export declare function revokeMySecuritySession(req: AuthRequest, res: Response): Promise<void>;
+export declare function logoutAllMySessions(req: AuthRequest, res: Response): Promise<void>;
+export declare function beginTotpSetup(req: AuthRequest, res: Response): Promise<void>;
+export declare function confirmTotpSetup(req: AuthRequest, res: Response): Promise<void>;
+export declare function regenerateBackupCodes(req: AuthRequest, res: Response): Promise<void>;
+export declare function disableTwoFactor(req: AuthRequest, res: Response): Promise<void>;
 //# sourceMappingURL=authController.d.ts.map

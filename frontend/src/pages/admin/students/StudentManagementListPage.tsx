@@ -95,49 +95,47 @@ export default function StudentManagementListPage() {
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[220px]">
             <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
-            <input className={`${inputCls} w-full pl-8`} placeholder="Search by name, email, phone..."
+            <input aria-label="Search students" title="Search students" className={`${inputCls} w-full pl-8`} placeholder="Search by name, email, phone..."
               value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
           </div>
-          <select className={inputCls} value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}>
+          <select aria-label="Filter by status" title="Filter by status" className={inputCls} value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}>
             <option value="">All Status</option>
             <option value="active">Active</option>
             <option value="suspended">Suspended</option>
             <option value="blocked">Blocked</option>
             <option value="pending">Pending</option>
           </select>
-          <select className={inputCls} value={subFilter} onChange={e => { setSubFilter(e.target.value); setPage(1); }}>
+          <select aria-label="Filter by subscription" title="Filter by subscription" className={inputCls} value={subFilter} onChange={e => { setSubFilter(e.target.value); setPage(1); }}>
             <option value="">All Subs</option>
             <option value="active">Active Sub</option>
             <option value="expired">Expired Sub</option>
             <option value="none">No Sub</option>
           </select>
-          <button onClick={() => setShowFilters(!showFilters)} className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm ${showFilters ? 'border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-700 dark:bg-indigo-900/20' : 'border-slate-300 text-slate-600 dark:border-slate-600 dark:text-slate-400'}`}>
+          <button onClick={() => setShowFilters(!showFilters)} className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm ${showFilters ? 'border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-700 dark:bg-indigo-900/20' : 'border-slate-300 text-slate-600 dark:border-slate-600 dark:text-slate-400'}`} title={showFilters ? 'Hide more filters' : 'Show more filters'}>
             <Filter size={14} /> More
           </button>
-          <button onClick={() => refetch()} className="rounded-lg border border-slate-300 p-2 text-slate-400 hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800">
+          <button onClick={() => refetch()} className="rounded-lg border border-slate-300 p-2 text-slate-400 hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800" title="Refresh list">
             <RefreshCcw size={14} />
           </button>
         </div>
 
         {showFilters && (
           <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3 dark:border-slate-800">
-            <select className={inputCls} value={departmentFilter} onChange={e => { setDepartmentFilter(e.target.value); setPage(1); }}>
+            <select aria-label="Filter by department" title="Filter by department" className={inputCls} value={departmentFilter} onChange={e => { setDepartmentFilter(e.target.value); setPage(1); }}>
               <option value="">All Departments</option>
-              <option value="science">Science</option>
-              <option value="arts">Arts</option>
-              <option value="commerce">Commerce</option>
+              {['science', 'arts', 'commerce'].map(d => <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>)}
             </select>
-            <select className={inputCls} value={groupFilter} onChange={e => { setGroupFilter(e.target.value); setPage(1); }}>
+            <select aria-label="Filter by group" title="Filter by group" className={inputCls} value={groupFilter} onChange={e => { setGroupFilter(e.target.value); setPage(1); }}>
               <option value="">All Groups</option>
               {allGroups.map(g => <option key={g._id} value={g._id}>{g.name}</option>)}
             </select>
-            <select className={inputCls} value={sortBy} onChange={e => setSortBy(e.target.value)}>
+            <select aria-label="Sort by" title="Sort by" className={inputCls} value={sortBy} onChange={e => setSortBy(e.target.value)}>
               <option value="createdAt">Sort: Join Date</option>
               <option value="name">Sort: Name</option>
               <option value="lastLogin">Sort: Last Login</option>
               <option value="status">Sort: Status</option>
             </select>
-            <select className={inputCls} value={sortOrder} onChange={e => setSortOrder(e.target.value)}>
+            <select aria-label="Sort order" title="Sort order" className={inputCls} value={sortOrder} onChange={e => setSortOrder(e.target.value)}>
               <option value="desc">Descending</option>
               <option value="asc">Ascending</option>
             </select>
@@ -156,7 +154,7 @@ export default function StudentManagementListPage() {
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-700">
                     <th className="px-4 py-3 w-8">
-                      <input type="checkbox" checked={selected.length === students.length && students.length > 0} onChange={toggleAll} className="rounded border-slate-300" />
+                      <input aria-label="Select all students" title="Select all students" type="checkbox" checked={selected.length === students.length && students.length > 0} onChange={toggleAll} className="rounded border-slate-300" />
                     </th>
                     <th className="px-4 py-3">Student</th>
                     <th className="px-4 py-3">Status</th>
@@ -172,7 +170,7 @@ export default function StudentManagementListPage() {
                     <tr key={s._id} className="text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/50 cursor-pointer"
                       onClick={() => navigate(adminUi(`student-management/students/${s._id}`))}>
                       <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                        <input type="checkbox" checked={selected.includes(s._id)} onChange={() => toggleSelect(s._id)} className="rounded border-slate-300" />
+                        <input aria-label="Select student" title="Select student" type="checkbox" checked={selected.includes(s._id)} onChange={() => toggleSelect(s._id)} className="rounded border-slate-300" />
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
@@ -191,7 +189,7 @@ export default function StudentManagementListPage() {
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
                           {s.groups?.slice(0, 2).map(g => (
-                            <span key={g._id} className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ backgroundColor: `${g.color || '#6366f1'}20`, color: g.color || '#6366f1' }}>{g.name}</span>
+                            <span key={g._id} className="rounded-full px-2 py-0.5 text-[10px] font-medium" ref={(el) => { if (el) { el.style.backgroundColor = `${g.color || '#6366f1'}20`; el.style.color = g.color || '#6366f1'; } }}>{g.name}</span>
                           ))}
                           {(s.groups?.length ?? 0) > 2 && <span className="text-[10px] text-slate-400">+{(s.groups?.length ?? 0) - 2}</span>}
                           {!s.groups?.length && <span className="text-xs text-slate-400">—</span>}
@@ -211,7 +209,7 @@ export default function StudentManagementListPage() {
                         <div className="flex items-center gap-2">
                           <div className="h-1.5 w-16 rounded-full bg-slate-200 dark:bg-slate-700">
                             <div className={`h-1.5 rounded-full ${pct >= 70 ? 'bg-green-500' : pct >= 40 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                              style={{ width: `${Math.min(pct, 100)}%` }} />
+                              ref={(el) => { if (el) el.style.width = `${Math.min(pct, 100)}%`; }} />
                           </div>
                           <span className="text-xs text-slate-400">{pct}%</span>
                         </div>
@@ -247,12 +245,12 @@ export default function StudentManagementListPage() {
               </p>
               <div className="flex items-center gap-1">
                 <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
-                  className="rounded p-1.5 text-slate-400 hover:bg-slate-100 disabled:opacity-30 dark:hover:bg-slate-800">
+                  className="rounded p-1.5 text-slate-400 hover:bg-slate-100 disabled:opacity-30 dark:hover:bg-slate-800" title="Previous page">
                   <ChevronLeft size={16} />
                 </button>
                 <span className="px-2 text-xs text-slate-600 dark:text-slate-400">{page} / {totalPages}</span>
                 <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
-                  className="rounded p-1.5 text-slate-400 hover:bg-slate-100 disabled:opacity-30 dark:hover:bg-slate-800">
+                  className="rounded p-1.5 text-slate-400 hover:bg-slate-100 disabled:opacity-30 dark:hover:bg-slate-800" title="Next page">
                   <ChevronRight size={16} />
                 </button>
               </div>

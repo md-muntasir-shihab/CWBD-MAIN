@@ -9,6 +9,7 @@ import {
 } from '../../services/api';
 import { Database, Download, RefreshCw } from 'lucide-react';
 import { downloadFile } from '../../utils/download';
+import { promptForSensitiveActionProof } from '../../utils/sensitiveAction';
 
 export default function BackupsPanel() {
     const [loading, setLoading] = useState(false);
@@ -48,8 +49,14 @@ export default function BackupsPanel() {
     const restore = async (id: string) => {
         const confirmation = window.prompt(`Type exactly: RESTORE ${id}`);
         if (!confirmation) return;
+        const proof = await promptForSensitiveActionProof({
+            actionLabel: 'restore backup',
+            defaultReason: `Restore backup ${id}`,
+            requireOtpHint: true,
+        });
+        if (!proof) return;
         try {
-            await adminRestoreBackup(id, confirmation.trim());
+            await adminRestoreBackup(id, confirmation.trim(), proof);
             toast.success('Restore completed');
             await load();
         } catch (error: any) {

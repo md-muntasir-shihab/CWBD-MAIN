@@ -10,7 +10,6 @@ export interface RuntimeFeatureFlags {
     strictExamTabLock: boolean;
     webNextEnabled: boolean;
     studentRegistrationEnabled: boolean;
-    passwordRevealEnabled: boolean;
     financeDashboardV1: boolean;
     smsReminderEnabled: boolean;
     emailReminderEnabled: boolean;

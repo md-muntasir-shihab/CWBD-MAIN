@@ -44,12 +44,14 @@ import {
 } from '../../services/api';
 import { useAdminRuntimeFlags } from '../../hooks/useAdminRuntimeFlags';
 import { downloadFile } from '../../utils/download';
+import AdminGuideButton, { type AdminGuideButtonProps } from './AdminGuideButton';
 
 type Tab = 'universities' | 'categories' | 'clusters' | 'import';
 type StatusFilter = 'all' | 'active' | 'inactive' | 'archived';
 type SortOrder = 'asc' | 'desc';
 type BulkAction = '' | 'softDelete' | 'hardDelete' | 'setCluster' | 'setCategory' | 'setStatus' | 'setFeatured' | 'setDescriptions';
 type BulkScope = 'selected' | 'filtered' | 'all';
+type InlineGuide = Omit<AdminGuideButtonProps, 'variant' | 'tone'>;
 
 type UniversityForm = Partial<ApiUniversity> & {
   categorySyncLocked?: boolean;
@@ -126,6 +128,113 @@ const DEFAULT_CATEGORY_FORM: CategoryForm = {
   homeHighlight: false,
   isActive: true,
   sharedConfig: { applicationStartDate: '', applicationEndDate: '', scienceExamDate: '', artsExamDate: '', businessExamDate: '', examCentersText: '' },
+};
+
+const UNIVERSITY_GUIDES: Record<string, InlineGuide> = {
+  refresh: {
+    title: 'Refresh Universities',
+    content: 'Reload the current universities workspace with the latest backend data.',
+    affected: 'University operators working with the current admin view.',
+  },
+  addUniversity: {
+    title: 'Add University',
+    content: 'Open the create flow for a new university record in the canonical university system.',
+    affected: 'University management and public university discovery after save.',
+  },
+  tabUniversities: {
+    title: 'Universities Tab',
+    content: 'Manage the live university list, filters, exports, bulk actions, and featured-home placement.',
+    affected: 'Admin university operators and public university visibility.',
+  },
+  tabCategories: {
+    title: 'Categories Tab',
+    content: 'Manage university categories and their home-highlight behaviour.',
+    affected: 'University categorisation and home quick-browse flows.',
+  },
+  tabClusters: {
+    title: 'Clusters Tab',
+    content: 'Manage university clusters, shared rules, and grouped date sync behaviour.',
+    affected: 'Cluster browse pages and shared university scheduling.',
+  },
+  tabImport: {
+    title: 'Import Tab',
+    content: 'Import university data from mapping files and validate the batch before commit.',
+    affected: 'Bulk university onboarding and data migration.',
+  },
+  exportCsv: {
+    title: 'Export CSV',
+    content: 'Export the current university scope as CSV using the selected export scope.',
+    affected: 'Reporting, review, and offline analysis.',
+  },
+  exportXlsx: {
+    title: 'Export XLSX',
+    content: 'Export the current university scope as XLSX using the selected export scope.',
+    affected: 'Reporting, review, and spreadsheet workflows.',
+  },
+  saveHomeCategories: {
+    title: 'Save Home Category Highlight',
+    content: 'Persist which categories should be highlighted on the home university browse surface.',
+    affected: 'Public home category chips and quick-browse order.',
+  },
+  bulkApply: {
+    title: 'Apply Bulk Action',
+    content: 'Run the selected bulk update or delete action against the chosen scope.',
+    affected: 'Selected universities, filtered universities, or the full university dataset depending on scope.',
+  },
+  homeUp: {
+    title: 'Move Up',
+    content: 'Move the selected university higher in the featured-home order.',
+    affected: 'Public home featured-university order.',
+  },
+  homeDown: {
+    title: 'Move Down',
+    content: 'Move the selected university lower in the featured-home order.',
+    affected: 'Public home featured-university order.',
+  },
+  homeToggle: {
+    title: 'Show or Hide on Home',
+    content: 'Add or remove the selected university from the public home featured list.',
+    enabledNote: 'The university becomes eligible for the home featured section.',
+    disabledNote: 'The university is removed from the home featured section.',
+    affected: 'Public home featured-university visibility.',
+  },
+  edit: {
+    title: 'Edit University',
+    content: 'Open the selected university record in edit mode.',
+    affected: 'University data reflected across admin and public views after save.',
+  },
+  status: {
+    title: 'Enable or Disable University',
+    content: 'Toggle whether the university remains active in public-facing lists and workflows.',
+    enabledNote: 'The university can appear in public and student discovery flows.',
+    disabledNote: 'The university stays stored in admin but drops from active public discovery.',
+    affected: 'Public university lists, filters, and detail visibility.',
+  },
+  delete: {
+    title: 'Delete University',
+    content: 'Delete the selected university record after the destructive confirmation flow completes.',
+    affected: 'The selected university record and any public route relying on it.',
+  },
+  importInit: {
+    title: 'Initialize Import Job',
+    content: 'Create a staging import job from the uploaded mapping file before validation.',
+    affected: 'The current staged import session only.',
+  },
+  importRefresh: {
+    title: 'Refresh Import Status',
+    content: 'Reload the current staged import job status and validation summary.',
+    affected: 'The current staged import session only.',
+  },
+  importValidate: {
+    title: 'Validate Mapping',
+    content: 'Run validation using the current column mapping and defaults before commit.',
+    affected: 'The staged import job and its validation report.',
+  },
+  importCommit: {
+    title: 'Commit Changes',
+    content: 'Apply the validated import rows into the live university dataset.',
+    affected: 'Live university records and related public/admin reflection.',
+  },
 };
 
 const IMPORT_FIELDS = [
@@ -1068,15 +1177,24 @@ export default function UniversitiesPanel() {
             <p className="text-sm text-slate-400">Manage university data, clusters, and bulk imports with premium glassmorphism.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => void loadUniversities()} className="inline-flex items-center gap-2 rounded-xl border border-indigo-400/20 bg-indigo-500/10 px-3 py-2 text-xs font-semibold text-indigo-200 hover:bg-indigo-500/20 transition-all"><RefreshCw className="w-4 h-4" /> Refresh</button>
-            <button type="button" onClick={openCreate} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 px-3 py-2 text-xs font-semibold text-white hover:opacity-90 shadow-lg shadow-indigo-500/20 transition-all"><Plus className="w-4 h-4" /> Add University</button>
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => void loadUniversities()} className="inline-flex items-center gap-2 rounded-xl border border-indigo-400/20 bg-indigo-500/10 px-3 py-2 text-xs font-semibold text-indigo-200 hover:bg-indigo-500/20 transition-all"><RefreshCw className="w-4 h-4" /> Refresh</button>
+              <AdminGuideButton {...UNIVERSITY_GUIDES.refresh} tone="indigo" />
+            </div>
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={openCreate} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 px-3 py-2 text-xs font-semibold text-white hover:opacity-90 shadow-lg shadow-indigo-500/20 transition-all"><Plus className="w-4 h-4" /> Add University</button>
+              <AdminGuideButton {...UNIVERSITY_GUIDES.addUniversity} tone="indigo" />
+            </div>
           </div>
         </div>
       </header>
 
       <div className="flex flex-wrap gap-2">
         {(['universities', 'categories', 'clusters', 'import'] as Tab[]).map((t) => (
-          <button key={t} type="button" onClick={() => setTab(t)} className={`rounded-xl px-4 py-2 text-sm font-semibold transition-all ${tab === t ? 'bg-gradient-to-r from-indigo-600 to-cyan-600 text-white shadow-lg shadow-indigo-500/20' : 'border border-indigo-500/10 bg-slate-900/60 text-slate-400 hover:text-white hover:border-indigo-500/30'}`}>{t.charAt(0).toUpperCase() + t.slice(1)}</button>
+          <div key={t} className="flex items-center gap-1">
+            <button type="button" onClick={() => setTab(t)} className={`rounded-xl px-4 py-2 text-sm font-semibold transition-all ${tab === t ? 'bg-gradient-to-r from-indigo-600 to-cyan-600 text-white shadow-lg shadow-indigo-500/20' : 'border border-indigo-500/10 bg-slate-900/60 text-slate-400 hover:text-white hover:border-indigo-500/30'}`}>{t.charAt(0).toUpperCase() + t.slice(1)}</button>
+            <AdminGuideButton {...UNIVERSITY_GUIDES[`tab${t.charAt(0).toUpperCase()}${t.slice(1)}` as keyof typeof UNIVERSITY_GUIDES]} tone="indigo" />
+          </div>
         ))}
       </div>
 
@@ -1107,8 +1225,14 @@ export default function UniversitiesPanel() {
                 <option value="filtered">Export Filtered</option>
                 <option value="all">Export All</option>
               </select>
-              <button type="button" onClick={() => void doExport('csv')} className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-200"><Download className="w-4 h-4" /> CSV</button>
-              <button type="button" onClick={() => void doExport('xlsx')} className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-200"><Download className="w-4 h-4" /> XLSX</button>
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={() => void doExport('csv')} className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-200"><Download className="w-4 h-4" /> CSV</button>
+                <AdminGuideButton {...UNIVERSITY_GUIDES.exportCsv} tone="indigo" />
+              </div>
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={() => void doExport('xlsx')} className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-200"><Download className="w-4 h-4" /> XLSX</button>
+                <AdminGuideButton {...UNIVERSITY_GUIDES.exportXlsx} tone="indigo" />
+              </div>
               <p className="text-xs text-slate-400 ml-auto">Selected: {selectedIds.length} | Total: {totalCount}</p>
             </div>
           </div>
@@ -1116,7 +1240,10 @@ export default function UniversitiesPanel() {
           <div className="rounded-2xl border border-indigo-500/10 bg-slate-900/60 backdrop-blur-sm p-4">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-sm font-bold text-white tracking-tight">Home Category Highlight</h3>
-              <button type="button" disabled={savingHomeSelection} onClick={() => void saveHomeCategories()} className="ml-auto inline-flex items-center gap-2 rounded-lg border border-cyan-400/20 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-200 disabled:opacity-60 transition-all">{savingHomeSelection ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save</button>
+              <div className="ml-auto flex items-center gap-1">
+                <button type="button" disabled={savingHomeSelection} onClick={() => void saveHomeCategories()} className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/20 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-200 disabled:opacity-60 transition-all">{savingHomeSelection ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save</button>
+                <AdminGuideButton {...UNIVERSITY_GUIDES.saveHomeCategories} tone="indigo" />
+              </div>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               {homeCategoryOptions.map((cat) => {
@@ -1208,10 +1335,13 @@ export default function UniversitiesPanel() {
                     </p>
                   </div>
                 )}
-                <button type="button" disabled={(bulkScope === 'selected' && selectedIds.length === 0) || !bulkAction || bulkLoading} onClick={() => void handleBulkAction()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-red-500/20 hover:opacity-90 disabled:opacity-40 transition-all">
-                  {bulkLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  Apply to {bulkScope === 'selected' ? selectedIds.length : bulkScope === 'filtered' ? 'filtered results' : 'all universities'}
-                </button>
+                <div className="flex items-center gap-1">
+                  <button type="button" disabled={(bulkScope === 'selected' && selectedIds.length === 0) || !bulkAction || bulkLoading} onClick={() => void handleBulkAction()} className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-600 to-orange-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-red-500/20 hover:opacity-90 disabled:opacity-40 transition-all">
+                    {bulkLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    Apply to {bulkScope === 'selected' ? selectedIds.length : bulkScope === 'filtered' ? 'filtered results' : 'all universities'}
+                  </button>
+                  <AdminGuideButton {...UNIVERSITY_GUIDES.bulkApply} tone="indigo" />
+                </div>
               </div>
             </div>
           )}
@@ -1273,39 +1403,57 @@ export default function UniversitiesPanel() {
                                 <span className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold text-cyan-200">
                                   Home #{homeFeaturedOrderMap.get(u._id)}
                                 </span>
-                                <button
-                                  type="button"
-                                  disabled={savingHomeFeaturedSelection || (homeFeaturedOrderMap.get(u._id) || 0) <= 1}
-                                  onClick={() => void moveUniversityHomeFeatured(u._id, 'up')}
-                                  className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-2 py-1 text-[11px] font-semibold text-cyan-200 disabled:opacity-40"
-                                >
-                                  Up
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={savingHomeFeaturedSelection || (homeFeaturedOrderMap.get(u._id) || 0) >= featuredHomeUniversities.length}
-                                  onClick={() => void moveUniversityHomeFeatured(u._id, 'down')}
-                                  className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-2 py-1 text-[11px] font-semibold text-cyan-200 disabled:opacity-40"
-                                >
-                                  Down
-                                </button>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    disabled={savingHomeFeaturedSelection || (homeFeaturedOrderMap.get(u._id) || 0) <= 1}
+                                    onClick={() => void moveUniversityHomeFeatured(u._id, 'up')}
+                                    className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-2 py-1 text-[11px] font-semibold text-cyan-200 disabled:opacity-40"
+                                  >
+                                    Up
+                                  </button>
+                                  <AdminGuideButton {...UNIVERSITY_GUIDES.homeUp} tone="indigo" />
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    disabled={savingHomeFeaturedSelection || (homeFeaturedOrderMap.get(u._id) || 0) >= featuredHomeUniversities.length}
+                                    onClick={() => void moveUniversityHomeFeatured(u._id, 'down')}
+                                    className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-2 py-1 text-[11px] font-semibold text-cyan-200 disabled:opacity-40"
+                                  >
+                                    Down
+                                  </button>
+                                  <AdminGuideButton {...UNIVERSITY_GUIDES.homeDown} tone="indigo" />
+                                </div>
                               </>
                             ) : (
                               <span className="rounded-lg border border-slate-700 bg-slate-950/60 px-2.5 py-1 text-[11px] font-semibold text-slate-400">
                                 Not on Home
                               </span>
                             )}
-                            <button
-                              type="button"
-                              disabled={savingHomeFeaturedSelection}
-                              onClick={() => void toggleUniversityHomeFeatured(u)}
-                              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all disabled:opacity-40 ${homeFeaturedOrderMap.has(u._id) ? 'bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20' : 'bg-sky-500/10 text-sky-300 hover:bg-sky-500/20'}`}
-                            >
-                              {homeFeaturedOrderMap.has(u._id) ? 'Hide Home' : 'Show Home'}
-                            </button>
-                            <button type="button" onClick={() => openEdit(u)} className="rounded-lg bg-indigo-500/10 px-2.5 py-1 text-xs font-semibold text-indigo-400 hover:bg-indigo-500/20 transition-all">Edit</button>
-                            <button type="button" onClick={() => void adminToggleUniversityStatus(u._id).then(async () => { await invalidateUniversityQueries(); await loadUniversities(); })} className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${u.isActive ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' : 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'}`}>{u.isActive ? 'Disable' : 'Enable'}</button>
-                            <button type="button" onClick={() => void deleteOne(u._id)} className="rounded-lg bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-400 hover:bg-red-500/20 transition-all">Delete</button>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                disabled={savingHomeFeaturedSelection}
+                                onClick={() => void toggleUniversityHomeFeatured(u)}
+                                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all disabled:opacity-40 ${homeFeaturedOrderMap.has(u._id) ? 'bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20' : 'bg-sky-500/10 text-sky-300 hover:bg-sky-500/20'}`}
+                              >
+                                {homeFeaturedOrderMap.has(u._id) ? 'Hide Home' : 'Show Home'}
+                              </button>
+                              <AdminGuideButton {...UNIVERSITY_GUIDES.homeToggle} tone="indigo" />
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button type="button" onClick={() => openEdit(u)} className="rounded-lg bg-indigo-500/10 px-2.5 py-1 text-xs font-semibold text-indigo-400 hover:bg-indigo-500/20 transition-all">Edit</button>
+                              <AdminGuideButton {...UNIVERSITY_GUIDES.edit} tone="indigo" />
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button type="button" onClick={() => void adminToggleUniversityStatus(u._id).then(async () => { await invalidateUniversityQueries(); await loadUniversities(); })} className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${u.isActive ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' : 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'}`}>{u.isActive ? 'Disable' : 'Enable'}</button>
+                              <AdminGuideButton {...UNIVERSITY_GUIDES.status} tone="indigo" />
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button type="button" onClick={() => void deleteOne(u._id)} className="rounded-lg bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-400 hover:bg-red-500/20 transition-all">Delete</button>
+                              <AdminGuideButton {...UNIVERSITY_GUIDES.delete} tone="indigo" />
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -1348,8 +1496,14 @@ export default function UniversitiesPanel() {
                         </div>
                       </div>
                       <div className="flex gap-1">
-                        <button type="button" onClick={() => openEdit(u)} className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-all"><Edit className="w-4 h-4" /></button>
-                        <button type="button" onClick={() => void deleteOne(u._id)} className="rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all"><Trash2 className="w-4 h-4" /></button>
+                        <div className="flex items-center gap-1">
+                          <button type="button" onClick={() => openEdit(u)} className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-all"><Edit className="w-4 h-4" /></button>
+                          <AdminGuideButton {...UNIVERSITY_GUIDES.edit} tone="indigo" />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button type="button" onClick={() => void deleteOne(u._id)} className="rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all"><Trash2 className="w-4 h-4" /></button>
+                          <AdminGuideButton {...UNIVERSITY_GUIDES.delete} tone="indigo" />
+                        </div>
                       </div>
                     </div>
                     <div className="grid grid-cols-1 gap-2 rounded-xl border border-indigo-500/5 bg-slate-950/40 p-3 text-[11px] sm:grid-cols-2">
@@ -1371,35 +1525,47 @@ export default function UniversitiesPanel() {
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        disabled={savingHomeFeaturedSelection}
-                        onClick={() => void toggleUniversityHomeFeatured(u)}
-                        className={`rounded-lg px-3 py-2 text-xs font-semibold transition-all disabled:opacity-40 ${homeFeaturedOrderMap.has(u._id) ? 'bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20' : 'bg-sky-500/10 text-sky-300 hover:bg-sky-500/20'}`}
-                      >
-                        {homeFeaturedOrderMap.has(u._id) ? 'Hide Home' : 'Show Home'}
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={savingHomeFeaturedSelection}
+                          onClick={() => void toggleUniversityHomeFeatured(u)}
+                          className={`rounded-lg px-3 py-2 text-xs font-semibold transition-all disabled:opacity-40 ${homeFeaturedOrderMap.has(u._id) ? 'bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20' : 'bg-sky-500/10 text-sky-300 hover:bg-sky-500/20'}`}
+                        >
+                          {homeFeaturedOrderMap.has(u._id) ? 'Hide Home' : 'Show Home'}
+                        </button>
+                        <AdminGuideButton {...UNIVERSITY_GUIDES.homeToggle} tone="indigo" />
+                      </div>
                       {homeFeaturedOrderMap.has(u._id) && (
                         <>
-                          <button
-                            type="button"
-                            disabled={savingHomeFeaturedSelection || (homeFeaturedOrderMap.get(u._id) || 0) <= 1}
-                            onClick={() => void moveUniversityHomeFeatured(u._id, 'up')}
-                            className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 text-xs font-semibold text-cyan-200 disabled:opacity-40"
-                          >
-                            Move Up
-                          </button>
-                          <button
-                            type="button"
-                            disabled={savingHomeFeaturedSelection || (homeFeaturedOrderMap.get(u._id) || 0) >= featuredHomeUniversities.length}
-                            onClick={() => void moveUniversityHomeFeatured(u._id, 'down')}
-                            className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 text-xs font-semibold text-cyan-200 disabled:opacity-40"
-                          >
-                            Move Down
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              disabled={savingHomeFeaturedSelection || (homeFeaturedOrderMap.get(u._id) || 0) <= 1}
+                              onClick={() => void moveUniversityHomeFeatured(u._id, 'up')}
+                              className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 text-xs font-semibold text-cyan-200 disabled:opacity-40"
+                            >
+                              Move Up
+                            </button>
+                            <AdminGuideButton {...UNIVERSITY_GUIDES.homeUp} tone="indigo" />
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              disabled={savingHomeFeaturedSelection || (homeFeaturedOrderMap.get(u._id) || 0) >= featuredHomeUniversities.length}
+                              onClick={() => void moveUniversityHomeFeatured(u._id, 'down')}
+                              className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 text-xs font-semibold text-cyan-200 disabled:opacity-40"
+                            >
+                              Move Down
+                            </button>
+                            <AdminGuideButton {...UNIVERSITY_GUIDES.homeDown} tone="indigo" />
+                          </div>
                         </>
                       )}
-                      <button type="button" onClick={() => void adminToggleUniversityStatus(u._id).then(async () => { await invalidateUniversityQueries(); await loadUniversities(); })} className={`rounded-lg px-3 py-2 text-xs font-semibold transition-all ${u.isActive ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' : 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'}`}>{u.isActive ? 'Disable' : 'Enable'}</button>
+                      <div className="flex items-center gap-1">
+                        <button type="button" onClick={() => void adminToggleUniversityStatus(u._id).then(async () => { await invalidateUniversityQueries(); await loadUniversities(); })} className={`rounded-lg px-3 py-2 text-xs font-semibold transition-all ${u.isActive ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' : 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'}`}>{u.isActive ? 'Disable' : 'Enable'}</button>
+                        <AdminGuideButton {...UNIVERSITY_GUIDES.status} tone="indigo" />
+                      </div>
                     </div>
                   </article>
                 ))
@@ -1508,16 +1674,22 @@ export default function UniversitiesPanel() {
               <button type="button" onClick={() => void downloadTemplate('csv')} className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20 transition-all"><Download className="w-4 h-4" /> Demo CSV</button>
               <button type="button" onClick={() => void downloadTemplate('xlsx')} className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/20 bg-cyan-500/10 px-4 py-2 text-xs font-bold text-cyan-300 hover:bg-cyan-500/20 transition-all"><Download className="w-4 h-4" /> Demo XLSX</button>
               <span className="text-xs text-slate-300 font-medium">{importFile ? importFile.name : 'No file selected'}</span>
-              <button type="button" disabled={initializingImport} onClick={() => void initImport()} className="ml-auto inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 px-5 py-2 text-xs font-bold text-white shadow-lg shadow-indigo-500/20 disabled:opacity-40 transition-all">{initializingImport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Initialize Job</button>
+              <div className="ml-auto flex items-center gap-1">
+                <button type="button" disabled={initializingImport} onClick={() => void initImport()} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 px-5 py-2 text-xs font-bold text-white shadow-lg shadow-indigo-500/20 disabled:opacity-40 transition-all">{initializingImport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Initialize Job</button>
+                <AdminGuideButton {...UNIVERSITY_GUIDES.importInit} tone="indigo" />
+              </div>
             </div>
             {importJobId && (
               <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-3 text-xs text-indigo-300 flex items-center gap-3 font-medium animate-in fade-in slide-in-from-top-2">
                 <Activity className="w-4 h-4" />
                 <span>Active Job ID: <code className="bg-slate-950/50 px-2 py-0.5 rounded text-white">{importJobId}</code></span>
-                <button type="button" disabled={refreshingImportStatus} onClick={() => void refreshImport()} className="ml-auto inline-flex items-center gap-1 hover:text-white transition-colors">
-                  {refreshingImportStatus ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                  Refresh Status
-                </button>
+                <div className="ml-auto flex items-center gap-1">
+                  <button type="button" disabled={refreshingImportStatus} onClick={() => void refreshImport()} className="inline-flex items-center gap-1 hover:text-white transition-colors">
+                    {refreshingImportStatus ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                    Refresh Status
+                  </button>
+                  <AdminGuideButton {...UNIVERSITY_GUIDES.importRefresh} tone="indigo" />
+                </div>
               </div>
             )}
           </div>
@@ -1606,8 +1778,14 @@ export default function UniversitiesPanel() {
                 </select>
               </div>
               <div className="flex flex-wrap gap-2 pt-2">
-                <button type="button" disabled={validatingImport} onClick={() => void validateImport()} className="inline-flex items-center gap-2 rounded-xl border border-indigo-400/20 bg-indigo-500/10 px-4 py-2 text-xs font-bold text-indigo-400 hover:bg-indigo-500/20 transition-all">{validatingImport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Validate Mapping</button>
-                <button type="button" disabled={committingImport} onClick={() => void commitImport()} className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-2 text-xs font-bold text-emerald-400 hover:bg-emerald-500/20 transition-all">{committingImport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} Commit Changes</button>
+                <div className="flex items-center gap-1">
+                  <button type="button" disabled={validatingImport} onClick={() => void validateImport()} className="inline-flex items-center gap-2 rounded-xl border border-indigo-400/20 bg-indigo-500/10 px-4 py-2 text-xs font-bold text-indigo-400 hover:bg-indigo-500/20 transition-all">{validatingImport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Validate Mapping</button>
+                  <AdminGuideButton {...UNIVERSITY_GUIDES.importValidate} tone="indigo" />
+                </div>
+                <div className="flex items-center gap-1">
+                  <button type="button" disabled={committingImport} onClick={() => void commitImport()} className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-2 text-xs font-bold text-emerald-400 hover:bg-emerald-500/20 transition-all">{committingImport ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} Commit Changes</button>
+                  <AdminGuideButton {...UNIVERSITY_GUIDES.importCommit} tone="indigo" />
+                </div>
                 <button type="button" onClick={() => void downloadErrors()} className="inline-flex items-center gap-2 rounded-xl border border-amber-400/20 bg-amber-500/10 px-4 py-2 text-xs font-bold text-amber-400 hover:bg-amber-500/20 transition-all ml-auto"><Download className="w-4 h-4" /> Download Error Log</button>
               </div>
             </div>

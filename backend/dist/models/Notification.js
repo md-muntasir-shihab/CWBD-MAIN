@@ -37,11 +37,26 @@ const mongoose_1 = __importStar(require("mongoose"));
 const NotificationSchema = new mongoose_1.Schema({
     title: { type: String, required: true, trim: true },
     message: { type: String, required: true, trim: true },
+    type: {
+        type: String,
+        enum: ['contact_new', 'support_ticket_new', 'support_reply_new', 'profile_update_request', 'payment_review', 'system_alert', ''],
+        default: '',
+        index: true,
+    },
+    messagePreview: { type: String, trim: true, default: '' },
     category: { type: String, enum: ['general', 'exam', 'update'], default: 'general' },
     publishAt: { type: Date, default: null },
     expireAt: { type: Date, default: null },
     isActive: { type: Boolean, default: true },
     linkUrl: { type: String, default: '' },
+    sourceType: { type: String, trim: true, default: '', index: true },
+    sourceId: { type: String, trim: true, default: '', index: true },
+    targetRoute: { type: String, trim: true, default: '' },
+    targetEntityId: { type: String, trim: true, default: '', index: true },
+    priority: { type: String, enum: ['normal', 'high', 'urgent'], default: 'normal' },
+    actorUserId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', default: null },
+    actorNameSnapshot: { type: String, trim: true, default: '' },
+    dedupeKey: { type: String, trim: true, default: undefined },
     attachmentUrl: { type: String, default: '' },
     targetRole: { type: String, enum: ['student', 'admin', 'moderator', 'all'], default: 'student' },
     reminderKey: { type: String, default: undefined },
@@ -51,6 +66,10 @@ const NotificationSchema = new mongoose_1.Schema({
 }, { timestamps: true });
 NotificationSchema.index({ isActive: 1, publishAt: -1, createdAt: -1 });
 NotificationSchema.index({ category: 1, isActive: 1 });
+NotificationSchema.index({ targetRole: 1, createdAt: -1 });
 NotificationSchema.index({ reminderKey: 1 }, { unique: true, sparse: true });
+NotificationSchema.index({ dedupeKey: 1 }, { unique: true, sparse: true });
+NotificationSchema.index({ sourceId: 1, createdAt: -1 });
+NotificationSchema.index({ targetEntityId: 1, createdAt: -1 });
 exports.default = mongoose_1.default.model('Notification', NotificationSchema);
 //# sourceMappingURL=Notification.js.map

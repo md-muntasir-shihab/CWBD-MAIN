@@ -26,13 +26,10 @@ import {
     adminUpdateStudentGroup,
     adminUpdateStudentSubscription,
     adminUpdateSubscriptionPlan,
-    adminMfaConfirm,
-    adminRevealStudentPassword,
     adminBulkStudentAction,
     AdminSubscriptionPlan,
 } from '../../services/api';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAuth } from '../../hooks/useAuth';
 import { useAdminRuntimeFlags } from '../../hooks/useAdminRuntimeFlags';
 import { downloadFile } from '../../utils/download';
 import {
@@ -40,7 +37,7 @@ import {
     CreditCard, Layers,
     ChevronLeft, ChevronRight,
     Edit, Trash2, CheckCircle, XCircle, Clock, Pause, Users,
-    X, RefreshCw, User, Mail, Hash, Phone, Crown, BookOpen, GraduationCap, Fingerprint, IdCard, Eye, Upload, Download
+    X, RefreshCw, User, Mail, Hash, Phone, Crown, BookOpen, GraduationCap, Fingerprint, IdCard, Upload, Download
 } from 'lucide-react';
 
 /* UI Components */
@@ -1248,104 +1245,6 @@ function GroupAssignForm({ student, groups, onSave, onClose }: {
     );
 }
 
-function PasswordRevealModal({
-    student,
-    onClose,
-}: {
-    student: AdminStudentItem;
-    onClose: () => void;
-}) {
-    const [password, setPassword] = useState('');
-    const [reason, setReason] = useState('');
-    const [revealed, setRevealed] = useState('');
-    const [loading, setLoading] = useState(false);
-
-    const reveal = async (event: React.FormEvent) => {
-        event.preventDefault();
-        if (!password.trim() || !reason.trim()) {
-            toast.error('Admin password and reason are required');
-            return;
-        }
-        const studentId = resolveStudentId(student);
-        if (!studentId) {
-            toast.error('Invalid student id');
-            return;
-        }
-        setLoading(true);
-        try {
-            const mfaRes = await adminMfaConfirm(password.trim());
-            const mfaToken = String(mfaRes.data?.mfaToken || '').trim();
-            if (!mfaToken) {
-                throw new Error('MFA token missing');
-            }
-            const revealRes = await adminRevealStudentPassword(studentId, {
-                mfaToken,
-                reason: reason.trim(),
-            });
-            setRevealed(String(revealRes.data?.password || ''));
-            toast.success('Password revealed');
-        } catch (error: any) {
-            toast.error(error.response?.data?.message || error.message || 'Password reveal failed');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const copyPassword = async () => {
-        if (!revealed) return;
-        try {
-            await navigator.clipboard.writeText(revealed);
-            toast.success('Password copied');
-        } catch {
-            toast.error('Copy failed');
-        }
-    };
-
-    return (
-        <form onSubmit={reveal} className="space-y-4">
-            <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-100">
-                Admin-only sensitive operation. This action is fully audit logged with reason and MFA confirmation.
-            </div>
-            <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-400">Admin Password (for MFA confirm)</label>
-                <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-slate-950/65 border border-indigo-500/20 rounded-xl py-2.5 px-3 text-sm text-white focus:border-indigo-500/50 outline-none"
-                    placeholder="Enter your admin password"
-                />
-            </div>
-            <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-400">Reason</label>
-                <textarea
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    className="w-full h-24 bg-slate-950/65 border border-indigo-500/20 rounded-xl py-2.5 px-3 text-sm text-white focus:border-indigo-500/50 outline-none"
-                    placeholder="Write why password reveal is needed"
-                />
-            </div>
-            {revealed && (
-                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3">
-                    <p className="text-xs text-emerald-200">Revealed password for {student.fullName}</p>
-                    <div className="mt-2 flex items-center gap-2">
-                        <code className="flex-1 rounded-lg bg-slate-950/80 px-3 py-2 text-sm text-white">{revealed}</code>
-                        <button type="button" onClick={() => void copyPassword()} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white">
-                            Copy
-                        </button>
-                    </div>
-                </div>
-            )}
-            <div className="flex gap-3 pt-2">
-                <button type="button" onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 text-slate-300 font-medium hover:bg-white/10 transition-all">Cancel</button>
-                <button type="submit" disabled={loading} className="flex-1 px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-all disabled:opacity-50">
-                    {loading ? 'Verifying...' : 'Reveal Password'}
-                </button>
-            </div>
-        </form>
-    );
-}
-
 type Tab = 'students' | 'groups' | 'plans';
 
 function fmtDate(v?: string | null) {
@@ -1367,14 +1266,6 @@ function resolveStudentId(student?: Partial<AdminStudentItem> | null): string {
 export default function StudentManagementPanel({ initialTab = 'students' }: { initialTab?: Tab }) {
     const runtimeFlags = useAdminRuntimeFlags();
     const queryClient = useQueryClient();
-    const { user } = useAuth();
-    const hasPasswordRevealPermission = Boolean(
-        ((user?.permissions as unknown as Record<string, unknown> | undefined)?.canRevealPasswords)
-    );
-    const canRevealPasswords = Boolean(
-        user
-        && (user.role === 'superadmin' || user.role === 'admin' || hasPasswordRevealPermission)
-    );
     const [tab, setTab] = useState<Tab>(initialTab);
     const [students, setStudents] = useState<AdminStudentItem[]>([]);
     const [groups, setGroups] = useState<AdminStudentGroup[]>([]);
@@ -1406,7 +1297,6 @@ export default function StudentManagementPanel({ initialTab = 'students' }: { in
     const [planModal, setPlanModal] = useState<{ mode: 'add' | 'edit'; data?: AdminSubscriptionPlan } | null>(null);
     const [renewModal, setRenewModal] = useState<AdminStudentItem | null>(null);
     const [groupAssignModal, setGroupAssignModal] = useState<AdminStudentItem | null>(null);
-    const [passwordRevealStudent, setPasswordRevealStudent] = useState<AdminStudentItem | null>(null);
     const [bulkImportOpen, setBulkImportOpen] = useState(false);
     const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
     const groupImportInputRef = useRef<HTMLInputElement | null>(null);
@@ -2024,9 +1914,6 @@ export default function StudentManagementPanel({ initialTab = 'students' }: { in
                                         <div className="absolute top-0 right-0 p-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                                             <button onClick={() => setStudentModal({ mode: 'edit', data: s })} className="p-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-all"><Edit className="w-4 h-4" /></button>
                                             <button onClick={() => setRenewModal(s)} title="Renew Subscription" className="p-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 rounded-lg text-indigo-400 hover:text-indigo-300 transition-all"><Clock className="w-4 h-4" /></button>
-                                            {canRevealPasswords && (
-                                                <button onClick={() => setPasswordRevealStudent(s)} title="Reveal Password" className="p-1.5 bg-amber-500/10 hover:bg-amber-500/20 rounded-lg text-amber-300 hover:text-amber-200 transition-all"><Eye className="w-4 h-4" /></button>
-                                            )}
                                         </div>
                                         <div className="flex items-start gap-4">
                                             <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg transition-all duration-300 ${s.subscription?.isActive ? 'bg-gradient-to-br from-amber-400 to-yellow-600 text-white shadow-[0_0_15px_rgba(251,191,36,0.4)] ring-2 ring-amber-400/50' : 'bg-gradient-to-br from-indigo-500/20 to-cyan-500/20 text-indigo-400'}`}>
@@ -2212,12 +2099,9 @@ export default function StudentManagementPanel({ initialTab = 'students' }: { in
                         onSave={async (data: any) => {
                             if (studentModal.mode === 'add') {
                                 const res = await adminCreateStudent(data);
-                                const providedPassword = String(data.password || '').trim();
-                                const generatedPassword = String(res.data?.generatedPassword || '').trim();
-                                const loginPassword = providedPassword || generatedPassword;
                                 toast.success('Student created');
-                                if (loginPassword) {
-                                    toast.success(`Login: ${data.username} / ${loginPassword}`, { duration: 10000 });
+                                if (res.data?.inviteSent) {
+                                    toast.success('Password setup link sent');
                                 }
                                 if (res.data?.paymentSyncWarning) {
                                     toast.error(String(res.data.paymentSyncWarning));
@@ -2278,12 +2162,6 @@ export default function StudentManagementPanel({ initialTab = 'students' }: { in
             {groupAssignModal && (
                 <Modal title="Assign Groups" onClose={() => setGroupAssignModal(null)}>
                     <GroupAssignForm student={groupAssignModal} groups={groups} onClose={() => setGroupAssignModal(null)} onSave={handleAssignGroups} />
-                </Modal>
-            )}
-
-            {passwordRevealStudent && (
-                <Modal title="Reveal Student Password" onClose={() => setPasswordRevealStudent(null)}>
-                    <PasswordRevealModal student={passwordRevealStudent} onClose={() => setPasswordRevealStudent(null)} />
                 </Modal>
             )}
 

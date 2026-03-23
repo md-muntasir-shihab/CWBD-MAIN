@@ -15,6 +15,7 @@ const path_1 = __importDefault(require("path"));
 const mongoose_1 = __importDefault(require("mongoose"));
 const express_mongo_sanitize_1 = __importDefault(require("express-mongo-sanitize"));
 const db_1 = require("./config/db");
+const auth_1 = require("./middlewares/auth");
 const publicRoutes_1 = __importDefault(require("./routes/publicRoutes"));
 const adminRoutes_1 = __importDefault(require("./routes/adminRoutes"));
 const studentRoutes_1 = __importDefault(require("./routes/studentRoutes"));
@@ -27,16 +28,20 @@ const dashboardJobs_1 = require("./cron/dashboardJobs");
 const financeRecurringJobs_1 = require("./cron/financeRecurringJobs");
 const financeSeedService_1 = require("./services/financeSeedService");
 const newsJobs_1 = require("./cron/newsJobs");
+const notificationJobs_1 = require("./cron/notificationJobs");
 const retentionJobs_1 = require("./cron/retentionJobs");
 const subscriptionExpiryCron_1 = require("./cron/subscriptionExpiryCron");
 const adminStudentMgmtRoutes_1 = __importDefault(require("./routes/adminStudentMgmtRoutes"));
+const adminProviderRoutes_1 = __importDefault(require("./routes/adminProviderRoutes"));
 const adminNotificationRoutes_1 = __importDefault(require("./routes/adminNotificationRoutes"));
 const adminStudentSecurityRoutes_1 = __importDefault(require("./routes/adminStudentSecurityRoutes"));
+const secureUploadController_1 = require("./controllers/secureUploadController");
 const securityGuards_1 = require("./middlewares/securityGuards");
 const requestSanitizer_1 = require("./middlewares/requestSanitizer");
 const securityRateLimit_1 = require("./middlewares/securityRateLimit");
 const requestId_1 = require("./middlewares/requestId");
 const logger_1 = require("./utils/logger");
+const migrate_communication_center_v1_1 = require("./scripts/migrate-communication-center-v1");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
@@ -113,6 +118,85 @@ function isLoopbackOrigin(origin) {
         return false;
     }
 }
+function inferStandaloneAdminModule(pathname) {
+    const clean = String(pathname || '').trim().toLowerCase();
+    if (!clean || clean === '/health' || clean.startsWith('/openapi'))
+        return null;
+    if (clean.endsWith('/security') ||
+        clean.includes('/set-password') ||
+        clean.includes('/force-reset') ||
+        clean.includes('/revoke-sessions') ||
+        clean.includes('/resend-account-info')) {
+        return 'security_logs';
+    }
+    if (clean.startsWith('/students-v2') ||
+        clean.startsWith('/students/create-with-password') ||
+        clean.startsWith('/students/') ||
+        clean.startsWith('/student-groups') ||
+        clean.startsWith('/student-contact-timeline') ||
+        clean.startsWith('/student-settings') ||
+        clean.startsWith('/audience-segments') ||
+        clean.startsWith('/import-export-logs')) {
+        return 'students_groups';
+    }
+    if (clean.startsWith('/subscriptions-v2') || clean.startsWith('/subscription-plans') || clean.startsWith('/subscriptions')) {
+        return 'subscription_plans';
+    }
+    if (clean.startsWith('/payments') ||
+        clean.startsWith('/finance') ||
+        clean.startsWith('/expenses') ||
+        clean.startsWith('/staff-payouts') ||
+        clean.startsWith('/dues') ||
+        clean.includes('/payments') ||
+        clean.includes('/finance')) {
+        return 'payments';
+    }
+    if (clean.startsWith('/support-tickets') || clean.startsWith('/contact-messages') || clean.startsWith('/notices')) {
+        return 'support_center';
+    }
+    if (clean.startsWith('/notifications') ||
+        clean.startsWith('/notifications-v2') ||
+        clean.startsWith('/notification-providers') ||
+        clean.startsWith('/notification-templates') ||
+        clean.startsWith('/data-hub')) {
+        return 'notifications';
+    }
+    return null;
+}
+function inferStandaloneAdminAction(method, pathname) {
+    const cleanPath = String(pathname || '').toLowerCase();
+    const upperMethod = String(method || '').toUpperCase();
+    if (cleanPath.includes('bulk'))
+        return 'bulk';
+    if (cleanPath.includes('/export'))
+        return 'export';
+    if (cleanPath.includes('publish'))
+        return 'publish';
+    if (cleanPath.includes('approve') || cleanPath.includes('reject'))
+        return 'approve';
+    if (upperMethod === 'GET' || upperMethod === 'HEAD' || upperMethod === 'OPTIONS')
+        return 'view';
+    if (upperMethod === 'POST')
+        return 'create';
+    if (upperMethod === 'DELETE')
+        return 'delete';
+    return 'edit';
+}
+const enforceStandaloneAdminModulePermissions = (req, res, next) => {
+    const moduleName = inferStandaloneAdminModule(req.path);
+    if (!moduleName) {
+        next();
+        return;
+    }
+    const action = inferStandaloneAdminAction(req.method, req.path);
+    return (0, auth_1.requirePermission)(moduleName, action)(req, res, next);
+};
+const standaloneAdminApiHardening = [
+    auth_1.authenticate,
+    securityGuards_1.enforceAdminPanelPolicy,
+    securityGuards_1.enforceAdminReadOnlyMode,
+    enforceStandaloneAdminModulePermissions,
+];
 // =============
 // Middleware
 // =============
@@ -145,6 +229,7 @@ app.use((0, express_mongo_sanitize_1.default)({ replaceWith: '_' }));
 app.use(requestSanitizer_1.sanitizeRequestPayload);
 app.use(securityGuards_1.enforceSiteAccess);
 // Serve uploaded media files
+app.get('/uploads/:storedName', secureUploadController_1.serveSecureUpload);
 app.use('/uploads', express_1.default.static(path_1.default.join(__dirname, '../public/uploads'), {
     maxAge: IS_PRODUCTION ? '7d' : 0,
     etag: true,
@@ -199,9 +284,10 @@ app.use('/api', publicRoutes_1.default);
 app.use(`/api/${ADMIN_SECRET_PATH}`, securityRateLimit_1.adminRateLimiter);
 app.use(`/api/${ADMIN_SECRET_PATH}`, adminRoutes_1.default);
 app.use('/api/admin', securityRateLimit_1.adminRateLimiter);
-app.use('/api/admin', adminStudentMgmtRoutes_1.default);
-app.use('/api/admin', adminNotificationRoutes_1.default);
-app.use('/api/admin', adminStudentSecurityRoutes_1.default);
+app.use('/api/admin', standaloneAdminApiHardening, adminStudentMgmtRoutes_1.default);
+app.use('/api/admin', standaloneAdminApiHardening, adminNotificationRoutes_1.default);
+app.use('/api/admin', standaloneAdminApiHardening, adminProviderRoutes_1.default);
+app.use('/api/admin', standaloneAdminApiHardening, adminStudentSecurityRoutes_1.default);
 app.use('/api/admin', adminRoutes_1.default);
 // Student API
 app.use('/api/student', studentRoutes_1.default);
@@ -265,6 +351,8 @@ app.use((err, req, res, _next) => {
 async function start() {
     validateRequiredEnv();
     await (0, db_1.connectDB)();
+    const communicationMigrationResult = await (0, migrate_communication_center_v1_1.runCommunicationCenterMigration)();
+    console.log('[startup] communication migration completed', communicationMigrationResult);
     // First-boot setup (controlled by ALLOW_DEFAULT_SETUP env)
     await (0, defaultSetup_1.runDefaultSetup)();
     // Start background cron jobs (e.g. auto-submitting expired exams)
@@ -272,15 +360,28 @@ async function start() {
     (0, modernExamJobs_1.startModernExamCronJobs)();
     (0, dashboardJobs_1.startStudentDashboardCronJobs)();
     (0, newsJobs_1.startNewsV2CronJobs)();
+    (0, notificationJobs_1.startNotificationJobCron)();
     (0, retentionJobs_1.startRetentionCronJobs)();
     (0, subscriptionExpiryCron_1.startSubscriptionExpiryCron)();
     (0, financeRecurringJobs_1.startFinanceRecurringCronJobs)();
     // Seed default Chart-of-Account entries (idempotent)
     await (0, financeSeedService_1.seedDefaultChartOfAccounts)();
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
         console.log(`🚀 CampusWay Backend running on port ${PORT}`);
         console.log(`📡 Public API: http://localhost:${PORT}/api`);
         console.log(`🔒 Admin API:  http://localhost:${PORT}/api/${ADMIN_SECRET_PATH}`);
+    });
+    server.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            console.error(`❌ Port ${PORT} is already in use. Please:`);
+            console.error(`   1. Stop the other process using port ${PORT}, or`);
+            console.error(`   2. Set a different PORT in your .env file`);
+            process.exit(1);
+        }
+        else {
+            console.error('❌ Server error:', err);
+            process.exit(1);
+        }
     });
 }
 start();

@@ -13,6 +13,7 @@ import {
     assignSubscriptionLifecycle,
     syncUserSubscriptionCache,
 } from '../services/subscriptionLifecycleService';
+import { buildSecureUploadUrl, registerSecureUpload } from '../services/secureUploadService';
 
 type ExportType = 'csv' | 'xlsx';
 type PlanMutationResult = {
@@ -1020,9 +1021,21 @@ export async function uploadSubscriptionProof(req: AuthRequest, res: Response): 
             return;
         }
 
-        const proofUrl = safeString(req.body?.proofUrl || req.body?.proofFileUrl);
+        let proofUrl = safeString(req.body?.proofUrl || req.body?.proofFileUrl);
         const transactionId = safeString(req.body?.transactionId);
         const methodRaw = safeString(req.body?.method).toLowerCase();
+        if (req.file) {
+            const secureUpload = await registerSecureUpload({
+                file: req.file,
+                category: 'payment_proof',
+                visibility: 'protected',
+                ownerUserId: userId,
+                ownerRole: req.user?.role || 'student',
+                uploadedBy: userId,
+                accessRoles: ['student', 'superadmin', 'admin', 'finance_agent'],
+            });
+            proofUrl = buildSecureUploadUrl(secureUpload.storedName);
+        }
         if (proofUrl) {
             payment.proofUrl = proofUrl;
             payment.proofFileUrl = proofUrl;

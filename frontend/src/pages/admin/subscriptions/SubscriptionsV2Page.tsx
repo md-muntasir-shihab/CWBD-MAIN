@@ -77,6 +77,8 @@ export default function SubscriptionsV2Page() {
                 <div className="relative flex-1 min-w-[200px]">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
                     <input
+                        aria-label="Search subscriptions"
+                        title="Search subscriptions"
                         type="search"
                         value={searchInput}
                         onChange={(e) => setSearchInput(e.target.value)}
@@ -88,6 +90,8 @@ export default function SubscriptionsV2Page() {
                 <div className="flex items-center gap-2">
                     <Filter className="h-4 w-4 text-text-muted" />
                     <select
+                        aria-label="Filter by status"
+                        title="Filter by status"
                         value={status}
                         onChange={(e) => { setStatus(e.target.value); setPage(1); }}
                         className="admin-input w-auto"
@@ -158,10 +162,10 @@ export default function SubscriptionsV2Page() {
                 <div className="flex items-center justify-between">
                     <p className="text-sm text-text-muted">Page {page} of {totalPages}</p>
                     <div className="flex gap-2">
-                        <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="btn-secondary text-sm">
+                        <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="btn-secondary text-sm" title="Previous page">
                             Previous
                         </button>
-                        <button type="button" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="btn-secondary text-sm">
+                        <button type="button" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="btn-secondary text-sm" title="Next page">
                             Next
                         </button>
                     </div>

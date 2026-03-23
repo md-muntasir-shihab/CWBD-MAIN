@@ -83,7 +83,7 @@ router.get('/me/exams/:examId', getStudentMeExamById);
 router.get('/me/results', getStudentMeResults);
 router.get('/me/results/:examId', getStudentMeResultByExam);
 router.get('/me/payments', getStudentMePayments);
-router.post('/me/payments/proof', studentSubmitPaymentProof);
+router.post('/me/payments/proof', uploadMiddleware.single('file'), studentSubmitPaymentProof);
 router.get('/me/notifications', getStudentMeNotifications);
 router.post('/me/notifications/mark-read', markStudentNotificationsRead);
 router.get('/me/resources', getStudentMeResources);

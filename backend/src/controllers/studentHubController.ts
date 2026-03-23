@@ -20,6 +20,7 @@ import { getCanonicalSubscriptionSnapshot } from '../services/subscriptionAccess
 import { getExternalExamAttemptCount } from '../services/externalExamAttemptService';
 import { computeStudentProfileScore } from '../services/studentProfileScoreService';
 import { getSecurityConfig } from '../services/securityConfigService';
+import { buildSecureUploadUrl, registerSecureUpload } from '../services/secureUploadService';
 
 type StudentPaymentItem = {
     _id: string;
@@ -689,7 +690,20 @@ export async function studentSubmitPaymentProof(req: AuthRequest, res: Response)
         const studentId = ensureStudent(req, res);
         if (!studentId) return;
 
-        const { amount, method, reference, notes, proofUrl, entryType, subscriptionPlanId } = req.body;
+        const { amount, method, reference, notes, proofUrl: rawProofUrl, entryType, subscriptionPlanId } = req.body;
+        let proofUrl = String(rawProofUrl || '').trim();
+        if (req.file) {
+            const secureUpload = await registerSecureUpload({
+                file: req.file,
+                category: 'payment_proof',
+                visibility: 'protected',
+                ownerUserId: studentId,
+                ownerRole: req.user?.role || 'student',
+                uploadedBy: studentId,
+                accessRoles: ['student', 'superadmin', 'admin', 'finance_agent'],
+            });
+            proofUrl = buildSecureUploadUrl(secureUpload.storedName);
+        }
 
         if (!amount || Number(amount) <= 0) {
             res.status(400).json({ message: 'Valid amount is required' });

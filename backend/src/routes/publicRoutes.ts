@@ -1,15 +1,22 @@
 import { Router } from 'express';
 import {
+    beginTotpSetup,
+    confirmTotpSetup,
     login,
     loginAdmin,
     loginChairman,
     getMe,
     changePassword,
+    disableTwoFactor,
     register,
     refresh,
     logout,
     verifyEmail,
     forgotPassword,
+    getMySecuritySessions,
+    logoutAllMySessions,
+    regenerateBackupCodes,
+    revokeMySecuritySession,
     resetPassword,
     verify2fa,
     resendOtp,
@@ -82,6 +89,9 @@ import {
     getPublicNewsV2List,
     getPublicNewsV2BySlug,
     getPublicNewsV2Appearance,
+    getPublicNewsV2DiagnosticArticle,
+    getPublicNewsV2DiagnosticDelivery,
+    getPublicNewsV2DiagnosticFeed,
     getPublicNewsV2Widgets,
     getPublicNewsV2Sources,
     getPublicNewsV2Settings,
@@ -141,6 +151,13 @@ router.post('/auth/verify-2fa', verify2fa);
 router.post('/auth/resend-otp', resendOtp);
 router.get('/auth/session-check', authenticate, checkSession);
 router.get('/auth/session-stream', authenticate, sessionStream);
+router.get('/auth/security/sessions', authenticate, getMySecuritySessions);
+router.delete('/auth/security/sessions/:sessionId', authenticate, revokeMySecuritySession);
+router.post('/auth/security/logout-all', authenticate, logoutAllMySessions);
+router.post('/auth/security/2fa/setup', authenticate, beginTotpSetup);
+router.post('/auth/security/2fa/confirm', authenticate, confirmTotpSetup);
+router.post('/auth/security/2fa/backup-codes', authenticate, regenerateBackupCodes);
+router.post('/auth/security/2fa/disable', authenticate, disableTwoFactor);
 router.get('/auth/oauth/providers', getOauthProviders);
 router.get('/auth/oauth/:provider/start', startOauth);
 router.get('/auth/oauth/:provider/callback', oauthCallback);
@@ -184,20 +201,18 @@ router.get('/settings', getSettings);
 router.get('/stats', getStats);
 
 /* ── Public — News ── */
+router.get('/news/diagnostics/rss.xml', getPublicNewsV2DiagnosticFeed);
+router.get('/news/diagnostics/article/:slug', getPublicNewsV2DiagnosticArticle);
+router.post('/news/diagnostics/delivery/:channel', getPublicNewsV2DiagnosticDelivery);
 router.get('/news', getPublicNewsV2List);
 router.get('/news/settings', getPublicNewsV2Settings);
 router.get('/news/sources', getPublicNewsV2Sources);
+router.get('/news/appearance', getPublicNewsV2Appearance);
+router.get('/news/widgets', getPublicNewsV2Widgets);
 router.get('/news/featured', getPublicFeaturedNews);
 router.get('/news/trending', getTrendingNews);
 router.get('/news/categories', getPublicNewsCategories);
 router.get('/news/:slug', getPublicNewsV2BySlug);
-router.get('/news-v2/list', getPublicNewsV2List);
-router.get('/news-v2/config/appearance', getPublicNewsV2Appearance);
-router.get('/news-v2/widgets', getPublicNewsV2Widgets);
-router.get('/news-v2/sources', getPublicNewsV2Sources);
-router.get('/news-v2/settings', getPublicNewsV2Settings);
-router.get('/news-v2/:slug', getPublicNewsV2BySlug);
-router.post('/news-v2/share/track', trackPublicNewsV2Share);
 router.post('/news/share/track', trackPublicNewsV2Share);
 router.post('/events/track', optionalAuthenticate, trackEvent);
 
@@ -260,7 +275,7 @@ router.get('/student/support-tickets/:id', authenticate, studentGetSupportTicket
 router.post('/student/support-tickets/:id/reply', authenticate, studentReplySupportTicket);
 router.get('/subscriptions/me', authenticate, getMySubscription);
 router.post('/subscriptions/:planId/request-payment', authenticate, subscriptionActionRateLimiter, requestSubscriptionPayment);
-router.post('/subscriptions/:planId/upload-proof', authenticate, subscriptionActionRateLimiter, uploadSubscriptionProof);
+router.post('/subscriptions/:planId/upload-proof', authenticate, subscriptionActionRateLimiter, uploadMiddleware.single('file'), uploadSubscriptionProof);
 router.get('/users/me', authenticate, getStudentMe);
 router.put('/users/me', authenticate, updateStudentProfile);
 router.get('/students/me/exams', authenticate, getStudentMeExams);

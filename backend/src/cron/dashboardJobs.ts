@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import cron from 'node-cron';
 import Notification from '../models/Notification';
 import Exam from '../models/Exam';
@@ -59,7 +60,7 @@ function activeWindow(now: Date, targetDate: Date, hoursBefore: number): boolean
     return diffMs <= upper && diffMs >= lower;
 }
 
-function normalizeObjectIdString(value: unknown, visited: Set<unknown> = new Set()): string | null {
+export function normalizeObjectIdString(value: unknown, visited: Set<unknown> = new Set()): string | null {
     if (value == null) return null;
 
     if (typeof value === 'string') {
@@ -92,6 +93,11 @@ function normalizeObjectIdString(value: unknown, visited: Set<unknown> = new Set
     }
 
     return null;
+}
+
+export function normalizeObjectId(value: unknown): mongoose.Types.ObjectId | null {
+    const normalized = normalizeObjectIdString(value);
+    return normalized ? new mongoose.Types.ObjectId(normalized) : null;
 }
 
 async function createExamReminderNotifications() {
@@ -199,8 +205,9 @@ async function createPaymentPendingNotifications() {
     const rows = await StudentDueLedger.find({ netDue: { $gt: 0 } }).select('studentId netDue').limit(1000).lean();
 
     for (const row of rows) {
-        const studentId = normalizeObjectIdString((row as { studentId?: unknown }).studentId);
-        if (!studentId) continue;
+        const studentObjectId = normalizeObjectId((row as { studentId?: unknown }).studentId);
+        if (!studentObjectId) continue;
+        const studentId = String(studentObjectId);
 
         for (const hoursBefore of settings.paymentPendingReminder.hoursBefore) {
             const hour = Math.max(0, Number(hoursBefore || 0));
@@ -219,7 +226,7 @@ async function createPaymentPendingNotifications() {
                         message,
                         category: 'update',
                         targetRole: 'student',
-                        targetUserIds: [studentId],
+                        targetUserIds: [studentObjectId],
                         publishAt: new Date(),
                         expireAt: new Date(Date.now() + 36 * 60 * 60 * 1000),
                         isActive: true,
@@ -302,11 +309,14 @@ async function createProfileScoreGateNotifications() {
 
     const startAt = new Date(upcomingExam.startDate);
     for (const profile of profiles) {
+        const profileUserId = normalizeObjectId((profile as { user_id?: unknown }).user_id);
+        if (!profileUserId) continue;
+
         for (const hoursBefore of settings.profileScoreGate.hoursBefore) {
             const hour = Math.max(0, Number(hoursBefore || 0));
             if (!activeWindow(now, startAt, hour === 0 ? 1 : hour)) continue;
 
-            const reminderKey = `profile-gate:${String(profile.user_id)}:${String(upcomingExam._id)}:${hour}:${startAt.toISOString()}`;
+            const reminderKey = `profile-gate:${String(profileUserId)}:${String(upcomingExam._id)}:${hour}:${startAt.toISOString()}`;
             const message = applyTemplate(settings.templates.profileScoreGate, {
                 examTitle: upcomingExam.title,
                 score: Number(profile.profile_completion_percentage || 0),
@@ -323,7 +333,7 @@ async function createProfileScoreGateNotifications() {
                         message,
                         category: 'exam',
                         targetRole: 'student',
-                        targetUserIds: [profile.user_id],
+                        targetUserIds: [profileUserId],
                         publishAt: now,
                         expireAt: new Date(startAt.getTime() + 3600000),
                         isActive: true,

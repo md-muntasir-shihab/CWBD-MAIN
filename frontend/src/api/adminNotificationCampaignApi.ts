@@ -1,4 +1,4 @@
-import api from '../services/api';
+import api, { buildSensitiveActionHeaders, type SensitiveActionProof } from '../services/api';
 
 export interface CampaignListItem {
   _id: string;
@@ -37,6 +37,14 @@ export interface DeliveryLog {
   userId: string;
   channel: string;
   status: string;
+  providerUsed?: string;
+  templateKey?: string;
+  originModule?: string;
+  originEntityId?: string;
+  recipientMode?: string;
+  messageMode?: string;
+  recipientDisplay?: string;
+  renderedPreview?: string;
   providerResponse?: string;
   costAmount: number;
   retryCount: number;
@@ -296,6 +304,14 @@ export const getDeliveryLogs = (params: Params = {}) =>
         userId: String(raw.userId ?? raw.studentId ?? ''),
         channel: String(raw.channel ?? ''),
         status: String(raw.status ?? ''),
+        providerUsed: typeof raw.providerUsed === 'string' ? raw.providerUsed : undefined,
+        templateKey: typeof raw.templateKey === 'string' ? raw.templateKey : undefined,
+        originModule: typeof raw.originModule === 'string' ? raw.originModule : undefined,
+        originEntityId: typeof raw.originEntityId === 'string' ? raw.originEntityId : undefined,
+        recipientMode: typeof raw.recipientMode === 'string' ? raw.recipientMode : undefined,
+        messageMode: typeof raw.messageMode === 'string' ? raw.messageMode : undefined,
+        recipientDisplay: typeof raw.recipientDisplay === 'string' ? raw.recipientDisplay : undefined,
+        renderedPreview: typeof raw.renderedPreview === 'string' ? raw.renderedPreview : undefined,
         providerResponse: typeof raw.providerResponse === 'string'
           ? raw.providerResponse
           : (typeof raw.errorMessage === 'string' ? raw.errorMessage : undefined),
@@ -394,3 +410,56 @@ export const getExportHistory = (params: Params = {}) =>
 
 export const triggerNotification = (triggerKey: string) =>
   api.post('/admin/notifications/trigger', { triggerKey }).then(r => r.data);
+
+export interface NotificationProvider {
+  _id: string;
+  type: 'sms' | 'email';
+  provider: string;
+  displayName: string;
+  isEnabled: boolean;
+  senderConfig: { fromName?: string; fromEmail?: string; smsSenderId?: string };
+  rateLimit: { perMinute: number; perDay: number };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TriggerToggle {
+  triggerKey: string;
+  enabled: boolean;
+  channels: ('sms' | 'email')[];
+  guardianIncluded: boolean;
+}
+
+export interface TriggerSettings {
+  triggers: TriggerToggle[];
+  resultPublishAutoSend: boolean;
+  resultPublishChannels: ('sms' | 'email')[];
+  resultPublishGuardianIncluded: boolean;
+  subscriptionReminderDays: number[];
+}
+
+// ── Provider API ──────────────────────────────────────────────────────────────
+export const listProviders = () =>
+  api.get('/admin/notifications/providers').then((r) => (r.data.providers ?? []) as NotificationProvider[]);
+
+export const createProvider = (data: Record<string, unknown>, proof?: SensitiveActionProof) =>
+  api.post('/admin/notifications/providers', data, { headers: buildSensitiveActionHeaders(proof) }).then((r) => r.data as NotificationProvider);
+
+export const updateProvider = (id: string, data: Record<string, unknown>, proof?: SensitiveActionProof) =>
+  api.put(`/admin/notifications/providers/${id}`, data, { headers: buildSensitiveActionHeaders(proof) }).then((r) => r.data as NotificationProvider);
+
+export const toggleProvider = (id: string, proof?: SensitiveActionProof) =>
+  api.patch(`/admin/notifications/providers/${id}/toggle`, {}, { headers: buildSensitiveActionHeaders(proof) }).then((r) => r.data as { _id: string; isEnabled: boolean });
+
+export const deleteProvider = (id: string, proof?: SensitiveActionProof) =>
+  api.delete(`/admin/notifications/providers/${id}`, { headers: buildSensitiveActionHeaders(proof) }).then((r) => r.data);
+
+// ── Trigger API ───────────────────────────────────────────────────────────────
+export const getTriggerSettings = () =>
+  api.get('/admin/notifications/triggers').then((r) => r.data as TriggerSettings);
+
+export const updateTrigger = (triggerKey: string, data: Record<string, unknown>) =>
+  api.put(`/admin/notifications/triggers/${triggerKey}`, data).then((r) => r.data);
+
+export const bulkUpdateTriggers = (data: Record<string, unknown>) =>
+  api.put('/admin/notifications/triggers', data).then((r) => r.data);

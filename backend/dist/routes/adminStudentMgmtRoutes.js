@@ -42,6 +42,7 @@ const mongoose_1 = __importDefault(require("mongoose"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const xlsx_1 = __importDefault(require("xlsx"));
 const auth_1 = require("../middlewares/auth");
+const sensitiveAction_1 = require("../middlewares/sensitiveAction");
 const User_1 = __importDefault(require("../models/User"));
 const StudentProfile_1 = __importDefault(require("../models/StudentProfile"));
 const UserSubscription_1 = __importDefault(require("../models/UserSubscription"));
@@ -55,25 +56,40 @@ const NotificationJob_1 = __importDefault(require("../models/NotificationJob"));
 const NotificationDeliveryLog_1 = __importDefault(require("../models/NotificationDeliveryLog"));
 const StudentSettings_1 = require("../models/StudentSettings");
 const payment_model_1 = require("../models/payment.model");
+const ManualPayment_1 = __importDefault(require("../models/ManualPayment"));
 const FinanceTransaction_1 = __importDefault(require("../models/FinanceTransaction"));
 const StudentDueLedger_1 = __importDefault(require("../models/StudentDueLedger"));
 const ExamResult_1 = __importDefault(require("../models/ExamResult"));
 const ImportExportLog_1 = __importDefault(require("../models/ImportExportLog"));
 const cryptoService_1 = require("../services/cryptoService");
 const notificationProviderService_1 = require("../services/notificationProviderService");
+const notificationOrchestrationService_1 = require("../services/notificationOrchestrationService");
 const studentImportExportService_1 = require("../services/studentImportExportService");
 const adminStudentUnifiedService_1 = require("../services/adminStudentUnifiedService");
 const groupMembershipService = __importStar(require("../services/groupMembershipService"));
+const subscriptionLifecycleService_1 = require("../services/subscriptionLifecycleService");
 const router = (0, express_1.Router)();
 const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 // All routes require admin auth
 const adminAuth = [auth_1.authenticate, (0, auth_1.requireRole)('superadmin', 'admin', 'moderator')];
+const notificationAdminAuth = [auth_1.authenticate, (0, auth_1.requireRole)('superadmin', 'admin', 'moderator', 'editor', 'viewer', 'support_agent', 'finance_agent')];
+const requireDestructiveStepUp = (moduleName, actionName) => (0, sensitiveAction_1.requireSensitiveAction)({
+    actionKey: 'data.destructive_change',
+    moduleName,
+    actionName,
+});
+const requireSensitiveExport = (moduleName, actionName, enforceExportRolePolicy = false) => (0, sensitiveAction_1.requireSensitiveAction)({
+    actionKey: 'students.export',
+    moduleName,
+    actionName,
+    enforceExportRolePolicy,
+});
 // ============================================================================
 // STUDENT METRICS (Dashboard overview) — must be before :id wildcard routes
 // ============================================================================
 router.get('/students-v2/metrics', ...adminAuth, async (_req, res) => {
     try {
-        const [totalStudents, activeStudents, suspendedStudents, pendingStudents, activeSubs, expiredSubs, expiringSoon, pendingPayments, totalPaidPayments, groupCount,] = await Promise.all([
+        const [totalStudents, activeStudents, suspendedStudents, pendingStudents, activeSubs, expiredSubs, expiringSoon, pendingLegacyPayments, pendingManualPayments, totalPaidLegacyPayments, totalPaidManualPayments, groupCount,] = await Promise.all([
             User_1.default.countDocuments({ role: 'student' }),
             User_1.default.countDocuments({ role: 'student', status: 'active' }),
             User_1.default.countDocuments({ role: 'student', status: 'suspended' }),
@@ -85,7 +101,9 @@ router.get('/students-v2/metrics', ...adminAuth, async (_req, res) => {
                 expiresAtUTC: { $lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
             }),
             payment_model_1.PaymentModel.countDocuments({ status: 'pending' }),
+            ManualPayment_1.default.countDocuments({ status: 'pending' }),
             payment_model_1.PaymentModel.countDocuments({ status: 'paid' }),
+            ManualPayment_1.default.countDocuments({ status: 'paid' }),
             StudentGroup_1.default.countDocuments({ isActive: true }),
         ]);
         // Profile completion stats
@@ -98,6 +116,8 @@ router.get('/students-v2/metrics', ...adminAuth, async (_req, res) => {
         ]);
         const avgProfileCompletion = Math.round(profileStats[0]?.avgCompletion ?? 0);
         const lowProfileCount = profileStats[0]?.lowProfile ?? 0;
+        const pendingPayments = pendingLegacyPayments + pendingManualPayments;
+        const totalPaidPayments = totalPaidLegacyPayments + totalPaidManualPayments;
         // Recent registrations (last 7 days)
         const recentRegistrations = await User_1.default.countDocuments({
             role: 'student',
@@ -135,7 +155,7 @@ router.get('/students-v2/:id/unified', ...adminAuth, async (req, res) => {
 // ============================================================================
 router.post('/students-v2/create', ...adminAuth, async (req, res) => {
     try {
-        const { full_name, email, phone_number, password, department, ssc_batch, hsc_batch, college_name, guardian_name, guardian_phone, guardian_email, gender, dob, district, present_address, planId, sendCredentials, } = req.body;
+        const { full_name, email, phone_number, password, department, ssc_batch, hsc_batch, college_name, guardian_name, guardian_phone, guardian_email, gender, dob, district, present_address, planId, sendCredentials, groupIds, paymentAmount, paymentMethod, recordPayment, paymentStatus, startDate, expiryDate, dueDateUTC, } = req.body;
         if (!full_name || !email || !password) {
             return res.status(400).json({ message: 'full_name, email, and password are required' });
         }
@@ -151,6 +171,15 @@ router.post('/students-v2/create', ...adminAuth, async (req, res) => {
         });
         if (existing) {
             return res.status(409).json({ message: 'A user with this email or phone already exists' });
+        }
+        if (planId && !mongoose_1.default.Types.ObjectId.isValid(String(planId))) {
+            return res.status(400).json({ message: 'Invalid planId' });
+        }
+        if (planId) {
+            const planExists = await SubscriptionPlan_1.default.exists({ _id: String(planId) });
+            if (!planExists) {
+                return res.status(404).json({ message: 'Plan not found' });
+            }
         }
         const adminUser = req['user'];
         const hashed = await bcryptjs_1.default.hash(String(password), 12);
@@ -197,6 +226,12 @@ router.post('/students-v2/create', ...adminAuth, async (req, res) => {
         if (present_address)
             profileData['present_address'] = present_address;
         const profile = await StudentProfile_1.default.create(profileData);
+        const normalizedGroupIds = Array.isArray(groupIds)
+            ? groupIds.filter((id) => mongoose_1.default.Types.ObjectId.isValid(String(id))).map((id) => String(id))
+            : [];
+        if (normalizedGroupIds.length > 0) {
+            await groupMembershipService.setStudentGroups(user._id, normalizedGroupIds, adminUser?.['_id'], 'Assigned during student creation');
+        }
         // Create CRM timeline entry
         await StudentContactTimeline_1.default.create({
             studentId: user._id,
@@ -207,39 +242,33 @@ router.post('/students-v2/create', ...adminAuth, async (req, res) => {
         });
         // Assign plan if requested
         let subscription = null;
+        let payment = null;
+        let invoice = null;
         if (planId && mongoose_1.default.Types.ObjectId.isValid(planId)) {
-            const plan = await SubscriptionPlan_1.default.findById(planId).lean();
-            if (plan) {
-                const start = new Date();
-                const expires = new Date(start.getTime() + plan['durationDays'] * 24 * 60 * 60 * 1000);
-                subscription = await UserSubscription_1.default.create({
-                    userId: user._id,
-                    planId: plan._id,
-                    status: 'active',
-                    startAtUTC: start,
-                    expiresAtUTC: expires,
-                    activatedByAdminId: adminUser?.['_id'],
-                });
-                await User_1.default.findByIdAndUpdate(user._id, {
-                    $set: {
-                        'subscription.plan': String(plan._id),
-                        'subscription.planCode': plan['code'],
-                        'subscription.planName': plan['name'],
-                        'subscription.isActive': true,
-                        'subscription.startDate': start,
-                        'subscription.expiryDate': expires,
-                        'subscription.assignedBy': adminUser?.['_id'],
-                        'subscription.assignedAt': new Date(),
-                    },
-                });
-                await StudentContactTimeline_1.default.create({
-                    studentId: user._id,
-                    type: 'subscription_event',
-                    content: `Subscription plan "${plan['name']}" assigned during account creation`,
-                    sourceType: 'system',
-                    createdByAdminId: adminUser?.['_id'],
-                });
-            }
+            const assignment = await (0, subscriptionLifecycleService_1.assignSubscriptionLifecycle)({
+                userId: String(user._id),
+                planId: String(planId),
+                actorId: String(adminUser?.['_id'] || ''),
+                startAtUTC: startDate,
+                expiresAtUTC: expiryDate,
+                paymentAmount,
+                paymentMethod,
+                paymentStatus,
+                recordPayment,
+                dueDateUTC,
+                notes: 'Assigned during student creation',
+                paymentNotes: 'Student creation subscription payment',
+            });
+            subscription = assignment.subscription;
+            payment = assignment.payment;
+            invoice = assignment.invoice;
+            await StudentContactTimeline_1.default.create({
+                studentId: user._id,
+                type: 'subscription_event',
+                content: `Subscription plan "${String(assignment.plan['name'] || '')}" assigned during account creation (${assignment.subscription.status})`,
+                sourceType: 'system',
+                createdByAdminId: adminUser?.['_id'],
+            });
         }
         // Send credentials if requested
         if (sendCredentials) {
@@ -253,7 +282,15 @@ router.post('/students-v2/create', ...adminAuth, async (req, res) => {
             catch { /* Best-effort, don't fail the create */ }
         }
         const safeUser = await User_1.default.findById(user._id).select('-password -twoFactorSecret').lean();
-        res.status(201).json({ user: safeUser, profile, subscription });
+        res.status(201).json({
+            message: 'Student created successfully',
+            student: safeUser,
+            user: safeUser,
+            profile,
+            subscription,
+            payment,
+            invoice,
+        });
     }
     catch (err) {
         res.status(500).json({ message: 'Failed to create student', error: String(err) });
@@ -387,7 +424,7 @@ router.get('/students-v2/template.xlsx', ...adminAuth, async (_req, res) => {
         res.status(500).json({ message: String(err) });
     }
 });
-router.get('/students-v2/export', ...adminAuth, async (req, res) => {
+router.get('/students-v2/export', ...adminAuth, requireSensitiveExport('students_groups', 'students_v2_export', true), (0, sensitiveAction_1.trackSensitiveExport)({ moduleName: 'students_groups', actionName: 'students_v2_export' }), async (req, res) => {
     try {
         const format = String(req.query['format'] ?? req.query['type'] ?? 'xlsx').trim().toLowerCase() === 'csv' ? 'csv' : 'xlsx';
         const filters = {};
@@ -451,7 +488,7 @@ router.post('/students-v2/import/commit', ...adminAuth, async (req, res) => {
         res.status(500).json({ message: String(err) });
     }
 });
-router.post('/students-v2/bulk-delete', ...adminAuth, async (req, res) => {
+router.post('/students-v2/bulk-delete', ...adminAuth, requireDestructiveStepUp('students_groups', 'students_v2_bulk_delete'), async (req, res) => {
     try {
         const { ids } = req.body;
         if (!Array.isArray(ids) || ids.length === 0) {
@@ -573,7 +610,7 @@ router.get('/students-v2/:id', ...adminAuth, async (req, res) => {
 });
 router.put('/students-v2/:id', ...adminAuth, async (req, res) => {
     try {
-        const { full_name, email, phone_number, status, ...profileFields } = req.body;
+        const { full_name, email, phone_number, status, planId, planCode, startDate, expiryDate, paymentAmount, paymentMethod, paymentStatus, recordPayment, dueDateUTC, subscriptionNotes, ...profileFields } = req.body;
         const userUpdate = {};
         if (full_name)
             userUpdate['full_name'] = full_name;
@@ -603,7 +640,26 @@ router.put('/students-v2/:id', ...adminAuth, async (req, res) => {
         if (phone_number)
             profileUpdate['phone_number'] = phone_number;
         const profile = await StudentProfile_1.default.findOneAndUpdate({ user_id: req.params.id }, { $set: profileUpdate }, { upsert: true, new: true }).lean();
-        res.json({ ...user, profile });
+        let subscription = null;
+        if (planId || planCode) {
+            const adminUser = req['user'];
+            const assignment = await (0, subscriptionLifecycleService_1.assignSubscriptionLifecycle)({
+                userId: String(req.params.id),
+                planId: planId ? String(planId) : undefined,
+                planCode: planCode ? String(planCode) : undefined,
+                actorId: String(adminUser?.['_id'] || ''),
+                startAtUTC: startDate,
+                expiresAtUTC: expiryDate,
+                paymentAmount,
+                paymentMethod,
+                paymentStatus,
+                recordPayment,
+                dueDateUTC,
+                notes: subscriptionNotes || 'Assigned via student update',
+            });
+            subscription = assignment.subscription;
+        }
+        res.json({ ...user, profile, subscription });
     }
     catch (err) {
         res.status(500).json({ message: String(err) });
@@ -670,7 +726,7 @@ router.get('/student-groups', ...adminAuth, async (req, res) => {
         res.status(500).json({ message: String(err) });
     }
 });
-router.get('/student-groups/export', ...adminAuth, async (req, res) => {
+router.get('/student-groups/export', ...adminAuth, requireSensitiveExport('students_groups', 'student_groups_legacy_export', true), (0, sensitiveAction_1.trackSensitiveExport)({ moduleName: 'students_groups', actionName: 'student_groups_legacy_export' }), async (req, res) => {
     try {
         const { q, isActive } = req.query;
         const format = String(req.query['format'] ?? req.query['type'] ?? 'xlsx').trim().toLowerCase() === 'csv' ? 'csv' : 'xlsx';
@@ -764,7 +820,7 @@ router.post('/student-groups/bulk-update', ...adminAuth, async (req, res) => {
         res.status(500).json({ message: String(err) });
     }
 });
-router.post('/student-groups/bulk-delete', ...adminAuth, async (req, res) => {
+router.post('/student-groups/bulk-delete', ...adminAuth, requireDestructiveStepUp('students_groups', 'student_groups_bulk_delete'), async (req, res) => {
     try {
         const { ids } = req.body;
         if (!Array.isArray(ids) || ids.length === 0) {
@@ -890,7 +946,7 @@ router.put('/student-groups/:id', ...adminAuth, async (req, res) => {
         res.status(500).json({ message: String(err) });
     }
 });
-router.delete('/student-groups/:id', ...adminAuth, async (req, res) => {
+router.delete('/student-groups/:id', ...adminAuth, requireDestructiveStepUp('students_groups', 'student_group_delete'), async (req, res) => {
     try {
         // Safety check before deletion
         const safety = await groupMembershipService.canDeleteGroup(String(req.params.id));
@@ -976,7 +1032,7 @@ router.post('/student-groups/:id/members/remove', ...adminAuth, async (req, res)
         res.status(500).json({ message: String(err) });
     }
 });
-router.get('/student-groups/:id/members/export', ...adminAuth, async (req, res) => {
+router.get('/student-groups/:id/members/export', ...adminAuth, requireSensitiveExport('students_groups', 'student_group_members_export', true), (0, sensitiveAction_1.trackSensitiveExport)({ moduleName: 'students_groups', actionName: 'student_group_members_export', targetType: 'student_group', targetParam: 'id' }), async (req, res) => {
     try {
         const format = String(req.query['format'] ?? req.query['type'] ?? 'csv').trim().toLowerCase() === 'xlsx' ? 'xlsx' : 'csv';
         const groupId = new mongoose_1.default.Types.ObjectId(String(req.params.id));
@@ -1301,7 +1357,7 @@ router.post('/student-contact-timeline/:studentId', ...adminAuth, async (req, re
         res.status(500).json({ message: String(err) });
     }
 });
-router.delete('/student-contact-timeline/:studentId/:entryId', ...adminAuth, async (req, res) => {
+router.delete('/student-contact-timeline/:studentId/:entryId', ...adminAuth, requireDestructiveStepUp('students_groups', 'student_contact_timeline_delete'), async (req, res) => {
     try {
         const entry = await StudentContactTimeline_1.default.findOneAndDelete({
             _id: req.params.entryId,
@@ -1354,38 +1410,29 @@ router.get('/subscriptions-v2', ...adminAuth, async (req, res) => {
 });
 router.post('/subscriptions-v2/users/:studentId/assign', ...adminAuth, async (req, res) => {
     try {
-        const { planId, startDate, notes } = req.body;
+        const { planId, startDate, notes, paymentAmount, paymentMethod, paymentStatus, recordPayment, dueDateUTC } = req.body;
         if (!planId)
             return res.status(400).json({ message: 'planId required' });
-        const plan = await SubscriptionPlan_1.default.findById(planId).lean();
-        if (!plan)
-            return res.status(404).json({ message: 'Plan not found' });
         const adminUser = req['user'];
-        const start = startDate ? new Date(startDate) : new Date();
-        const expires = new Date(start.getTime() + plan['durationDays'] * 24 * 60 * 60 * 1000);
-        await UserSubscription_1.default.updateMany({ userId: req.params.studentId, status: 'active' }, { $set: { status: 'expired' } });
-        const sub = await UserSubscription_1.default.create({
-            userId: new mongoose_1.default.Types.ObjectId(req.params.studentId),
-            planId: plan._id,
-            status: 'active',
-            startAtUTC: start,
-            expiresAtUTC: expires,
-            activatedByAdminId: adminUser?.['_id'],
-            notes: notes ?? '',
+        const assignment = await (0, subscriptionLifecycleService_1.assignSubscriptionLifecycle)({
+            userId: String(req.params.studentId),
+            planId: String(planId),
+            actorId: String(adminUser?.['_id'] || ''),
+            startAtUTC: startDate,
+            paymentAmount,
+            paymentMethod,
+            paymentStatus,
+            recordPayment,
+            dueDateUTC,
+            notes,
         });
-        await User_1.default.findByIdAndUpdate(req.params.studentId, {
-            $set: {
-                'subscription.plan': String(plan._id),
-                'subscription.planCode': plan['code'],
-                'subscription.planName': plan['name'],
-                'subscription.isActive': true,
-                'subscription.startDate': start,
-                'subscription.expiryDate': expires,
-                'subscription.assignedBy': adminUser?.['_id'],
-                'subscription.assignedAt': new Date(),
-            },
+        res.status(201).json({
+            message: assignment.subscription.status === 'active' ? 'Subscription assigned' : 'Subscription created in pending state',
+            subscription: assignment.subscription,
+            payment: assignment.payment,
+            invoice: assignment.invoice,
+            cache: assignment.cache,
         });
-        res.status(201).json(sub);
     }
     catch (err) {
         res.status(500).json({ message: String(err) });
@@ -1396,18 +1443,9 @@ router.post('/subscriptions-v2/users/:studentId/extend', ...adminAuth, async (re
         const { days, notes } = req.body;
         if (!days || isNaN(Number(days)))
             return res.status(400).json({ message: 'days (number) required' });
-        const sub = await UserSubscription_1.default.findOne({ userId: req.params.studentId, status: 'active' });
-        if (!sub)
-            return res.status(404).json({ message: 'No active subscription found' });
-        const newExpiry = new Date(sub.expiresAtUTC.getTime() + Number(days) * 24 * 60 * 60 * 1000);
-        sub.expiresAtUTC = newExpiry;
-        if (notes)
-            sub.notes = (sub.notes ? sub.notes + ' | ' : '') + notes;
-        await sub.save();
-        await User_1.default.findByIdAndUpdate(req.params.studentId, {
-            $set: { 'subscription.expiryDate': newExpiry },
-        });
-        res.json({ message: `Extended by ${days} days`, newExpiry, sub });
+        const adminUser = req['user'];
+        const result = await (0, subscriptionLifecycleService_1.extendSubscriptionForUser)(String(req.params.studentId), Number(days), String(adminUser?.['_id'] || ''), notes);
+        res.json({ message: `Extended by ${days} days`, newExpiry: result.subscription.expiresAtUTC, sub: result.subscription });
     }
     catch (err) {
         res.status(500).json({ message: String(err) });
@@ -1415,11 +1453,9 @@ router.post('/subscriptions-v2/users/:studentId/extend', ...adminAuth, async (re
 });
 router.post('/subscriptions-v2/users/:studentId/expire-now', ...adminAuth, async (req, res) => {
     try {
-        await UserSubscription_1.default.updateMany({ userId: req.params.studentId, status: 'active' }, { $set: { status: 'expired', expiresAtUTC: new Date() } });
-        await User_1.default.findByIdAndUpdate(req.params.studentId, {
-            $set: { 'subscription.isActive': false },
-        });
-        res.json({ message: 'Subscription expired immediately' });
+        const adminUser = req['user'];
+        const result = await (0, subscriptionLifecycleService_1.expireSubscriptionForUser)(String(req.params.studentId), String(adminUser?.['_id'] || ''), 'Expired from student management');
+        res.json({ message: 'Subscription expired immediately', subscription: result.subscription });
     }
     catch (err) {
         res.status(500).json({ message: String(err) });
@@ -1427,11 +1463,7 @@ router.post('/subscriptions-v2/users/:studentId/expire-now', ...adminAuth, async
 });
 router.post('/subscriptions-v2/users/:studentId/toggle-auto-renew', ...adminAuth, async (req, res) => {
     try {
-        const sub = await UserSubscription_1.default.findOne({ userId: req.params.studentId, status: 'active' });
-        if (!sub)
-            return res.status(404).json({ message: 'No active subscription found' });
-        sub.autoRenewEnabled = !sub.autoRenewEnabled;
-        await sub.save();
+        const sub = await (0, subscriptionLifecycleService_1.toggleAutoRenewForUser)(String(req.params.studentId));
         res.json({ message: `Auto-renew ${sub.autoRenewEnabled ? 'enabled' : 'disabled'}`, autoRenewEnabled: sub.autoRenewEnabled });
     }
     catch (err) {
@@ -1441,7 +1473,7 @@ router.post('/subscriptions-v2/users/:studentId/toggle-auto-renew', ...adminAuth
 // ============================================================================
 // NOTIFICATION PROVIDERS
 // ============================================================================
-router.get('/notification-providers', ...adminAuth, async (_req, res) => {
+router.get('/notification-providers', ...notificationAdminAuth, async (_req, res) => {
     try {
         const providers = await NotificationProvider_1.default.find().select('-credentialsEncrypted').lean();
         res.json({ data: providers });
@@ -1450,7 +1482,7 @@ router.get('/notification-providers', ...adminAuth, async (_req, res) => {
         res.status(500).json({ message: String(err) });
     }
 });
-router.post('/notification-providers', ...adminAuth, async (req, res) => {
+router.post('/notification-providers', ...notificationAdminAuth, (0, sensitiveAction_1.requireSensitiveAction)({ actionKey: 'providers.credentials_change', moduleName: 'notification_center', actionName: 'provider_create' }), async (req, res) => {
     try {
         const { type, provider, displayName, credentials, senderConfig, rateLimit, isEnabled } = req.body;
         if (!type || !provider || !displayName || !credentials) {
@@ -1472,7 +1504,7 @@ router.post('/notification-providers', ...adminAuth, async (req, res) => {
         res.status(500).json({ message: String(err) });
     }
 });
-router.get('/notification-providers/:id', ...adminAuth, async (req, res) => {
+router.get('/notification-providers/:id', ...notificationAdminAuth, async (req, res) => {
     try {
         const doc = await NotificationProvider_1.default.findById(req.params.id).select('-credentialsEncrypted').lean();
         if (!doc)
@@ -1483,7 +1515,7 @@ router.get('/notification-providers/:id', ...adminAuth, async (req, res) => {
         res.status(500).json({ message: String(err) });
     }
 });
-router.put('/notification-providers/:id', ...adminAuth, async (req, res) => {
+router.put('/notification-providers/:id', ...notificationAdminAuth, (0, sensitiveAction_1.requireSensitiveAction)({ actionKey: 'providers.credentials_change', moduleName: 'notification_center', actionName: 'provider_update' }), async (req, res) => {
     try {
         const { displayName, credentials, senderConfig, rateLimit, isEnabled } = req.body;
         const update = {};
@@ -1506,7 +1538,7 @@ router.put('/notification-providers/:id', ...adminAuth, async (req, res) => {
         res.status(500).json({ message: String(err) });
     }
 });
-router.delete('/notification-providers/:id', ...adminAuth, async (req, res) => {
+router.delete('/notification-providers/:id', ...notificationAdminAuth, (0, sensitiveAction_1.requireSensitiveAction)({ actionKey: 'providers.credentials_change', moduleName: 'notification_center', actionName: 'provider_delete' }), async (req, res) => {
     try {
         const doc = await NotificationProvider_1.default.findByIdAndDelete(req.params.id).lean();
         if (!doc)
@@ -1517,7 +1549,7 @@ router.delete('/notification-providers/:id', ...adminAuth, async (req, res) => {
         res.status(500).json({ message: String(err) });
     }
 });
-router.post('/notification-providers/:id/test-send', ...adminAuth, async (req, res) => {
+router.post('/notification-providers/:id/test-send', ...notificationAdminAuth, (0, sensitiveAction_1.requireSensitiveAction)({ actionKey: 'providers.credentials_change', moduleName: 'notification_center', actionName: 'provider_test_send' }), async (req, res) => {
     try {
         const { studentId } = req.body;
         if (!studentId)
@@ -1535,7 +1567,7 @@ router.post('/notification-providers/:id/test-send', ...adminAuth, async (req, r
 // ============================================================================
 // NOTIFICATION TEMPLATES
 // ============================================================================
-router.get('/notification-templates', ...adminAuth, async (_req, res) => {
+router.get('/notification-templates', ...notificationAdminAuth, async (_req, res) => {
     try {
         const templates = await NotificationTemplate_1.default.find().sort({ key: 1 }).lean();
         res.json({ data: templates });
@@ -1544,7 +1576,7 @@ router.get('/notification-templates', ...adminAuth, async (_req, res) => {
         res.status(500).json({ message: String(err) });
     }
 });
-router.post('/notification-templates', ...adminAuth, async (req, res) => {
+router.post('/notification-templates', ...notificationAdminAuth, async (req, res) => {
     try {
         const { key, channel, subject, body, placeholdersAllowed, isEnabled } = req.body;
         if (!key || !channel || !body) {
@@ -1562,7 +1594,7 @@ router.post('/notification-templates', ...adminAuth, async (req, res) => {
         res.status(500).json({ message: String(err) });
     }
 });
-router.get('/notification-templates/:id', ...adminAuth, async (req, res) => {
+router.get('/notification-templates/:id', ...notificationAdminAuth, async (req, res) => {
     try {
         const template = await NotificationTemplate_1.default.findById(req.params.id).lean();
         if (!template)
@@ -1573,7 +1605,7 @@ router.get('/notification-templates/:id', ...adminAuth, async (req, res) => {
         res.status(500).json({ message: String(err) });
     }
 });
-router.put('/notification-templates/:id', ...adminAuth, async (req, res) => {
+router.put('/notification-templates/:id', ...notificationAdminAuth, requireDestructiveStepUp('notification_center', 'template_update'), async (req, res) => {
     try {
         const { subject, body, placeholdersAllowed, isEnabled } = req.body;
         const update = {};
@@ -1594,7 +1626,7 @@ router.put('/notification-templates/:id', ...adminAuth, async (req, res) => {
         res.status(500).json({ message: String(err) });
     }
 });
-router.delete('/notification-templates/:id', ...adminAuth, async (req, res) => {
+router.delete('/notification-templates/:id', ...notificationAdminAuth, requireDestructiveStepUp('notification_center', 'template_delete'), async (req, res) => {
     try {
         const template = await NotificationTemplate_1.default.findByIdAndDelete(req.params.id).lean();
         if (!template)
@@ -1608,93 +1640,74 @@ router.delete('/notification-templates/:id', ...adminAuth, async (req, res) => {
 // ============================================================================
 // NOTIFICATIONS V2 - SEND / JOBS / LOGS
 // ============================================================================
-router.post('/notifications-v2/send', ...adminAuth, async (req, res) => {
+router.post('/notifications-v2/send', ...notificationAdminAuth, async (req, res) => {
     try {
-        const { channel, target, templateKey, payloadOverrides, targetStudentId, targetGroupId, targetStudentIds, targetFilterJson, scheduledAtUTC, } = req.body;
+        const { channel, target, templateKey, payloadOverrides, targetStudentId, targetGroupId, targetStudentIds, targetFilterJson, scheduledAtUTC, customBody, customSubject, campaignName, guardianTargeted, recipientMode, } = req.body;
         if (!channel || !target || !templateKey) {
             return res.status(400).json({ message: 'channel, target, templateKey required' });
         }
         const adminUser = req['user'];
-        const adminId = adminUser?.['_id'];
-        let recipientIds = [];
-        if (target === 'single' && targetStudentId) {
-            recipientIds = [new mongoose_1.default.Types.ObjectId(targetStudentId)];
+        const adminId = String(adminUser?.['_id'] || '');
+        let totalTargets = 0;
+        let audienceFilters;
+        if (target === 'group' && targetGroupId) {
+            const recipients = await (0, notificationOrchestrationService_1.resolveAudience)('group', { groupId: String(targetGroupId) });
+            totalTargets = recipients.length;
         }
-        else if (target === 'group' && targetGroupId) {
-            const members = await GroupMembership_1.default.find({
-                groupId: new mongoose_1.default.Types.ObjectId(targetGroupId),
-            }).select('studentId').lean();
-            recipientIds = members.map((m) => new mongoose_1.default.Types.ObjectId(String(m.studentId)));
+        else if (target === 'single' && targetStudentId) {
+            totalTargets = 1;
         }
         else if (target === 'selected' && Array.isArray(targetStudentIds)) {
-            recipientIds = targetStudentIds
-                .filter((id) => mongoose_1.default.Types.ObjectId.isValid(id))
-                .map((id) => new mongoose_1.default.Types.ObjectId(id));
+            totalTargets = targetStudentIds.filter((id) => mongoose_1.default.Types.ObjectId.isValid(id)).length;
         }
         else if (target === 'filter' && targetFilterJson) {
             try {
-                const filterQuery = JSON.parse(targetFilterJson);
-                const users = await User_1.default.find({ ...filterQuery, role: 'student' }).select('_id').lean();
-                recipientIds = users.map((u) => new mongoose_1.default.Types.ObjectId(String(u._id)));
-            }
-            catch { /* invalid filter */ }
-        }
-        const job = await NotificationJob_1.default.create({
-            type: scheduledAtUTC ? 'scheduled' : 'bulk',
-            channel, target,
-            targetStudentId: targetStudentId ? new mongoose_1.default.Types.ObjectId(targetStudentId) : undefined,
-            targetGroupId: targetGroupId ? new mongoose_1.default.Types.ObjectId(targetGroupId) : undefined,
-            targetStudentIds: target === 'selected' ? recipientIds : undefined,
-            targetFilterJson: targetFilterJson ?? undefined,
-            templateKey: String(templateKey).toUpperCase(),
-            payloadOverrides: payloadOverrides ?? {},
-            status: scheduledAtUTC ? 'queued' : 'processing',
-            scheduledAtUTC: scheduledAtUTC ? new Date(scheduledAtUTC) : undefined,
-            totalTargets: recipientIds.length,
-            sentCount: 0,
-            failedCount: 0,
-            createdByAdminId: adminId,
-        });
-        if (!scheduledAtUTC && recipientIds.length <= 50) {
-            let sent = 0;
-            let failed = 0;
-            const vars = (payloadOverrides ?? {});
-            const channels = channel === 'both' ? ['sms', 'email'] : [channel];
-            for (const recipId of recipientIds) {
-                for (const ch of channels) {
-                    try {
-                        const result = await (0, notificationProviderService_1.sendNotificationToStudent)(recipId, templateKey, ch, vars, job._id);
-                        if (result.success)
-                            sent++;
-                        else
-                            failed++;
-                    }
-                    catch {
-                        failed++;
-                    }
+                const parsedFilters = JSON.parse(targetFilterJson);
+                audienceFilters = { ...parsedFilters };
+                if (!audienceFilters.statuses && audienceFilters.status) {
+                    audienceFilters.statuses = [audienceFilters.status];
                 }
+                const recipients = await (0, notificationOrchestrationService_1.resolveAudience)('filter', { filters: audienceFilters });
+                totalTargets = recipients.length;
             }
-            await NotificationJob_1.default.findByIdAndUpdate(job._id, {
-                $set: {
-                    status: failed === 0 ? 'done' : sent > 0 ? 'partial' : 'failed',
-                    sentCount: sent,
-                    failedCount: failed,
-                    processedAtUTC: new Date(),
-                },
-            });
-            return res.status(201).json({ message: 'Notification job completed', jobId: String(job._id), sent, failed });
+            catch {
+                return res.status(400).json({ message: 'Invalid targetFilterJson' });
+            }
         }
+        const result = await (0, notificationOrchestrationService_1.executeCampaign)({
+            campaignName: String(campaignName || templateKey),
+            channels: channel === 'both' ? ['sms', 'email'] : [channel],
+            templateKey: String(templateKey).toUpperCase(),
+            customBody: typeof customBody === 'string' ? customBody : undefined,
+            customSubject: typeof customSubject === 'string' ? customSubject : undefined,
+            vars: (payloadOverrides ?? {}),
+            audienceType: target === 'group' ? 'group' : target === 'filter' ? 'filter' : 'manual',
+            audienceGroupId: target === 'group' ? String(targetGroupId || '') : undefined,
+            audienceFilters,
+            manualStudentIds: target === 'single'
+                ? [String(targetStudentId || '')].filter(Boolean)
+                : Array.isArray(targetStudentIds)
+                    ? targetStudentIds.map((id) => String(id || '')).filter(Boolean)
+                    : undefined,
+            guardianTargeted: Boolean(guardianTargeted),
+            recipientMode: recipientMode === 'guardian' || recipientMode === 'both' ? recipientMode : 'student',
+            scheduledAtUTC: scheduledAtUTC ? new Date(scheduledAtUTC) : undefined,
+            adminId,
+        });
         res.status(201).json({
-            message: scheduledAtUTC ? 'Notification job scheduled' : 'Notification job queued (large batch)',
-            jobId: String(job._id),
-            totalTargets: recipientIds.length,
+            message: scheduledAtUTC ? 'Notification job scheduled' : 'Notification job queued or completed',
+            jobId: result.jobId,
+            totalTargets,
+            sent: result.sent,
+            failed: result.failed,
+            skipped: result.skipped,
         });
     }
     catch (err) {
         res.status(500).json({ message: String(err) });
     }
 });
-router.get('/notifications-v2/jobs', ...adminAuth, async (req, res) => {
+router.get('/notifications-v2/jobs', ...notificationAdminAuth, async (req, res) => {
     try {
         const { status, page = '1', limit = '20' } = req.query;
         const pageNum = Math.max(1, parseInt(page, 10) || 1);
@@ -1712,7 +1725,7 @@ router.get('/notifications-v2/jobs', ...adminAuth, async (req, res) => {
         res.status(500).json({ message: String(err) });
     }
 });
-router.get('/notifications-v2/jobs/:id', ...adminAuth, async (req, res) => {
+router.get('/notifications-v2/jobs/:id', ...notificationAdminAuth, async (req, res) => {
     try {
         const job = await NotificationJob_1.default.findById(req.params.id).lean();
         if (!job)
@@ -1723,7 +1736,7 @@ router.get('/notifications-v2/jobs/:id', ...adminAuth, async (req, res) => {
         res.status(500).json({ message: String(err) });
     }
 });
-router.post('/notifications-v2/jobs/:id/retry-failed', ...adminAuth, async (req, res) => {
+router.post('/notifications-v2/jobs/:id/retry-failed', ...notificationAdminAuth, async (req, res) => {
     try {
         const job = await NotificationJob_1.default.findById(req.params.id);
         if (!job)
@@ -1731,42 +1744,15 @@ router.post('/notifications-v2/jobs/:id/retry-failed', ...adminAuth, async (req,
         if (!['failed', 'partial'].includes(job.status)) {
             return res.status(400).json({ message: 'Only failed or partial jobs can be retried' });
         }
-        const failedLogs = await NotificationDeliveryLog_1.default.find({ jobId: job._id, status: 'failed' }).lean();
-        let sent = 0;
-        let failed = 0;
-        const vars = (job.payloadOverrides ?? {});
-        for (const log of failedLogs) {
-            try {
-                const logData = log;
-                const result = await (0, notificationProviderService_1.sendNotificationToStudent)(logData['studentId'], job.templateKey, logData['channel'], vars, job._id);
-                if (result.success) {
-                    sent++;
-                    await NotificationDeliveryLog_1.default.findByIdAndUpdate(log._id, {
-                        $set: { status: 'sent', sentAtUTC: new Date() },
-                    });
-                }
-                else {
-                    failed++;
-                }
-            }
-            catch {
-                failed++;
-            }
-        }
-        await NotificationJob_1.default.findByIdAndUpdate(job._id, {
-            $set: {
-                status: failed === 0 ? 'done' : sent > 0 ? 'partial' : 'failed',
-                sentCount: job.sentCount + sent,
-                failedCount: failed,
-            },
-        });
-        res.json({ message: 'Retry complete', sent, failed });
+        const adminUser = req['user'];
+        const result = await (0, notificationOrchestrationService_1.retryFailedDeliveries)(String(job._id), String(adminUser?.['_id'] || ''));
+        res.json({ message: 'Retry complete', ...result });
     }
     catch (err) {
         res.status(500).json({ message: String(err) });
     }
 });
-router.get('/notifications-v2/logs', ...adminAuth, async (req, res) => {
+router.get('/notifications-v2/logs', ...notificationAdminAuth, async (req, res) => {
     try {
         const { jobId, studentId, status, page = '1', limit = '50' } = req.query;
         const pageNum = Math.max(1, parseInt(page, 10) || 1);
@@ -1878,7 +1864,7 @@ router.post('/audience-segments/preview', ...adminAuth, async (req, res) => {
         res.status(500).json({ message: String(err) });
     }
 });
-router.delete('/audience-segments/:id', ...adminAuth, async (req, res) => {
+router.delete('/audience-segments/:id', ...adminAuth, requireDestructiveStepUp('students_groups', 'audience_segment_delete'), async (req, res) => {
     try {
         const segment = await StudentGroup_1.default.findOneAndDelete({ _id: req.params.id, type: 'dynamic' }).lean();
         if (!segment)
@@ -1892,7 +1878,7 @@ router.delete('/audience-segments/:id', ...adminAuth, async (req, res) => {
 // ============================================================================
 // FINANCE ADJUSTMENT (Admin adds manual finance entries for a student)
 // ============================================================================
-router.post('/students-v2/:id/finance-adjustment', ...adminAuth, async (req, res) => {
+router.post('/students-v2/:id/finance-adjustment', ...adminAuth, requireDestructiveStepUp('payments', 'student_finance_adjustment'), async (req, res) => {
     try {
         const { amount, direction, description, method, categoryLabel } = req.body;
         if (!amount || !direction || !description) {
@@ -1946,12 +1932,64 @@ router.post('/students-v2/:id/finance-adjustment', ...adminAuth, async (req, res
 // ============================================================================
 router.get('/students-v2/:id/payments', ...adminAuth, async (req, res) => {
     try {
-        const payments = await payment_model_1.PaymentModel.find({ userId: req.params.id })
-            .sort({ createdAt: -1 })
-            .limit(100)
-            .lean();
-        const ledger = await StudentDueLedger_1.default.findOne({ studentId: req.params.id }).lean();
-        res.json({ payments, ledger: ledger || null });
+        const studentId = String(req.params.id || '');
+        const studentObjectId = mongoose_1.default.Types.ObjectId.isValid(studentId)
+            ? new mongoose_1.default.Types.ObjectId(studentId)
+            : null;
+        const [legacyPayments, manualPayments, ledger] = await Promise.all([
+            payment_model_1.PaymentModel.find({ userId: studentId })
+                .sort({ createdAt: -1 })
+                .limit(100)
+                .lean(),
+            studentObjectId
+                ? ManualPayment_1.default.find({ studentId: studentObjectId })
+                    .sort({ date: -1, createdAt: -1 })
+                    .limit(100)
+                    .lean()
+                : Promise.resolve([]),
+            StudentDueLedger_1.default.findOne({ studentId }).lean(),
+        ]);
+        const payments = [
+            ...legacyPayments.map((payment) => ({
+                _id: String(payment._id),
+                amountBDT: Number(payment.amountBDT) || 0,
+                method: String(payment.method || 'manual'),
+                status: String(payment.status || 'pending'),
+                date: payment.paidAt || payment.createdAt,
+                createdAt: payment.createdAt,
+                paidAt: payment.paidAt || null,
+                source: 'legacy',
+                entryType: payment.examId ? 'exam_fee' : 'legacy_payment',
+            })),
+            ...manualPayments.map((payment) => ({
+                _id: String(payment._id),
+                amountBDT: Number(payment.amount) || 0,
+                method: String(payment.method || 'manual'),
+                status: String(payment.status || 'pending'),
+                date: payment.date || payment.createdAt,
+                createdAt: payment.createdAt,
+                paidAt: payment.paidAt || null,
+                source: 'manual',
+                entryType: payment.entryType || 'manual_payment',
+            })),
+        ].sort((a, b) => {
+            const aTime = new Date(String(a.date || a.createdAt || 0)).getTime();
+            const bTime = new Date(String(b.date || b.createdAt || 0)).getTime();
+            return bTime - aTime;
+        });
+        const dueLedger = ledger || null;
+        const totals = {
+            totalPaid: payments
+                .filter((payment) => payment.status === 'paid')
+                .reduce((sum, payment) => sum + payment.amountBDT, 0),
+            pendingCount: payments.filter((payment) => payment.status === 'pending').length,
+        };
+        res.json({
+            payments,
+            ledger: dueLedger,
+            dueLedger,
+            totals,
+        });
     }
     catch (err) {
         res.status(500).json({ message: String(err) });
@@ -1962,12 +2000,14 @@ router.get('/students-v2/:id/payments', ...adminAuth, async (req, res) => {
 // ============================================================================
 router.get('/students-v2/:id/finance-statement', ...adminAuth, async (req, res) => {
     try {
+        const studentId = String(req.params.id || '');
+        const studentObjectId = new mongoose_1.default.Types.ObjectId(studentId);
         const transactions = await FinanceTransaction_1.default.find({
-            studentId: new mongoose_1.default.Types.ObjectId(req.params.id),
+            studentId: studentObjectId,
             isDeleted: false,
         }).sort({ dateUTC: -1 }).limit(200).lean();
         const totals = await FinanceTransaction_1.default.aggregate([
-            { $match: { studentId: new mongoose_1.default.Types.ObjectId(req.params.id), isDeleted: false } },
+            { $match: { studentId: studentObjectId, isDeleted: false } },
             { $group: {
                     _id: '$direction',
                     total: { $sum: '$amount' },
@@ -1975,7 +2015,26 @@ router.get('/students-v2/:id/finance-statement', ...adminAuth, async (req, res) 
         ]);
         const income = totals.find((t) => t._id === 'income')?.total ?? 0;
         const expense = totals.find((t) => t._id === 'expense')?.total ?? 0;
-        res.json({ transactions, totalIncome: income, totalExpenses: expense, net: income - expense });
+        const dueLedger = await StudentDueLedger_1.default.findOne({ studentId }).lean();
+        res.json({
+            transactions: transactions.map((transaction) => ({
+                _id: String(transaction._id),
+                txnCode: transaction.txnCode,
+                direction: transaction.direction,
+                amount: transaction.amount,
+                description: transaction.description ?? '',
+                status: transaction.status,
+                dateUTC: transaction.dateUTC,
+            })),
+            totals: {
+                income,
+                expense,
+            },
+            totalIncome: income,
+            totalExpenses: expense,
+            net: income - expense,
+            dueLedger: dueLedger || null,
+        });
     }
     catch (err) {
         res.status(500).json({ message: String(err) });

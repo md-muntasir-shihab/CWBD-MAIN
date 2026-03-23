@@ -64,6 +64,12 @@ function toSlug(value) {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '');
 }
+function buildReachableExampleUrl(slug, kind) {
+    const safeSlug = encodeURIComponent(slug);
+    return kind === 'admission'
+        ? `https://example.com/admission/${safeSlug}`
+        : `https://example.com/universities/${safeSlug}`;
+}
 async function upsertUniversity(seed) {
     const categoryDoc = await (0, universitySyncService_1.ensureUniversityCategoryByName)(seed.category);
     const slug = toSlug(seed.name);
@@ -80,10 +86,10 @@ async function upsertUniversity(seed) {
             address: seed.address || 'Dhaka, Bangladesh',
             contactNumber: seed.contactNumber || '01700000000',
             email: seed.email || `${slug}@campusway.local`,
-            website: seed.website || `https://${slug}.example.edu`,
-            websiteUrl: seed.website || `https://${slug}.example.edu`,
-            admissionWebsite: seed.admissionWebsite || `https://${slug}.example.edu/admission`,
-            admissionUrl: seed.admissionWebsite || `https://${slug}.example.edu/admission`,
+            website: seed.website || buildReachableExampleUrl(slug, 'website'),
+            websiteUrl: seed.website || buildReachableExampleUrl(slug, 'website'),
+            admissionWebsite: seed.admissionWebsite || buildReachableExampleUrl(slug, 'admission'),
+            admissionUrl: seed.admissionWebsite || buildReachableExampleUrl(slug, 'admission'),
             totalSeats: seed.totalSeats || '1200',
             scienceSeats: seed.scienceSeats || '450',
             seatsScienceEng: seed.scienceSeats || '450',

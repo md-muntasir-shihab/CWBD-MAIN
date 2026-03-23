@@ -34,7 +34,15 @@ const adminGetDashboardSummary = async (_req, res) => {
             User_1.default.countDocuments({ role: 'student', status: 'suspended' }),
             User_1.default.countDocuments({ role: 'student', status: 'pending' }),
             ManualPayment_1.default.countDocuments({ date: { $gte: startOfToday, $lt: endOfToday } }),
-            SupportTicket_1.default.countDocuments({ status: { $in: ['open', 'in_progress'] } }),
+            SupportTicket_1.default.countDocuments({
+                $or: [
+                    { unreadCountForAdmin: { $gt: 0 } },
+                    {
+                        unreadCountForAdmin: { $exists: false },
+                        status: { $in: ['open', 'in_progress'] },
+                    },
+                ],
+            }),
         ]);
         const highlightedCategories = Array.isArray(homeSettings?.highlightedCategories)
             ? homeSettings.highlightedCategories.filter((item) => item?.enabled !== false).length

@@ -56,6 +56,8 @@ export interface TeamApprovalRuleItem {
   module: string;
   action: string;
   requiresApproval: boolean;
+  requiredApprovals?: number;
+  description?: string;
   approverRoleIds: Array<{ _id: string; name: string; slug: string } | string>;
 }
 
@@ -107,7 +109,7 @@ export const teamApi = {
   updateMember: (id: string, payload: Record<string, unknown>) => api.put(`${BASE}/team/members/${id}`, payload),
   suspendMember: (id: string) => api.post(`${BASE}/team/members/${id}/suspend`),
   activateMember: (id: string) => api.post(`${BASE}/team/members/${id}/activate`),
-  resetMemberPassword: (id: string) => api.post<{ tempPassword?: string }>(`${BASE}/team/members/${id}/reset-password`),
+  resetMemberPassword: (id: string) => api.post<{ inviteSent?: boolean; message?: string }>(`${BASE}/team/members/${id}/reset-password`),
   revokeMemberSessions: (id: string) => api.post(`${BASE}/team/members/${id}/revoke-sessions`),
   resendMemberInvite: (id: string) => api.post(`${BASE}/team/members/${id}/resend-invite`),
 

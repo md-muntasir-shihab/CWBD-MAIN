@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Loader2, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import AdminGuardShell from '../../../components/admin/AdminGuardShell';
+import ModernToggle from '../../../components/ui/ModernToggle';
 import {
     createAdminHelpArticle,
     createAdminHelpCategory,
@@ -124,12 +125,19 @@ export default function AdminHelpCenterPage() {
                         </div>
                         <button type="button" onClick={resetCategory} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"><Plus className="h-4 w-4" /> New</button>
                     </div>
-                    <input className={inputClass} placeholder="Category name" value={categoryForm.name} onChange={(event) => setCategoryForm((prev) => ({ ...prev, name: event.target.value }))} />
-                    <input className={inputClass} placeholder="Icon label" value={categoryForm.icon} onChange={(event) => setCategoryForm((prev) => ({ ...prev, icon: event.target.value }))} />
-                    <textarea className={textareaClass} placeholder="Description" value={categoryForm.description} onChange={(event) => setCategoryForm((prev) => ({ ...prev, description: event.target.value }))} />
+                    <input aria-label="Category name" title="Category name" className={inputClass} placeholder="Category name" value={categoryForm.name} onChange={(event) => setCategoryForm((prev) => ({ ...prev, name: event.target.value }))} />
+                    <input aria-label="Icon label" title="Icon label" className={inputClass} placeholder="Icon label" value={categoryForm.icon} onChange={(event) => setCategoryForm((prev) => ({ ...prev, icon: event.target.value }))} />
+                    <textarea aria-label="Category description" title="Category description" className={textareaClass} placeholder="Description" value={categoryForm.description} onChange={(event) => setCategoryForm((prev) => ({ ...prev, description: event.target.value }))} />
                     <div className="grid gap-3 sm:grid-cols-2">
-                        <input className={inputClass} type="number" placeholder="Display order" value={categoryForm.displayOrder} onChange={(event) => setCategoryForm((prev) => ({ ...prev, displayOrder: event.target.value }))} />
-                        <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:text-slate-300"><input type="checkbox" checked={categoryForm.isActive} onChange={(event) => setCategoryForm((prev) => ({ ...prev, isActive: event.target.checked }))} /> Active</label>
+                        <input aria-label="Display order" title="Display order" className={inputClass} type="number" placeholder="Display order" value={categoryForm.displayOrder} onChange={(event) => setCategoryForm((prev) => ({ ...prev, displayOrder: event.target.value }))} />
+                        <div className="flex items-center rounded-xl border border-slate-200 px-3 py-2 dark:border-slate-700">
+                            <ModernToggle
+                                label="Active"
+                                checked={categoryForm.isActive}
+                                onChange={(isActive) => setCategoryForm((prev) => ({ ...prev, isActive }))}
+                                size="sm"
+                            />
+                        </div>
                     </div>
                     <button type="button" onClick={saveCategory} disabled={!categoryForm.name.trim()} className="w-full rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">{editingCategoryId ? 'Update Category' : 'Create Category'}</button>
                     {categoriesQuery.isLoading && <p className="text-sm text-slate-500">Loading categories...</p>}
@@ -159,19 +167,29 @@ export default function AdminHelpCenterPage() {
                         <button type="button" onClick={resetArticle} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"><Plus className="h-4 w-4" /> New Article</button>
                     </div>
                     <div className="grid gap-3 md:grid-cols-[minmax(0,1fr),180px,160px]">
-                        <label className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input className={`${inputClass} pl-9`} placeholder="Search title or tags" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
-                        <select className={inputClass} value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="">All categories</option>{categories.map((category) => <option key={category._id} value={category._id}>{category.name}</option>)}</select>
-                        <select className={inputClass} value={publishedFilter} onChange={(event) => setPublishedFilter(event.target.value as 'all' | 'published' | 'draft')}><option value="all">All statuses</option><option value="published">Published</option><option value="draft">Drafts</option></select>
+                        <label className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input aria-label="Search articles" title="Search articles" placeholder="Search title or tags" className={`${inputClass} pl-9`} value={search} onChange={(event) => setSearch(event.target.value)} /></label>
+                        <select aria-label="Filter by category" title="Filter by category" className={inputClass} value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="">All categories</option>{categories.map((category) => <option key={category._id} value={category._id}>{category.name}</option>)}</select>
+                        <select aria-label="Filter by status" title="Filter by status" className={inputClass} value={publishedFilter} onChange={(event) => setPublishedFilter(event.target.value as 'all' | 'published' | 'draft')}><option value="all">All statuses</option><option value="published">Published</option><option value="draft">Drafts</option></select>
                     </div>
                     <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950/40">
-                        <input className={inputClass} placeholder="Article title" value={articleForm.title} onChange={(event) => setArticleForm((prev) => ({ ...prev, title: event.target.value }))} />
-                        <select className={inputClass} value={articleForm.categoryId} onChange={(event) => setArticleForm((prev) => ({ ...prev, categoryId: event.target.value }))}><option value="">Select category</option>{categories.map((category) => <option key={category._id} value={category._id}>{category.name}</option>)}</select>
-                        <textarea className={textareaClass} placeholder="Short description" value={articleForm.shortDescription} onChange={(event) => setArticleForm((prev) => ({ ...prev, shortDescription: event.target.value }))} />
-                        <textarea className={`${textareaClass} min-h-[220px]`} placeholder="Full article content" value={articleForm.fullContent} onChange={(event) => setArticleForm((prev) => ({ ...prev, fullContent: event.target.value }))} />
-                        <input className={inputClass} placeholder="Tags, comma separated" value={articleForm.tagsInput} onChange={(event) => setArticleForm((prev) => ({ ...prev, tagsInput: event.target.value }))} />
-                        <div className="flex flex-wrap gap-4 text-sm text-slate-700 dark:text-slate-300">
-                            <label className="flex items-center gap-2"><input type="checkbox" checked={articleForm.isPublished} onChange={(event) => setArticleForm((prev) => ({ ...prev, isPublished: event.target.checked }))} /> Published</label>
-                            <label className="flex items-center gap-2"><input type="checkbox" checked={articleForm.isFeatured} onChange={(event) => setArticleForm((prev) => ({ ...prev, isFeatured: event.target.checked }))} /> Featured</label>
+                        <input aria-label="Article title" title="Article title" className={inputClass} placeholder="Article title" value={articleForm.title} onChange={(event) => setArticleForm((prev) => ({ ...prev, title: event.target.value }))} />
+                        <select aria-label="Article category" title="Article category" className={inputClass} value={articleForm.categoryId} onChange={(event) => setArticleForm((prev) => ({ ...prev, categoryId: event.target.value }))}><option value="">Select category</option>{categories.map((category) => <option key={category._id} value={category._id}>{category.name}</option>)}</select>
+                        <textarea aria-label="Short description" title="Short description" className={textareaClass} placeholder="Short description" value={articleForm.shortDescription} onChange={(event) => setArticleForm((prev) => ({ ...prev, shortDescription: event.target.value }))} />
+                        <textarea aria-label="Full article content" title="Full article content" className={`${textareaClass} min-h-[220px]`} placeholder="Full article content" value={articleForm.fullContent} onChange={(event) => setArticleForm((prev) => ({ ...prev, fullContent: event.target.value }))} />
+                        <input aria-label="Tags" title="Tags, comma separated" className={inputClass} placeholder="Tags, comma separated" value={articleForm.tagsInput} onChange={(event) => setArticleForm((prev) => ({ ...prev, tagsInput: event.target.value }))} />
+                        <div className="flex flex-wrap gap-6 border-y border-slate-100 py-4 dark:border-slate-800">
+                            <ModernToggle
+                                label="Published"
+                                checked={articleForm.isPublished}
+                                onChange={(isPublished) => setArticleForm((prev) => ({ ...prev, isPublished }))}
+                                size="sm"
+                            />
+                            <ModernToggle
+                                label="Featured"
+                                checked={articleForm.isFeatured}
+                                onChange={(isFeatured) => setArticleForm((prev) => ({ ...prev, isFeatured }))}
+                                size="sm"
+                            />
                         </div>
                         <button type="button" onClick={saveArticle} disabled={!articleForm.title.trim() || !articleForm.categoryId || !articleForm.shortDescription.trim() || !articleForm.fullContent.trim()} className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">{editingArticleId ? 'Update Article' : 'Create Article'}</button>
                     </div>

@@ -82,7 +82,7 @@ const QuestionBankQuestionSchema = new mongoose_1.Schema({
     isArchived: { type: Boolean, default: false, index: true },
     createdByAdminId: { type: String, default: '' },
     updatedByAdminId: { type: String, default: '' },
-    contentHash: { type: String, default: '', index: true },
+    contentHash: { type: String, default: '' },
     versionNo: { type: Number, default: 1 },
     parentQuestionId: {
         type: mongoose_1.Schema.Types.ObjectId,

@@ -2,7 +2,6 @@ import { Response } from 'express';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
-import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { AuthRequest } from '../middlewares/auth';
 import Exam from '../models/Exam';
@@ -17,6 +16,8 @@ import StudentProfile from '../models/StudentProfile';
 import ExternalExamJoinLog from '../models/ExternalExamJoinLog';
 import AnnouncementNotice from '../models/AnnouncementNotice';
 import Notification from '../models/Notification';
+import AuditLog from '../models/AuditLog';
+import { getSensitiveActionContext } from '../middlewares/sensitiveAction';
 import { broadcastStudentDashboardEvent } from '../realtime/studentDashboardStream';
 import { submitExamAsSystem } from './examController';
 import { broadcastExamAttemptEventByMeta } from '../realtime/examAttemptStream';
@@ -27,6 +28,7 @@ import { computeStudentProfileScore } from '../services/studentProfileScoreServi
 import { markExternalExamAttemptImported } from '../services/externalExamAttemptService';
 import { syncExamResultToStudentProfile } from '../services/examProfileSyncEngine';
 import { getCanonicalSubscriptionSnapshot } from '../services/subscriptionAccessService';
+import { getClientIp, getDeviceInfo } from '../utils/requestMeta';
 
 interface PopulatedStudent { username: string; fullName: string; email: string; }
 function asStudent(s: unknown): PopulatedStudent { return s as PopulatedStudent; }
@@ -1302,33 +1304,59 @@ export async function adminGetExamAnalytics(req: AuthRequest, res: Response): Pr
     }
 }
 
-/* ─────── MFA CONFIRMATION ─────── */
-
-export async function adminMfaConfirm(req: AuthRequest, res: Response): Promise<void> {
-    try {
-        const { password } = req.body;
-        if (!password) { res.status(400).json({ message: 'Password required for MFA confirmation.' }); return; }
-
-        const user = await User.findById(req.user!._id).select('+password');
-        if (!user) { res.status(404).json({ message: 'User not found' }); return; }
-
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) { res.status(401).json({ message: 'Invalid password. MFA failed.' }); return; }
-
-        // Generate a simple short-lived token (Base64 encoded for simplicity)
-        const mfaToken = Buffer.from(`${user._id}:${Date.now() + 15 * 60 * 1000}`).toString('base64');
-        res.json({ message: 'MFA confirmed successfully.', mfaToken });
-    } catch (err) {
-        console.error('[adminMfaConfirm]', err);
-        res.status(500).json({ message: 'Server error' });
+async function writeExamExportAuditLog(
+    req: AuthRequest,
+    params: {
+        action: 'exam_results_exported' | 'exam_report_exported';
+        examId: string;
+        examTitle: string;
+        format: 'xlsx' | 'csv' | 'pdf';
+        exportedCount: number;
+        groupId?: string;
+    },
+): Promise<void> {
+    const actorId = String(req.user?._id || '').trim();
+    if (!mongoose.Types.ObjectId.isValid(actorId)) {
+        return;
     }
+
+    const sensitiveContext = getSensitiveActionContext(req);
+    await AuditLog.create({
+        actor_id: new mongoose.Types.ObjectId(actorId),
+        actor_role: String(req.user?.role || '').trim(),
+        action: params.action,
+        module: 'reports',
+        status: 'success',
+        target_id: mongoose.Types.ObjectId.isValid(params.examId) ? new mongoose.Types.ObjectId(params.examId) : undefined,
+        target_type: 'Exam',
+        requestId: String((req as AuthRequest & { requestId?: string }).requestId || '').trim(),
+        sessionId: String(req.user?.sessionId || '').trim(),
+        device: getDeviceInfo(req),
+        reason: sensitiveContext?.reason || '',
+        after: {
+            examId: params.examId,
+            examTitle: params.examTitle,
+            format: params.format,
+            exportedCount: params.exportedCount,
+            groupId: params.groupId || '',
+            usedTwoFactor: Boolean(sensitiveContext?.usedTwoFactor),
+        },
+        ip_address: getClientIp(req),
+        details: {
+            examId: params.examId,
+            examTitle: params.examTitle,
+            format: params.format,
+            exportedCount: params.exportedCount,
+            groupId: params.groupId || '',
+        },
+    });
 }
 
 /* ─────── EXCEL EXPORT ─────── */
 
 export async function adminExportExamResults(req: AuthRequest, res: Response): Promise<void> {
     try {
-        const { examId } = req.params;
+        const examId = String(req.params.examId || '');
         const exam = await Exam.findById(examId).lean();
         if (!exam) { res.status(404).json({ message: 'Exam not found' }); return; }
 
@@ -1412,6 +1440,14 @@ export async function adminExportExamResults(req: AuthRequest, res: Response): P
             { metric: 'Lowest Score', value: exam.lowestScore },
             { metric: 'Export Date', value: new Date().toLocaleString() }
         ]);
+
+        await writeExamExportAuditLog(req, {
+            action: 'exam_results_exported',
+            examId,
+            examTitle: String(exam.title || ''),
+            format: 'xlsx',
+            exportedCount: results.length,
+        });
 
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename="${exam.title.replace(/[^a-z0-9]/gi, '_')}_results.xlsx"`);
@@ -2250,6 +2286,13 @@ export async function adminExportExamReport(req: AuthRequest, res: Response): Pr
 
         const { rows, examTitle } = await buildExamReportRows(examId, groupId);
         const safeTitle = examTitle.replace(/[^a-z0-9]/gi, '_') || `exam_${examId}`;
+        const auditPayload = {
+            action: 'exam_report_exported' as const,
+            examId,
+            examTitle,
+            exportedCount: rows.length,
+            groupId: groupId || undefined,
+        };
 
         if (format === 'csv') {
             const headers = [
@@ -2263,6 +2306,10 @@ export async function adminExportExamReport(req: AuthRequest, res: Response): Pr
             ];
             res.setHeader('Content-Type', 'text/csv; charset=utf-8');
             res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}_report.csv"`);
+            await writeExamExportAuditLog(req, {
+                ...auditPayload,
+                format: 'csv',
+            });
             res.send(csvRows.join('\n'));
             return;
         }
@@ -2270,6 +2317,10 @@ export async function adminExportExamReport(req: AuthRequest, res: Response): Pr
         if (format === 'pdf') {
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}_report.pdf"`);
+            await writeExamExportAuditLog(req, {
+                ...auditPayload,
+                format: 'pdf',
+            });
             const doc = new PDFDocument({ size: 'A4', margin: 40 });
             doc.pipe(res);
             doc.fontSize(14).text(`Exam Report: ${examTitle}`, { underline: true });
@@ -2314,6 +2365,10 @@ export async function adminExportExamReport(req: AuthRequest, res: Response): Pr
 
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}_report.xlsx"`);
+        await writeExamExportAuditLog(req, {
+            ...auditPayload,
+            format: 'xlsx',
+        });
         await workbook.xlsx.write(res);
         res.end();
     } catch (err) {

@@ -9,10 +9,18 @@
     }
   ],
   "servers": {
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-playwright"],
+      "env": {
+        "PWTEST_BROWSER": "chromium"
+      }
+    },
     "puppeteer": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@anthropic-ai/mcp-server-puppeteer"]
+      "args": ["-y", "@modelcontextprotocol/server-puppeteer"]
     },
     "coderabbit": {
       "type": "stdio",
@@ -28,7 +36,7 @@
       "args": [
         "-y",
         "@modelcontextprotocol/server-filesystem",
-        "f:/CampusWay"
+        "g:/CampusWay"
       ]
     },
     "mongodb": {

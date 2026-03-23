@@ -26,10 +26,10 @@ const UNIVERSITY_SORT_OPTIONS: UniversityCardSort[] = [
     'exam_soon',
 ];
 
-function normalizeUniversitySort(value: string): UniversityCardSort {
+function normalizeUniversitySort(value: string, fallback: UniversityCardSort = 'closing_soon'): UniversityCardSort {
     return UNIVERSITY_SORT_OPTIONS.includes(value as UniversityCardSort)
         ? (value as UniversityCardSort)
-        : 'closing_soon';
+        : fallback;
 }
 
 interface UniversityBrowseShellProps {
@@ -57,14 +57,6 @@ export default function UniversityBrowseShell({
     const categoryFromUrl = searchParams.get('category') || '';
     const clusterFromUrl = searchParams.get('cluster') || '';
     const searchFromUrl = searchParams.get('q') || '';
-    const sortFromUrl = normalizeUniversitySort(searchParams.get('sort') || 'closing_soon');
-
-    const [search, setSearch] = useState(searchFromUrl);
-    const [debouncedSearch, setDebouncedSearch] = useState(searchFromUrl);
-    const [selectedCategory, setSelectedCategory] = useState(fixedCategory || categoryFromUrl || '');
-    const [selectedCluster, setSelectedCluster] = useState(fixedCluster || clusterFromUrl || '');
-    const [sort, setSort] = useState<UniversityCardSort>(sortFromUrl);
-    const [filterOpen, setFilterOpen] = useState(false);
 
     const homeSettingsQuery = usePublicHomeSettings();
     const categoriesQuery = useUniversityCategories();
@@ -72,6 +64,17 @@ export default function UniversityBrowseShell({
     const categories = useMemo(() => sortCategories(categoriesQuery.data || []), [categoriesQuery.data]);
     const defaultCategoryFromAdmin = String(homeSettingsQuery.data?.universityDashboard?.defaultCategory || '').trim();
     const showAllCategories = Boolean(homeSettingsQuery.data?.universityDashboard?.showAllCategories);
+    const adminDefaultSort: UniversityCardSort = normalizeUniversitySort(
+        homeSettingsQuery.data?.universityCardConfig?.defaultSort || 'closing_soon',
+    );
+    const sortFromUrl = normalizeUniversitySort(searchParams.get('sort') || '', adminDefaultSort);
+
+    const [search, setSearch] = useState(searchFromUrl);
+    const [debouncedSearch, setDebouncedSearch] = useState(searchFromUrl);
+    const [selectedCategory, setSelectedCategory] = useState(fixedCategory || categoryFromUrl || '');
+    const [selectedCluster, setSelectedCluster] = useState(fixedCluster || clusterFromUrl || '');
+    const [sort, setSort] = useState<UniversityCardSort>(sortFromUrl);
+    const [filterOpen, setFilterOpen] = useState(false);
 
     const syncUrlState = useCallback((next: {
         category?: string;
@@ -94,7 +97,7 @@ export default function UniversityBrowseShell({
         if (searchValue.trim()) params.set('q', searchValue.trim());
         else params.delete('q');
 
-        if (sortValue && sortValue !== 'closing_soon') params.set('sort', sortValue);
+        if (sortValue && sortValue !== adminDefaultSort) params.set('sort', sortValue);
         else params.delete('sort');
 
         const nextParams = params.toString();
@@ -258,8 +261,8 @@ export default function UniversityBrowseShell({
                 onClearFilters={() => {
                     setSearch('');
                     setSelectedCluster('');
-                    setSort('closing_soon');
-                    syncUrlState({ cluster: '', q: '', sort: 'closing_soon' });
+                    setSort(adminDefaultSort);
+                    syncUrlState({ cluster: '', q: '', sort: adminDefaultSort });
                 }}
                 hideCategoryTabs={hideCategoryTabs}
             />

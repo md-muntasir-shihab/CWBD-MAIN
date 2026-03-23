@@ -1109,9 +1109,16 @@ export const getAggregatedHomeData = async (req: AuthRequest, res: Response): Pr
             })
             .slice(0, maxExamCards);
         const upcomingExamCategories: HomeCategoryCardItem[] = [];
-        const featuredClusters = filteredClusterCards
-            .filter((cluster) => cluster.homeVisible)
-            .slice(0, maxFeatured);
+        const preferredFeaturedClusters = filteredClusterCards.filter((cluster) => cluster.homeVisible);
+        const featuredClusters = (
+            preferredFeaturedClusters.length > 0
+                ? preferredFeaturedClusters
+                : [...filteredClusterCards].sort((a, b) => {
+                    if (b.memberCount !== a.memberCount) return b.memberCount - a.memberCount;
+                    if (a.homeOrder !== b.homeOrder) return a.homeOrder - b.homeOrder;
+                    return a.name.localeCompare(b.name);
+                })
+        ).slice(0, maxFeatured);
         const featuredCategories = filteredCategoryCards.slice(0, maxFeatured);
 
         const universityDashboardData = {
@@ -1164,11 +1171,16 @@ export const getAggregatedHomeData = async (req: AuthRequest, res: Response): Pr
         const newsLimit = getSafeMax(homeSettings.newsPreview.maxItems, 4, 1, 12);
         const resourcesLimit = getSafeMax(homeSettings.resourcesPreview.maxItems, 4, 1, 12);
 
-        const [newsPreview, resourcesPreview, homeContentBlocks, homeConfigDoc] = await Promise.all([
+        const [featuredNews, newsPreview, resourcesPreview, homeContentBlocks, homeConfigDoc] = await Promise.all([
+            News.find({ isPublished: true, status: 'published', isFeatured: true })
+                .sort({ publishDate: -1, createdAt: -1 })
+                .limit(Math.min(newsLimit, 6))
+                .select('title slug shortSummary shortDescription category sourceName sourceIconUrl publishDate coverImageUrl featuredImage thumbnailImage isFeatured priority')
+                .lean(),
             News.find({ isPublished: true, status: 'published' })
                 .sort({ publishDate: -1, createdAt: -1 })
                 .limit(newsLimit)
-                .select('title slug shortSummary shortDescription category sourceName publishDate coverImageUrl featuredImage thumbnailImage')
+                .select('title slug shortSummary shortDescription category sourceName sourceIconUrl publishDate coverImageUrl featuredImage thumbnailImage isFeatured priority')
                 .lean(),
             Resource.find({ isPublic: true, $or: [{ expiryDate: { $exists: false } }, { expiryDate: null }, { expiryDate: { $gte: now } }] })
                 .sort({ isFeatured: -1, order: 1, publishDate: -1, createdAt: -1 })
@@ -1263,6 +1275,7 @@ export const getAggregatedHomeData = async (req: AuthRequest, res: Response): Pr
         };
 
         const categoriesSafe = Array.isArray(universityCategories) ? universityCategories : [];
+        const featuredNewsItems = Array.isArray(featuredNews) ? featuredNews : [];
         const newsPreviewItems = Array.isArray(newsPreview) ? newsPreview : [];
         const resourcePreviewItems = Array.isArray(resourcesPreview) ? resourcesPreview : [];
         const featuredUniversities = Array.isArray(filteredFeaturedItems) ? filteredFeaturedItems : [];
@@ -1461,6 +1474,8 @@ export const getAggregatedHomeData = async (req: AuthRequest, res: Response): Pr
                 upcoming: upcomingOnlineExamItems,
                 items: [...liveExamItems, ...upcomingOnlineExamItems],
             },
+            featuredNews: featuredNewsItems,
+            featuredNewsItems,
             newsPreview: newsPreviewItems,
             newsPreviewItems,
             resourcesPreview: resourcePreviewItems,

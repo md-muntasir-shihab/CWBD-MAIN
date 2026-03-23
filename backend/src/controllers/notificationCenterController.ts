@@ -9,6 +9,9 @@ import AuditLog from '../models/AuditLog';
 import { AuthRequest } from '../middlewares/auth';
 import { getClientIp } from '../utils/requestMeta';
 import { sendNotificationToStudent } from '../services/notificationProviderService';
+import { encrypt } from '../services/cryptoService';
+import { executeCampaign, retryFailedDeliveries } from '../services/notificationOrchestrationService';
+import { createSecurityAlert } from './securityAlertController';
 
 /* ── helpers ── */
 
@@ -28,6 +31,16 @@ async function createAudit(req: AuthRequest, action: string, details?: Record<st
         ip_address: getClientIp(req),
         details: details || {},
     });
+}
+
+function sanitizeProvider(doc: Record<string, unknown>): Record<string, unknown> {
+    const plain = { ...doc };
+    const credentialsConfigured = Boolean(plain.credentialsEncrypted);
+    delete plain.credentialsEncrypted;
+    return {
+        ...plain,
+        credentialsConfigured,
+    };
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -58,7 +71,8 @@ export async function adminGetProviders(_req: AuthRequest, res: Response): Promi
     const items = await NotificationProvider.find()
         .select('-credentialsEncrypted')
         .sort({ createdAt: -1 })
-        .lean();
+        .lean()
+        .then((rows) => rows.map((row) => sanitizeProvider(row as unknown as Record<string, unknown>)));
     res.json({ items });
 }
 
@@ -75,15 +89,20 @@ export async function adminCreateProvider(req: AuthRequest, res: Response): Prom
         provider,
         displayName,
         isEnabled: isEnabled !== false,
-        credentialsEncrypted: credentials ? JSON.stringify(credentials) : '{}',
+        credentialsEncrypted: encrypt(JSON.stringify(credentials || {})),
         senderConfig: senderConfig || {},
         rateLimit: rateLimit || {},
     });
 
     await createAudit(req, 'notification_provider_created', { providerId: doc._id, type, provider });
-    const plain = doc.toObject();
-    delete (plain as any).credentialsEncrypted;
-    res.status(201).json({ data: plain, message: 'Provider created' });
+    await createSecurityAlert(
+        'provider_credentials_changed',
+        'warning',
+        'Notification provider added',
+        `${displayName} credentials were added or updated.`,
+        { providerId: String(doc._id), provider, type, actorUserId: req.user?._id || null },
+    );
+    res.status(201).json({ data: sanitizeProvider(doc.toObject() as unknown as Record<string, unknown>), message: 'Provider created' });
 }
 
 export async function adminUpdateProvider(req: AuthRequest, res: Response): Promise<void> {
@@ -97,15 +116,24 @@ export async function adminUpdateProvider(req: AuthRequest, res: Response): Prom
     if (typeof isEnabled === 'boolean') update.isEnabled = isEnabled;
     if (senderConfig !== undefined) update.senderConfig = senderConfig;
     if (rateLimit !== undefined) update.rateLimit = rateLimit;
-    if (credentials !== undefined) update.credentialsEncrypted = JSON.stringify(credentials);
+    if (credentials !== undefined) update.credentialsEncrypted = encrypt(JSON.stringify(credentials || {}));
 
     const doc = await NotificationProvider.findByIdAndUpdate(id, { $set: update }, { new: true })
-        .select('-credentialsEncrypted')
+        .select('+credentialsEncrypted')
         .lean();
     if (!doc) { res.status(404).json({ message: 'Provider not found' }); return; }
 
     await createAudit(req, 'notification_provider_updated', { providerId: id });
-    res.json({ data: doc, message: 'Provider updated' });
+    if (credentials !== undefined) {
+        await createSecurityAlert(
+            'provider_credentials_changed',
+            'warning',
+            'Notification provider credentials changed',
+            `${String(doc.displayName || doc.provider || 'Provider')} credentials were changed.`,
+            { providerId: String(id), actorUserId: req.user?._id || null },
+        );
+    }
+    res.json({ data: sanitizeProvider(doc as unknown as Record<string, unknown>), message: 'Provider updated' });
 }
 
 export async function adminDeleteProvider(req: AuthRequest, res: Response): Promise<void> {
@@ -116,6 +144,13 @@ export async function adminDeleteProvider(req: AuthRequest, res: Response): Prom
     if (!doc) { res.status(404).json({ message: 'Provider not found' }); return; }
 
     await createAudit(req, 'notification_provider_deleted', { providerId: id });
+    await createSecurityAlert(
+        'provider_credentials_changed',
+        'warning',
+        'Notification provider deleted',
+        `${String(doc.displayName || doc.provider || 'Provider')} was removed from the communication hub.`,
+        { providerId: String(id), actorUserId: req.user?._id || null },
+    );
     res.json({ message: 'Provider deleted' });
 }
 
@@ -232,29 +267,51 @@ export async function adminGetJobs(req: AuthRequest, res: Response): Promise<voi
 export async function adminSendNotification(req: AuthRequest, res: Response): Promise<void> {
     if (!req.user?._id) { res.status(401).json({ message: 'Unauthorized' }); return; }
 
-    const { channel, target, templateKey, targetStudentId, targetGroupId, targetStudentIds, targetFilterJson, payloadOverrides, scheduledAtUTC } = req.body;
+    const { channel, target, templateKey, targetStudentId, targetGroupId, targetStudentIds, targetFilterJson, payloadOverrides, scheduledAtUTC, customBody, customSubject, campaignName, guardianTargeted, recipientMode } = req.body;
 
     if (!channel || !target || !templateKey) {
         res.status(400).json({ message: 'channel, target, templateKey required' });
         return;
     }
 
-    const job = await NotificationJob.create({
-        type: scheduledAtUTC ? 'scheduled' : 'bulk',
-        channel,
-        target,
-        targetStudentId: targetStudentId ? new mongoose.Types.ObjectId(targetStudentId) : undefined,
-        targetGroupId: targetGroupId ? new mongoose.Types.ObjectId(targetGroupId) : undefined,
-        targetStudentIds: targetStudentIds?.map((id: string) => new mongoose.Types.ObjectId(id)),
-        targetFilterJson: targetFilterJson ? JSON.stringify(targetFilterJson) : undefined,
-        templateKey: templateKey.toUpperCase(),
-        payloadOverrides,
+    let audienceFilters: Record<string, unknown> | undefined;
+    if (target === 'filter' && targetFilterJson) {
+        try {
+            audienceFilters = typeof targetFilterJson === 'string'
+                ? JSON.parse(targetFilterJson)
+                : targetFilterJson;
+        } catch {
+            res.status(400).json({ message: 'Invalid targetFilterJson' });
+            return;
+        }
+    }
+
+    const result = await executeCampaign({
+        campaignName: String(campaignName || templateKey),
+        channels: channel === 'both' ? ['sms', 'email'] : [channel],
+        templateKey: String(templateKey).toUpperCase(),
+        customBody,
+        customSubject,
+        vars: payloadOverrides,
+        audienceType: target === 'group' ? 'group' : target === 'filter' ? 'filter' : 'manual',
+        audienceGroupId: target === 'group' ? String(targetGroupId || '') : undefined,
+        audienceFilters,
+        manualStudentIds: target === 'single'
+            ? [String(targetStudentId || '')].filter(Boolean)
+            : Array.isArray(targetStudentIds)
+                ? targetStudentIds.map((value: unknown) => String(value || '')).filter(Boolean)
+                : undefined,
+        guardianTargeted: Boolean(guardianTargeted),
+        recipientMode: recipientMode === 'guardian' || recipientMode === 'both' ? recipientMode : 'student',
         scheduledAtUTC: scheduledAtUTC ? new Date(scheduledAtUTC) : undefined,
-        createdByAdminId: new mongoose.Types.ObjectId(String(req.user._id)),
+        adminId: String(req.user._id),
     });
 
-    await createAudit(req, 'notification_job_created', { jobId: job._id, templateKey, target });
-    res.status(201).json({ data: job, message: 'Notification job created' });
+    await createAudit(req, 'notification_job_created', { jobId: result.jobId, templateKey, target });
+    res.status(201).json({
+        data: { jobId: result.jobId, sent: result.sent, failed: result.failed, skipped: result.skipped },
+        message: scheduledAtUTC ? 'Notification job scheduled' : 'Notification job queued or processed',
+    });
 }
 
 export async function adminRetryFailedJob(req: AuthRequest, res: Response): Promise<void> {
@@ -269,12 +326,9 @@ export async function adminRetryFailedJob(req: AuthRequest, res: Response): Prom
         return;
     }
 
-    job.status = 'queued';
-    job.errorMessage = undefined;
-    await job.save();
-
-    await createAudit(req, 'notification_job_retried', { jobId: id });
-    res.json({ data: job, message: 'Job queued for retry' });
+    const result = await retryFailedDeliveries(String(id), String(req.user!._id));
+    await createAudit(req, 'notification_job_retried', { jobId: id, ...result });
+    res.json({ data: result, message: 'Failed deliveries retried' });
 }
 
 /* ═══════════════════════════════════════════════════════════

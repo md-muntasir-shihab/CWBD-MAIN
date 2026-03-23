@@ -44,6 +44,8 @@ const SORT_WHITELIST = {
 const PUBLIC_UNIVERSITY_LIST_PROJECTION = [
     'name',
     'shortForm',
+    'shortDescription',
+    'description',
     'category',
     'clusterGroup',
     'established',
@@ -149,6 +151,35 @@ function asStringIdList(value) {
         return [];
     return raw.split(',').map((item) => item.trim()).filter(Boolean);
 }
+async function getActivePublicUniversityTaxonomy() {
+    const [activeCategories, activeClusters] = await Promise.all([
+        UniversityCategory_1.default.find({ isActive: true }).select('name').lean(),
+        UniversityCluster_1.default.find({ isActive: true }).select('_id name').lean(),
+    ]);
+    const activeCategoryNames = activeCategories
+        .map((item) => (0, universityCategories_1.normalizeUniversityCategory)(item.name))
+        .filter(Boolean);
+    return {
+        activeCategoryNames,
+        activeCategorySet: new Set(activeCategoryNames),
+        activeClusterIdSet: new Set(activeClusters.map((item) => String(item._id || ''))),
+        activeClusterNameSet: new Set(activeClusters.map((item) => String(item.name || '').trim()).filter(Boolean)),
+    };
+}
+function stripInactiveClusterFromUniversityRecord(input, taxonomy) {
+    const clusterId = String(input.clusterId || '').trim();
+    const clusterName = String(input.clusterGroup || input.clusterName || '').trim();
+    const hasActiveCluster = ((clusterId && taxonomy.activeClusterIdSet.has(clusterId))
+        || (clusterName && taxonomy.activeClusterNameSet.has(clusterName)));
+    if (hasActiveCluster)
+        return input;
+    return {
+        ...input,
+        clusterId: null,
+        clusterGroup: '',
+        clusterName: '',
+    };
+}
 function normalizeClusterGroupValue(data) {
     const rawGroup = String(data.clusterGroup || '').trim();
     data.clusterGroup = rawGroup || String(data.clusterName || '').trim() || '';
@@ -161,6 +192,10 @@ function buildUniversityMutationPayload(input, opts) {
     const output = partial
         ? Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined))
         : { ...input };
+    const name = String(input.name || '').trim();
+    const shortForm = String(input.shortForm || '').trim();
+    const shortDescription = String(input.shortDescription || '').trim();
+    const description = String(input.description || '').trim();
     const website = String(input.website || input.websiteUrl || '').trim();
     const admissionWebsite = String(input.admissionWebsite || input.admissionUrl || '').trim();
     const established = Number(input.establishedYear ?? input.established ?? 0);
@@ -173,6 +208,18 @@ function buildUniversityMutationPayload(input, opts) {
     const seatsArtsHum = String(input.seatsArtsHum || input.artsSeats || '').trim();
     const seatsBusiness = String(input.seatsBusiness || input.businessSeats || '').trim();
     const clusterGroup = String(input.clusterGroup || input.clusterName || '').trim();
+    if (!partial || input.name !== undefined) {
+        output.name = name;
+    }
+    if (!partial || input.shortForm !== undefined) {
+        output.shortForm = shortForm;
+    }
+    if (!partial || input.shortDescription !== undefined) {
+        output.shortDescription = shortDescription;
+    }
+    if (!partial || input.description !== undefined) {
+        output.description = description;
+    }
     if (!partial || hasAnyDefined(input, ['category', 'categoryId'])) {
         output.category = (0, universityCategories_1.normalizeUniversityCategory)(input.category || universityCategories_1.DEFAULT_UNIVERSITY_CATEGORY);
     }
@@ -245,6 +292,10 @@ function buildUniversityMutationPayload(input, opts) {
     return output;
 }
 function toCanonicalUniversityRecord(input) {
+    const name = String(input.name || '').trim();
+    const shortForm = String(input.shortForm || '').trim();
+    const shortDescription = String(input.shortDescription || '').trim();
+    const description = String(input.description || '').trim();
     const website = String(input.website || input.websiteUrl || '').trim();
     const admissionWebsite = String(input.admissionWebsite || input.admissionUrl || '').trim();
     const established = Number(input.establishedYear ?? input.established ?? 0);
@@ -259,6 +310,10 @@ function toCanonicalUniversityRecord(input) {
     const clusterGroup = String(input.clusterGroup || input.clusterName || '').trim();
     return {
         ...input,
+        name,
+        shortForm,
+        shortDescription,
+        description,
         category: (0, universityCategories_1.normalizeUniversityCategory)(input.category || universityCategories_1.DEFAULT_UNIVERSITY_CATEGORY),
         website,
         websiteUrl: website,
@@ -408,6 +463,7 @@ async function getUniversities(req, res) {
         const limitNum = Math.min(500, Math.max(1, parseInt(String(limit), 10) || 24));
         const dashboardConfig = await getUniversityDashboardConfig();
         const { filter, categoryMissing } = buildUniversityFilter(req.query, { requireCategory: true, allowAllCategories: dashboardConfig.showAllCategories });
+        const taxonomy = await getActivePublicUniversityTaxonomy();
         const featuredRaw = String(req.query.featured || '').trim().toLowerCase();
         const featuredMode = ['true', '1', 'yes', 'on'].includes(featuredRaw);
         if (categoryMissing && !featuredMode) {
@@ -417,6 +473,26 @@ async function getUniversities(req, res) {
                 defaultCategory: dashboardConfig.defaultCategory,
             });
             return;
+        }
+        const requestedCategory = typeof filter.category === 'string'
+            ? (0, universityCategories_1.normalizeUniversityCategory)(filter.category)
+            : '';
+        if (taxonomy.activeCategoryNames.length > 0) {
+            if (requestedCategory) {
+                if (!taxonomy.activeCategorySet.has(requestedCategory)) {
+                    res.json({
+                        items: [],
+                        page: pageNum,
+                        limit: limitNum,
+                        total: 0,
+                    });
+                    return;
+                }
+                filter.category = requestedCategory;
+            }
+            else {
+                filter.category = { $in: taxonomy.activeCategoryNames };
+            }
         }
         filter.isActive = true;
         if (featuredMode)
@@ -432,7 +508,7 @@ async function getUniversities(req, res) {
             .limit(limitNum)
             .lean();
         res.json({
-            items: rows.map((item) => toCanonicalUniversityRecord(item)),
+            items: rows.map((item) => toCanonicalUniversityRecord(stripInactiveClusterFromUniversityRecord(item, taxonomy))),
             page: pageNum,
             limit: limitNum,
             total,
@@ -446,25 +522,39 @@ async function getUniversities(req, res) {
 async function getUniversityCategories(_req, res) {
     try {
         await (0, universitySyncService_1.backfillUniversityTaxonomyIfNeeded)();
-        const rows = await University_1.default.aggregate([
-            { $match: { isActive: true, isArchived: { $ne: true } } },
-            { $group: { _id: '$category', count: { $sum: 1 }, clusterGroups: { $addToSet: '$clusterGroup' } } },
+        const [categoryDocs, activeClusters, rows] = await Promise.all([
+            UniversityCategory_1.default.find({ isActive: true }).select('name').sort({ homeOrder: 1, name: 1 }).lean(),
+            UniversityCluster_1.default.find({ isActive: true }).select('name').lean(),
+            University_1.default.aggregate([
+                { $match: { isActive: true, isArchived: { $ne: true } } },
+                { $group: { _id: '$category', count: { $sum: 1 }, clusterGroups: { $addToSet: '$clusterGroup' } } },
+            ]),
         ]);
+        const activeClusterNames = new Set(activeClusters.map((item) => String(item.name || '').trim()).filter(Boolean));
+        const activeCategoryNames = categoryDocs
+            .map((item) => (0, universityCategories_1.normalizeUniversityCategory)(item.name))
+            .filter(Boolean);
+        const allowedCategorySet = new Set(activeCategoryNames);
         const map = new Map();
         rows.forEach((row) => {
             const name = (0, universityCategories_1.normalizeUniversityCategory)(row._id || universityCategories_1.DEFAULT_UNIVERSITY_CATEGORY);
+            if (allowedCategorySet.size > 0 && !allowedCategorySet.has(name))
+                return;
             const existing = map.get(name) || { count: 0, clusterGroups: new Set() };
             existing.count += Number(row.count || 0);
             if (Array.isArray(row.clusterGroups)) {
                 row.clusterGroups
                     .map((value) => String(value || '').trim())
                     .filter(Boolean)
+                    .filter((group) => activeClusterNames.has(group))
                     .forEach((group) => existing.clusterGroups.add(group));
             }
             map.set(name, existing);
         });
-        const extra = Array.from(map.keys()).filter((name) => !universityCategories_1.UNIVERSITY_CATEGORY_ORDER.includes(name));
-        const ordered = [...universityCategories_1.UNIVERSITY_CATEGORY_ORDER, ...extra.sort((a, b) => a.localeCompare(b))];
+        const extra = activeCategoryNames.filter((name) => !universityCategories_1.UNIVERSITY_CATEGORY_ORDER.includes(name));
+        const ordered = [...universityCategories_1.UNIVERSITY_CATEGORY_ORDER, ...extra.sort((a, b) => a.localeCompare(b))]
+            .filter((name, index, arr) => arr.indexOf(name) === index)
+            .filter((name) => allowedCategorySet.size === 0 || allowedCategorySet.has(name));
         const categories = ordered.map((categoryName, index) => ({
             categoryName,
             order: index + 1,
@@ -481,12 +571,18 @@ async function getUniversityCategories(_req, res) {
 async function getUniversityBySlug(req, res) {
     try {
         await (0, universitySyncService_1.backfillUniversityTaxonomyIfNeeded)();
+        const taxonomy = await getActivePublicUniversityTaxonomy();
         const row = await University_1.default.findOne({ slug: req.params.slug, isActive: true, isArchived: { $ne: true } }).lean();
         if (!row) {
             res.status(404).json({ message: 'University not found' });
             return;
         }
-        res.json(toCanonicalUniversityRecord(row));
+        const categoryName = (0, universityCategories_1.normalizeUniversityCategory)(String(row.category || universityCategories_1.DEFAULT_UNIVERSITY_CATEGORY));
+        if (taxonomy.activeCategoryNames.length > 0 && !taxonomy.activeCategorySet.has(categoryName)) {
+            res.status(404).json({ message: 'University not found' });
+            return;
+        }
+        res.json(toCanonicalUniversityRecord(stripInactiveClusterFromUniversityRecord(row, taxonomy)));
     }
     catch (error) {
         console.error('Get university error:', error);

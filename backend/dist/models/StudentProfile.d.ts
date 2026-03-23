@@ -34,6 +34,11 @@ export interface IStudentProfile extends Document {
     profile_completion_percentage: number;
     points: number;
     rank?: number;
+    examIdentity?: Record<string, unknown>;
+    examHistory?: Array<Record<string, unknown>>;
+    latestExamResultSummary?: string;
+    examDataLastSyncAt?: Date | null;
+    examDataLastSyncSource?: string;
     createdAt: Date;
     updatedAt: Date;
 }

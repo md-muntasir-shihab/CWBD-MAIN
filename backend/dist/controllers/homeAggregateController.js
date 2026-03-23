@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getAggregatedHomeData = void 0;
 const SubscriptionPlan_1 = __importDefault(require("../models/SubscriptionPlan"));
 const University_1 = __importDefault(require("../models/University"));
+const UniversityCategory_1 = __importDefault(require("../models/UniversityCategory"));
 const UniversityCluster_1 = __importDefault(require("../models/UniversityCluster"));
 const Exam_1 = __importDefault(require("../models/Exam"));
 const News_1 = __importDefault(require("../models/News"));
@@ -19,6 +20,7 @@ const UniversitySettings_1 = __importDefault(require("../models/UniversitySettin
 const ContentBlock_1 = __importDefault(require("../models/ContentBlock"));
 const HomeConfig_1 = __importDefault(require("../models/HomeConfig"));
 const universitySyncService_1 = require("../services/universitySyncService");
+const universityCategories_1 = require("../utils/universityCategories");
 const DAY_MS = 24 * 60 * 60 * 1000;
 function parseSeatValue(value) {
     if (value === null || value === undefined)
@@ -97,6 +99,14 @@ function pickString(value, fallback = '') {
     if (typeof value !== 'string')
         return fallback;
     return value.trim() || fallback;
+}
+function toSlug(value, fallbackPrefix) {
+    const raw = String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    return raw || `${fallbackPrefix}-${Date.now()}`;
 }
 function normalizeTimelineItem(item) {
     return {
@@ -280,7 +290,7 @@ function mapUniversityPreviewItem(item) {
         name: pickString(item.name, 'University'),
         shortForm: pickString(item.shortForm, 'N/A'),
         slug: pickString(item.slug, ''),
-        category: pickString(item.category, 'Uncategorized'),
+        category: (0, universityCategories_1.normalizeUniversityCategory)(pickString(item.category, 'Uncategorized')),
         clusterId: pickString(item.clusterId, ''),
         clusterGroup: pickString(item.clusterGroup, ''),
         contactNumber: pickString(item.contactNumber, ''),
@@ -338,6 +348,16 @@ function getNearestFutureDateIso(values, now) {
         return '';
     return new Date(timestamps[0]).toISOString();
 }
+function getEarliestKnownDateIso(values) {
+    const timestamps = values
+        .map((value) => parseDate(value))
+        .filter((value) => Boolean(value))
+        .map((value) => startOfDay(value).getTime())
+        .sort((a, b) => a - b);
+    if (timestamps.length === 0)
+        return '';
+    return new Date(timestamps[0]).toISOString();
+}
 function buildHomeClusterCards(clusters, previewItems, now) {
     const universitiesByCluster = new Map();
     previewItems.forEach((item) => {
@@ -354,6 +374,61 @@ function buildHomeClusterCards(clusters, previewItems, now) {
         const members = universitiesByCluster.get(clusterId) || universitiesByCluster.get(String(cluster.name || '').trim()) || [];
         if (members.length === 0)
             return;
+        const clusterDates = (cluster.dates || {});
+        const sharedApplicationStartDate = toIsoDateString(clusterDates.applicationStartDate);
+        const sharedApplicationEndDate = toIsoDateString(clusterDates.applicationEndDate);
+        const sharedScienceExamDate = toIsoDateString(clusterDates.scienceExamDate);
+        const sharedArtsExamDate = toIsoDateString(clusterDates.artsExamDate);
+        const sharedBusinessExamDate = toIsoDateString(clusterDates.commerceExamDate || clusterDates.businessExamDate);
+        const nearestDeadline = getNearestFutureDateIso(members.map((item) => item.applicationEndDate).filter(Boolean), now);
+        const nearestExam = getNearestFutureDateIso(members.flatMap((item) => [
+            item.scienceExamDate,
+            item.artsExamDate,
+            item.businessExamDate,
+            item.examDateScience,
+            item.examDateArts,
+            item.examDateBusiness,
+        ].filter(Boolean)), now);
+        const applicationStartDate = sharedApplicationStartDate || getEarliestKnownDateIso(members.map((item) => item.applicationStartDate).filter(Boolean));
+        const applicationEndDate = sharedApplicationEndDate || nearestDeadline;
+        const scienceExamDate = sharedScienceExamDate || getNearestFutureDateIso(members.flatMap((item) => [item.scienceExamDate, item.examDateScience].filter(Boolean)), now);
+        const artsExamDate = sharedArtsExamDate || getNearestFutureDateIso(members.flatMap((item) => [item.artsExamDate, item.examDateArts].filter(Boolean)), now);
+        const businessExamDate = sharedBusinessExamDate || getNearestFutureDateIso(members.flatMap((item) => [item.businessExamDate, item.examDateBusiness].filter(Boolean)), now);
+        const admissionWebsite = pickString(clusterDates.admissionWebsite)
+            || members.find((item) => item.admissionWebsite)?.admissionWebsite
+            || '';
+        cards.push({
+            id: clusterId,
+            slug: pickString(cluster.slug, ''),
+            name: pickString(cluster.name, 'Cluster'),
+            description: pickString(cluster.description, ''),
+            memberCount: members.length,
+            categories: Array.from(new Set(members.map((item) => item.category).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+            applicationStartDate,
+            applicationEndDate,
+            scienceExamDate,
+            artsExamDate,
+            businessExamDate,
+            admissionWebsite,
+            nearestDeadline,
+            nearestExam,
+            examCentersPreview: Array.from(new Set(members.flatMap((item) => item.examCentersPreview || []))).slice(0, 6),
+            homeVisible: Boolean(cluster.homeVisible),
+            homeOrder: Number(cluster.homeOrder || 0),
+        });
+    });
+    return cards.sort((a, b) => {
+        if (a.homeOrder !== b.homeOrder)
+            return a.homeOrder - b.homeOrder;
+        return a.name.localeCompare(b.name);
+    });
+}
+function buildHomeCategoryCards(highlightedCategories, previewItems, now) {
+    const cards = [];
+    highlightedCategories.forEach((category) => {
+        const members = previewItems.filter((item) => item.category === category.name);
+        if (members.length === 0)
+            return;
         const nearestDeadline = getNearestFutureDateIso(members.map((item) => item.applicationEndDate).filter(Boolean), now);
         const nearestExam = getNearestFutureDateIso(members.flatMap((item) => [
             item.scienceExamDate,
@@ -364,17 +439,16 @@ function buildHomeClusterCards(clusters, previewItems, now) {
             item.examDateBusiness,
         ].filter(Boolean)), now);
         cards.push({
-            id: clusterId,
-            slug: pickString(cluster.slug, ''),
-            name: pickString(cluster.name, 'Cluster'),
-            description: pickString(cluster.description, ''),
+            id: category.id,
+            slug: category.slug,
+            name: category.name,
+            badgeText: pickString(category.badgeText),
             memberCount: members.length,
-            categories: Array.from(new Set(members.map((item) => item.category).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+            clusterGroups: Array.from(new Set(members.map((item) => item.clusterGroup).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
             nearestDeadline,
             nearestExam,
             examCentersPreview: Array.from(new Set(members.flatMap((item) => item.examCentersPreview || []))).slice(0, 6),
-            homeVisible: Boolean(cluster.homeVisible),
-            homeOrder: Number(cluster.homeOrder || 0),
+            homeOrder: Number(category.order || 0),
         });
     });
     return cards.sort((a, b) => {
@@ -396,13 +470,17 @@ const getAggregatedHomeData = async (req, res) => {
         ]);
         const defaults = (0, homeSettingsService_1.getHomeSettingsDefaults)();
         const homeSettings = (0, homeSettingsService_1.mergeHomeSettings)(defaults, homeSettingsDoc.toObject());
-        const [universities, clusters, allRelevantExams, totalStudents, totalResources, totalNews, subscriptionPlansRaw, activeBanners] = await Promise.all([
+        const [rawUniversities, categoryDocs, clusters, allRelevantExams, totalStudents, totalResources, totalNews, subscriptionPlansRaw, activeBanners] = await Promise.all([
             University_1.default.find({ isActive: true, isArchived: { $ne: true } })
                 .select('name shortForm slug category clusterId clusterGroup contactNumber established address email website admissionWebsite totalSeats scienceSeats artsSeats businessSeats applicationStartDate applicationEndDate scienceExamDate artsExamDate businessExamDate examCenters shortDescription description logoUrl')
                 .sort({ updatedAt: -1, createdAt: -1, _id: -1 })
                 .lean(),
+            UniversityCategory_1.default.find({ isActive: true })
+                .select('_id name slug labelBn labelEn homeHighlight homeOrder')
+                .sort({ homeOrder: 1, name: 1 })
+                .lean(),
             UniversityCluster_1.default.find({ isActive: true })
-                .select('_id slug name description homeVisible homeOrder')
+                .select('_id slug name description homeVisible homeOrder dates')
                 .sort({ homeOrder: 1, name: 1 })
                 .lean(),
             Exam_1.default.find({
@@ -417,13 +495,26 @@ const getAggregatedHomeData = async (req, res) => {
             User_1.default.countDocuments({ role: 'student', status: 'active' }),
             Resource_1.default.countDocuments({ isPublic: true }),
             News_1.default.countDocuments({ isPublished: true, status: 'published' }),
-            SubscriptionPlan_1.default.find({ isActive: true })
+            SubscriptionPlan_1.default.find({ isActive: true, isArchived: { $ne: true } })
                 .sort({ sortOrder: 1, priority: 1, code: 1 })
                 .lean(),
             Banner_1.default.find({ isActive: true, status: 'published' })
                 .sort({ priority: -1, order: 1, createdAt: -1 })
                 .lean(),
         ]);
+        const activeCategoryNames = categoryDocs
+            .map((item) => (0, universityCategories_1.normalizeUniversityCategory)(pickString(item.name, '')))
+            .filter(Boolean);
+        const activeCategorySet = new Set(activeCategoryNames);
+        const universities = rawUniversities.filter((item) => {
+            if (activeCategorySet.size === 0)
+                return true;
+            return activeCategorySet.has((0, universityCategories_1.normalizeUniversityCategory)(pickString(item.category, 'Uncategorized')));
+        });
+        const activeClusterIds = new Set(clusters.map((item) => String(item._id || '')));
+        const activeClusterNames = new Set(clusters
+            .map((item) => pickString(item.name))
+            .filter(Boolean));
         const validBanners = activeBanners.filter((b) => {
             if (b.startDate && new Date(b.startDate) > now)
                 return false;
@@ -497,39 +588,67 @@ const getAggregatedHomeData = async (req, res) => {
             return Boolean(deadline && deadline.getTime() >= now.getTime());
         }).length;
         for (const item of universities) {
-            const category = pickString(item.category, 'Uncategorized');
+            const category = (0, universityCategories_1.normalizeUniversityCategory)(pickString(item.category, 'Uncategorized'));
             categoriesMap.set(category, (categoriesMap.get(category) || 0) + 1);
         }
+        const categorySourceNames = activeCategoryNames.length > 0
+            ? activeCategoryNames
+            : Array.from(categoriesMap.keys()).sort((a, b) => a.localeCompare(b));
         const categories = [
             { key: 'all', label: 'All', count: universities.length },
-            ...Array.from(categoriesMap.entries())
-                .sort((a, b) => a[0].localeCompare(b[0]))
-                .map(([label, count]) => ({ key: label, label, count })),
+            ...categorySourceNames.map((label) => ({
+                key: label,
+                label,
+                count: categoriesMap.get(label) || 0,
+            })),
         ];
+        const badgeTextMap = new Map((homeSettings.highlightedCategories || [])
+            .map((item) => ({
+            category: (0, universityCategories_1.normalizeUniversityCategory)(pickString(item.category)),
+            badgeText: pickString(item.badgeText),
+        }))
+            .filter((item) => item.category)
+            .map((item) => [item.category, item.badgeText]));
         const highlightedFromUniversitySettings = Array.isArray(uniSettingsDoc?.highlightedCategories)
             ? (uniSettingsDoc?.highlightedCategories)
                 .map((entry, index) => ({
-                category: pickString(entry),
+                category: (0, universityCategories_1.normalizeUniversityCategory)(pickString(entry)),
                 order: index + 1,
                 enabled: true,
-                badgeText: '',
+                badgeText: pickString(badgeTextMap.get((0, universityCategories_1.normalizeUniversityCategory)(pickString(entry)))),
             }))
                 .filter((entry) => entry.category)
             : [];
         const highlightedFromHomeSettings = (homeSettings.highlightedCategories || [])
             .map((item) => ({
-            category: pickString(item.category),
+            category: (0, universityCategories_1.normalizeUniversityCategory)(pickString(item.category)),
             order: Number(item.order || 0),
             enabled: Boolean(item.enabled !== false),
             badgeText: pickString(item.badgeText),
         }))
             .filter((item) => item.enabled && item.category)
             .sort((a, b) => a.order - b.order);
-        // Home settings should be the canonical source when explicitly configured.
-        // Fall back to university settings only when home settings are empty.
-        const highlightedCategories = highlightedFromHomeSettings.length > 0
-            ? highlightedFromHomeSettings
-            : highlightedFromUniversitySettings;
+        const highlightedFromCategoryMaster = categoryDocs
+            .map((item, index) => {
+            const categoryName = (0, universityCategories_1.normalizeUniversityCategory)(pickString(item.name, ''));
+            if (!categoryName || !item.homeHighlight)
+                return null;
+            return {
+                category: categoryName,
+                order: Number(item.homeOrder || index + 1),
+                enabled: true,
+                badgeText: pickString(badgeTextMap.get(categoryName)
+                    || item.labelBn
+                    || item.labelEn),
+            };
+        })
+            .filter((item) => Boolean(item))
+            .sort((a, b) => a.order - b.order);
+        const highlightedCategories = highlightedFromCategoryMaster.length > 0
+            ? highlightedFromCategoryMaster
+            : highlightedFromHomeSettings.length > 0
+                ? highlightedFromHomeSettings
+                : highlightedFromUniversitySettings;
         const highlightedSet = new Set(highlightedCategories.map((item) => item.category));
         const categoriesWithHighlightRaw = categories.map((item) => ({
             ...item,
@@ -559,27 +678,53 @@ const getAggregatedHomeData = async (req, res) => {
         // Build per-category clusterGroups map
         const categoryClusterMap = new Map();
         for (const item of universities) {
-            const cat = pickString(item.category, 'Uncategorized');
-            const cluster = pickString(item.clusterGroup);
+            const cat = (0, universityCategories_1.normalizeUniversityCategory)(pickString(item.category, 'Uncategorized'));
+            const clusterId = pickString(item.clusterId);
+            const clusterName = pickString(item.clusterGroup);
+            const activeClusterName = ((clusterId && activeClusterIds.has(clusterId))
+                || (clusterName && activeClusterNames.has(clusterName))) ? clusterName : '';
             if (!categoryClusterMap.has(cat)) {
                 categoryClusterMap.set(cat, new Set());
             }
-            if (cluster)
-                categoryClusterMap.get(cat).add(cluster);
+            if (activeClusterName)
+                categoryClusterMap.get(cat).add(activeClusterName);
         }
-        const previewItems = sortUniversityPreviewItems(universities.map((item) => mapUniversityPreviewItem(item)), homeSettings.universityCardConfig.defaultSort);
+        const rawPreviewItems = sortUniversityPreviewItems(universities.map((item) => mapUniversityPreviewItem(item)), homeSettings.universityCardConfig.defaultSort);
+        const previewItems = rawPreviewItems.map((item) => {
+            const hasActiveCluster = ((item.clusterId && activeClusterIds.has(item.clusterId))
+                || (item.clusterGroup && activeClusterNames.has(item.clusterGroup)));
+            if (hasActiveCluster)
+                return item;
+            return {
+                ...item,
+                clusterId: '',
+                clusterGroup: '',
+            };
+        });
         const clusterGroups = Array.from(new Set(previewItems
             .map((item) => pickString(item.clusterGroup))
             .filter(Boolean))).sort((a, b) => a.localeCompare(b));
-        const clusterCards = buildHomeClusterCards(clusters, previewItems, now);
+        const clusterCards = buildHomeClusterCards(clusters, rawPreviewItems, now);
+        const highlightedCategoryMeta = highlightedCategories.map((entry, index) => {
+            const categoryDoc = categoryDocs.find((item) => (0, universityCategories_1.normalizeUniversityCategory)(pickString(item.name, '')) === entry.category);
+            return {
+                id: String(categoryDoc?._id || entry.category),
+                name: entry.category,
+                slug: pickString(categoryDoc?.slug) || toSlug(entry.category, 'category'),
+                badgeText: pickString(entry.badgeText),
+                order: Number(entry.order || index + 1),
+            };
+        });
+        const categoryCards = buildHomeCategoryCards(highlightedCategoryMeta, previewItems, now);
+        const highlightedCategorySet = new Set(categoryCards.map((item) => item.name));
         // Build universityCategories array with per-category clusterGroups
-        const categoryOrder = (uniSettingsDoc?.categoryOrder || []);
+        const categoryOrder = (uniSettingsDoc?.categoryOrder || []).map((value) => (0, universityCategories_1.normalizeUniversityCategory)(pickString(value)));
         const categoryOrderMap = new Map(categoryOrder.map((cat, i) => [cat, i]));
-        const universityCategories = Array.from(categoryClusterMap.entries())
-            .map(([categoryName, clusters]) => ({
+        const universityCategories = categorySourceNames
+            .map((categoryName) => ({
             categoryName,
             count: categoriesMap.get(categoryName) || 0,
-            clusterGroups: Array.from(clusters).sort((a, b) => a.localeCompare(b)),
+            clusterGroups: Array.from(categoryClusterMap.get(categoryName) || []).sort((a, b) => a.localeCompare(b)),
         }))
             .sort((a, b) => {
             const aOrder = categoryOrderMap.get(a.categoryName) ?? 999;
@@ -591,10 +736,11 @@ const getAggregatedHomeData = async (req, res) => {
         // Build featuredItems based on universityPreview settings
         const uniBySlug = new Map(universities.map((item) => [pickString(item.slug), item]));
         let featuredItems = [];
+        let manualFeaturedUniversityIds = new Set();
         const maxFeatured = homeSettings.universityPreview?.maxFeaturedItems ?? uniSettingsDoc?.maxFeaturedItems ?? 12;
         const featuredMode = homeSettings.universityPreview?.featuredMode ?? 'manual';
         if (featuredMode === 'auto') {
-            const openUnis = previewItems.filter(item => {
+            const openUnis = previewItems.filter((item) => {
                 const deadline = parseDate(item.applicationEndDate);
                 return deadline && deadline.getTime() >= now.getTime();
             });
@@ -610,7 +756,7 @@ const getAggregatedHomeData = async (req, res) => {
                 ? homeSettings.featuredUniversities
                 : [];
             if (homeFeaturedEntries.length > 0) {
-                featuredItems = homeFeaturedEntries
+                const manualEntries = homeFeaturedEntries
                     .map((item) => ({
                     universityId: pickString(item.universityId),
                     order: Number(item.order || 0),
@@ -618,8 +764,9 @@ const getAggregatedHomeData = async (req, res) => {
                 }))
                     .filter((item) => item.enabled && item.universityId && universityById.has(item.universityId))
                     .sort((a, b) => a.order - b.order)
-                    .slice(0, maxFeatured)
-                    .map((item) => mapUniversityPreviewItem(universityById.get(item.universityId)));
+                    .slice(0, maxFeatured);
+                manualFeaturedUniversityIds = new Set(manualEntries.map((item) => item.universityId));
+                featuredItems = manualEntries.map((item) => mapUniversityPreviewItem(universityById.get(item.universityId)));
             }
             else {
                 const featuredSlugs = uniSettingsDoc?.featuredUniversitySlugs;
@@ -638,10 +785,10 @@ const getAggregatedHomeData = async (req, res) => {
         const reqCluster = typeof req.query.clusterGroup === 'string' ? req.query.clusterGroup.trim() : '';
         let filteredPreviewItems = previewItems;
         if (reqCategory && reqCategory.toLowerCase() !== 'all') {
-            filteredPreviewItems = filteredPreviewItems.filter(item => item.category === reqCategory);
+            filteredPreviewItems = filteredPreviewItems.filter((item) => item.category === (0, universityCategories_1.normalizeUniversityCategory)(reqCategory));
         }
         if (reqCluster && reqCluster.toLowerCase() !== 'all') {
-            filteredPreviewItems = filteredPreviewItems.filter(item => item.clusterGroup === reqCluster);
+            filteredPreviewItems = filteredPreviewItems.filter((item) => item.clusterGroup === reqCluster);
         }
         const maxDeadlineCards = homeSettings.universityPreview?.maxDeadlineItems ?? 6;
         const maxExamCards = homeSettings.universityPreview?.maxExamItems ?? 6;
@@ -653,11 +800,25 @@ const getAggregatedHomeData = async (req, res) => {
         const filteredClusterCards = clusterCards.filter((cluster) => {
             if (reqCluster && reqCluster.toLowerCase() !== 'all' && cluster.name !== reqCluster)
                 return false;
-            if (reqCategory && reqCategory.toLowerCase() !== 'all' && !cluster.categories.includes(reqCategory))
+            if (reqCategory && reqCategory.toLowerCase() !== 'all' && !cluster.categories.includes((0, universityCategories_1.normalizeUniversityCategory)(reqCategory)))
                 return false;
             return true;
         });
-        const filteredIndividualPreviewItems = filteredPreviewItems.filter((item) => !item.clusterGroup);
+        const filteredCategoryCards = categoryCards.filter((category) => {
+            if (reqCluster && reqCluster.toLowerCase() !== 'all') {
+                return category.clusterGroups.includes(reqCluster);
+            }
+            if (reqCategory && reqCategory.toLowerCase() !== 'all') {
+                return category.name === (0, universityCategories_1.normalizeUniversityCategory)(reqCategory);
+            }
+            return true;
+        });
+        const filteredIndividualPreviewItems = filteredPreviewItems.filter((item) => !item.clusterGroup && !highlightedCategorySet.has(item.category));
+        const filteredFeaturedItems = featuredItems.filter((item) => {
+            if (manualFeaturedUniversityIds.has(item.id))
+                return true;
+            return !item.clusterGroup && !highlightedCategorySet.has(item.category);
+        });
         const deadlineUniversities = filteredIndividualPreviewItems
             .filter(item => {
             const deadline = parseDate(item.applicationEndDate);
@@ -683,6 +844,7 @@ const getAggregatedHomeData = async (req, res) => {
             return deadlineTime >= nowStartTime && deadlineTime <= maxDeadlineTime;
         })
             .slice(0, maxDeadlineCards);
+        const deadlineCategories = [];
         const upcomingExamUniversities = filteredIndividualPreviewItems
             .filter(item => {
             const dates = [
@@ -709,9 +871,18 @@ const getAggregatedHomeData = async (req, res) => {
             return examTime >= nowStartTime && examTime <= maxExamTime;
         })
             .slice(0, maxExamCards);
-        const featuredClusters = filteredClusterCards
-            .filter((cluster) => cluster.homeVisible)
-            .slice(0, maxFeatured);
+        const upcomingExamCategories = [];
+        const preferredFeaturedClusters = filteredClusterCards.filter((cluster) => cluster.homeVisible);
+        const featuredClusters = (preferredFeaturedClusters.length > 0
+            ? preferredFeaturedClusters
+            : [...filteredClusterCards].sort((a, b) => {
+                if (b.memberCount !== a.memberCount)
+                    return b.memberCount - a.memberCount;
+                if (a.homeOrder !== b.homeOrder)
+                    return a.homeOrder - b.homeOrder;
+                return a.name.localeCompare(b.name);
+            })).slice(0, maxFeatured);
+        const featuredCategories = filteredCategoryCards.slice(0, maxFeatured);
         const universityDashboardData = {
             categories: categoriesWithHighlight,
             filtersMeta: {
@@ -727,7 +898,7 @@ const getAggregatedHomeData = async (req, res) => {
                 clusterGroups,
             },
             highlightedCategories,
-            featuredItems,
+            featuredItems: filteredFeaturedItems,
             itemsPreview: previewItems,
         };
         const showLockedExams = homeSettings.examsWidget.showLockedExamsToUnsubscribed === 'show_locked';
@@ -757,11 +928,16 @@ const getAggregatedHomeData = async (req, res) => {
             .slice(0, getSafeMax(homeSettings.examsWidget.maxUpcoming, 6));
         const newsLimit = getSafeMax(homeSettings.newsPreview.maxItems, 4, 1, 12);
         const resourcesLimit = getSafeMax(homeSettings.resourcesPreview.maxItems, 4, 1, 12);
-        const [newsPreview, resourcesPreview, homeContentBlocks, homeConfigDoc] = await Promise.all([
+        const [featuredNews, newsPreview, resourcesPreview, homeContentBlocks, homeConfigDoc] = await Promise.all([
+            News_1.default.find({ isPublished: true, status: 'published', isFeatured: true })
+                .sort({ publishDate: -1, createdAt: -1 })
+                .limit(Math.min(newsLimit, 6))
+                .select('title slug shortSummary shortDescription category sourceName sourceIconUrl publishDate coverImageUrl featuredImage thumbnailImage isFeatured priority')
+                .lean(),
             News_1.default.find({ isPublished: true, status: 'published' })
                 .sort({ publishDate: -1, createdAt: -1 })
                 .limit(newsLimit)
-                .select('title slug shortSummary shortDescription category sourceName publishDate coverImageUrl featuredImage thumbnailImage')
+                .select('title slug shortSummary shortDescription category sourceName sourceIconUrl publishDate coverImageUrl featuredImage thumbnailImage isFeatured priority')
                 .lean(),
             Resource_1.default.find({ isPublic: true, $or: [{ expiryDate: { $exists: false } }, { expiryDate: null }, { expiryDate: { $gte: now } }] })
                 .sort({ isFeatured: -1, order: 1, publishDate: -1, createdAt: -1 })
@@ -781,13 +957,30 @@ const getAggregatedHomeData = async (req, res) => {
                 .lean(),
             HomeConfig_1.default.findOne().lean(),
         ]);
-        const planIdSet = new Set(homeSettings.subscriptionBanner.planIdsToShow || []);
-        const subscriptionPlans = homeSettings.subscriptionBanner.showPlanCards
-            ? subscriptionPlansRaw.filter((plan) => {
-                if (!planIdSet.size)
-                    return true;
-                return planIdSet.has(String(plan._id));
-            })
+        const curatedPlanIds = Array.isArray(homeSettings.subscriptionBanner.planIdsToShow)
+            ? homeSettings.subscriptionBanner.planIdsToShow
+                .map((item) => String(item || '').trim())
+                .filter(Boolean)
+            : [];
+        const subscriptionPreviewEnabled = homeSettings.sectionVisibility.subscriptionBanner !== false
+            && homeSettings.subscriptionBanner.enabled !== false
+            && homeSettings.subscriptionBanner.showPlanCards;
+        const findHomePlanByToken = (token) => {
+            return subscriptionPlansRaw.find((plan) => {
+                const raw = plan;
+                const planId = String(raw._id || '').trim();
+                const planCode = String(raw.code || '').trim();
+                const planSlug = String(raw.slug || '').trim();
+                return token === planId || token === planCode || token === planSlug;
+            });
+        };
+        const curatedPlans = Array.from(new Set(curatedPlanIds))
+            .map((token) => findHomePlanByToken(token))
+            .filter(Boolean);
+        const homeTaggedPlans = subscriptionPlansRaw.filter((plan) => Boolean(plan.showOnHome));
+        const fallbackPlans = homeTaggedPlans.length > 0 ? homeTaggedPlans : subscriptionPlansRaw;
+        const subscriptionPlans = subscriptionPreviewEnabled
+            ? (curatedPlans.length > 0 ? curatedPlans : fallbackPlans)
             : [];
         const managedSocialLinks = (Array.isArray(rawSiteSettings?.socialLinks)
             ? rawSiteSettings.socialLinks || []
@@ -829,13 +1022,17 @@ const getAggregatedHomeData = async (req, res) => {
             })),
         };
         const categoriesSafe = Array.isArray(universityCategories) ? universityCategories : [];
+        const featuredNewsItems = Array.isArray(featuredNews) ? featuredNews : [];
         const newsPreviewItems = Array.isArray(newsPreview) ? newsPreview : [];
         const resourcePreviewItems = Array.isArray(resourcesPreview) ? resourcesPreview : [];
-        const featuredUniversities = Array.isArray(featuredItems) ? featuredItems : [];
+        const featuredUniversities = Array.isArray(filteredFeaturedItems) ? filteredFeaturedItems : [];
+        const featuredCategoryItems = Array.isArray(featuredCategories) ? featuredCategories : [];
         const featuredClusterItems = Array.isArray(featuredClusters) ? featuredClusters : [];
         const deadlineItems = Array.isArray(deadlineUniversities) ? deadlineUniversities : [];
+        const deadlineCategoryItems = Array.isArray(deadlineCategories) ? deadlineCategories : [];
         const deadlineClusterItems = Array.isArray(deadlineClusters) ? deadlineClusters : [];
         const upcomingExamItems = Array.isArray(upcomingExamUniversities) ? upcomingExamUniversities : [];
+        const upcomingExamCategoryItems = Array.isArray(upcomingExamCategories) ? upcomingExamCategories : [];
         const upcomingExamClusterItems = Array.isArray(upcomingExamClusters) ? upcomingExamClusters : [];
         const liveExamItems = Array.isArray(liveNow) ? liveNow : [];
         const upcomingOnlineExamItems = Array.isArray(upcoming) ? upcoming : [];
@@ -859,18 +1056,112 @@ const getAggregatedHomeData = async (req, res) => {
         const DEFAULT_SECTIONS = [
             { id: 'search', title: 'Search Bar', isActive: true, order: 0 },
             { id: 'hero', title: 'Hero Banner', isActive: true, order: 1 },
-            { id: 'campaign_banners', title: 'Campaign Banners', isActive: true, order: 2 },
-            { id: 'featured', title: 'Featured Universities', isActive: true, order: 3 },
-            { id: 'category_filter', title: 'Category & Cluster Filter', isActive: true, order: 4 },
-            { id: 'deadlines', title: 'Admission Deadlines', isActive: true, order: 5 },
-            { id: 'upcoming_exams', title: 'Upcoming Exams', isActive: true, order: 6 },
-            { id: 'online_exam_preview', title: 'Online Exam Preview', isActive: true, order: 7 },
-            { id: 'news', title: 'Latest News', isActive: true, order: 8 },
-            { id: 'resources', title: 'Resources Preview', isActive: true, order: 9 },
-            { id: 'content_blocks', title: 'Global CTA / Content Block', isActive: true, order: 10 },
-            { id: 'stats', title: 'Quick Stats', isActive: true, order: 11 },
+            { id: 'subscription_banner', title: 'Subscription Preview', isActive: true, order: 2 },
+            { id: 'campaign_banners', title: 'Campaign Banners', isActive: true, order: 3 },
+            { id: 'featured', title: 'Featured Universities', isActive: true, order: 4 },
+            { id: 'category_filter', title: 'Category & Cluster Filter', isActive: true, order: 5 },
+            { id: 'deadlines', title: 'Admission Deadlines', isActive: true, order: 6 },
+            { id: 'upcoming_exams', title: 'Upcoming Exams', isActive: true, order: 7 },
+            { id: 'online_exam_preview', title: 'Online Exam Preview', isActive: true, order: 8 },
+            { id: 'news', title: 'Latest News', isActive: true, order: 9 },
+            { id: 'resources', title: 'Resources Preview', isActive: true, order: 10 },
+            { id: 'content_blocks', title: 'Global CTA / Content Block', isActive: true, order: 11 },
+            { id: 'stats', title: 'Quick Stats', isActive: true, order: 12 },
         ];
-        const sectionOrder = (homeConfigDoc?.sections || DEFAULT_SECTIONS)
+        const SECTION_ID_ALIAS_MAP = {
+            search: 'search',
+            searchbar: 'search',
+            hero: 'hero',
+            herobanner: 'hero',
+            subscriptionbanner: 'subscription_banner',
+            subscriptionplans: 'subscription_banner',
+            planspreview: 'subscription_banner',
+            campaignbanners: 'campaign_banners',
+            campaignbanner: 'campaign_banners',
+            featured: 'featured',
+            featureduniversities: 'featured',
+            featureduniversity: 'featured',
+            categoryfilter: 'category_filter',
+            categoryclusterfilter: 'category_filter',
+            categoryandclusterfilter: 'category_filter',
+            deadlines: 'deadlines',
+            admissiondeadlines: 'deadlines',
+            applicationdeadlines: 'deadlines',
+            upcomingexams: 'upcoming_exams',
+            upcomingexam: 'upcoming_exams',
+            onlineexampreview: 'online_exam_preview',
+            onlineexamspreview: 'online_exam_preview',
+            onlineexam: 'online_exam_preview',
+            news: 'news',
+            latestnews: 'news',
+            newspreview: 'news',
+            resources: 'resources',
+            resource: 'resources',
+            resourcespreview: 'resources',
+            resourcepreview: 'resources',
+            contentblocks: 'content_blocks',
+            contentblock: 'content_blocks',
+            globalcta: 'content_blocks',
+            globalcontentblock: 'content_blocks',
+            globalctacontentblock: 'content_blocks',
+            stats: 'stats',
+            quickstats: 'stats',
+        };
+        const normalizeSectionId = (value) => {
+            const raw = String(value || '').trim();
+            if (!raw)
+                return '';
+            const direct = raw.toLowerCase();
+            if (SECTION_ID_ALIAS_MAP[direct])
+                return SECTION_ID_ALIAS_MAP[direct];
+            const collapsed = direct.replace(/[^a-z0-9]+/g, '');
+            return SECTION_ID_ALIAS_MAP[collapsed] || direct.replace(/[^a-z0-9]+/g, '_');
+        };
+        const normalizeHomeSections = (input) => {
+            const defaultsById = new Map(DEFAULT_SECTIONS.map((item) => [item.id, item]));
+            const incoming = Array.isArray(input) ? input : [];
+            const normalizedIncoming = incoming
+                .filter((row) => row && typeof row === 'object')
+                .map((row, index) => {
+                const item = row;
+                const id = normalizeSectionId(item.id);
+                if (!id)
+                    return null;
+                const fallback = defaultsById.get(id);
+                const orderRaw = Number(item.order);
+                return {
+                    id,
+                    title: String(item.title || fallback?.title || id),
+                    isActive: item.isActive === undefined ? (fallback?.isActive ?? true) : Boolean(item.isActive),
+                    order: Number.isFinite(orderRaw) ? orderRaw : (fallback?.order ?? index),
+                };
+            })
+                .filter(Boolean);
+            const byId = new Map(normalizedIncoming.map((item) => [item.id, item]));
+            const mergedDefaults = DEFAULT_SECTIONS.map((fallback) => {
+                const stored = byId.get(fallback.id);
+                if (!stored)
+                    return { ...fallback };
+                return {
+                    ...fallback,
+                    ...stored,
+                    id: fallback.id,
+                    title: String(stored.title || fallback.title),
+                    isActive: stored.isActive !== false,
+                    order: Number.isFinite(Number(stored.order)) ? Number(stored.order) : fallback.order,
+                };
+            });
+            const knownIds = new Set(DEFAULT_SECTIONS.map((item) => item.id));
+            const extraSections = normalizedIncoming
+                .filter((item) => !knownIds.has(item.id))
+                .map((item, index) => ({
+                ...item,
+                order: Number.isFinite(Number(item.order)) ? Number(item.order) : DEFAULT_SECTIONS.length + index,
+            }));
+            return [...mergedDefaults, ...extraSections];
+        };
+        const normalizedSections = normalizeHomeSections(homeConfigDoc?.sections || DEFAULT_SECTIONS);
+        const sectionOrder = normalizedSections
             .filter((s) => s.isActive !== false)
             .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
             .map((s) => ({ id: s.id, title: s.title, order: s.order }));
@@ -901,10 +1192,13 @@ const getAggregatedHomeData = async (req, res) => {
             universityDashboardData,
             universityCategories: categoriesSafe,
             featuredUniversities,
+            featuredCategories: featuredCategoryItems,
             featuredClusters: featuredClusterItems,
             deadlineUniversities: deadlineItems,
+            deadlineCategories: deadlineCategoryItems,
             deadlineClusters: deadlineClusterItems,
             upcomingExamUniversities: upcomingExamItems,
+            upcomingExamCategories: upcomingExamCategoryItems,
             upcomingExamClusters: upcomingExamClusterItems,
             uniSettings: {
                 enableClusterFilterOnHome: uniSettingsDoc?.enableClusterFilterOnHome ?? true,
@@ -921,6 +1215,8 @@ const getAggregatedHomeData = async (req, res) => {
                 upcoming: upcomingOnlineExamItems,
                 items: [...liveExamItems, ...upcomingOnlineExamItems],
             },
+            featuredNews: featuredNewsItems,
+            featuredNewsItems,
             newsPreview: newsPreviewItems,
             newsPreviewItems,
             resourcesPreview: resourcePreviewItems,

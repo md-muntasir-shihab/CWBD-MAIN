@@ -1,4 +1,6 @@
 import { Request, Response } from 'express';
+import { promises as fs } from 'fs';
+import path from 'path';
 import WebsiteSettings from '../models/WebsiteSettings';
 import HomePage from '../models/HomePage';
 import User from '../models/User';
@@ -50,10 +52,69 @@ const DEFAULT_PRICING_UI = {
     thousandSeparator: true,
 };
 
+const CANONICAL_BRAND_ASSETS = {
+    logo: '/uploads/logo-1773555868748-118876447.webp',
+    favicon: '/uploads/favicon-1773555868749-501330119.webp',
+} as const;
+
+const LEGACY_BRAND_PATHS = new Set(['', '/logo.png', '/favicon.ico']);
+const BRAND_UPLOAD_PATTERN = /^(logo|favicon|icon)[-_].+/i;
+
+function getCanonicalBrandValue(currentValue: unknown, fallbackValue: string) {
+    const normalized = String(currentValue || '').trim();
+    return LEGACY_BRAND_PATHS.has(normalized) ? fallbackValue : normalized;
+}
+
+function getLocalUploadAsset(value: unknown): string | null {
+    const normalized = String(value || '').trim();
+    return normalized.startsWith('/uploads/') ? normalized : null;
+}
+
+async function cleanupBrandLikeUploads(activeAssets: Array<string | null | undefined>) {
+    const uploadDir = path.resolve(__dirname, '../../public/uploads');
+    const activeFileNames = new Set(
+        activeAssets
+            .map((asset) => getLocalUploadAsset(asset))
+            .filter((asset): asset is string => Boolean(asset))
+            .map((asset) => path.basename(asset))
+    );
+
+    try {
+        const files = await fs.readdir(uploadDir);
+        const deletions = files
+            .filter((fileName) => BRAND_UPLOAD_PATTERN.test(fileName) && !activeFileNames.has(fileName))
+            .map(async (fileName) => {
+                try {
+                    await fs.unlink(path.join(uploadDir, fileName));
+                } catch {
+                    // Ignore individual cleanup failures so settings save does not fail.
+                }
+            });
+        await Promise.all(deletions);
+    } catch {
+        // Ignore cleanup failures; settings persistence remains the primary concern.
+    }
+}
+
 // Helper to ensure configs exist
 const ensureConfigs = async () => {
     let settings = await WebsiteSettings.findOne();
-    if (!settings) settings = await WebsiteSettings.create({});
+    if (!settings) settings = await WebsiteSettings.create({
+        logo: CANONICAL_BRAND_ASSETS.logo,
+        favicon: CANONICAL_BRAND_ASSETS.favicon,
+    });
+    let settingsUpdated = false;
+    const nextLogo = getCanonicalBrandValue(settings.logo, CANONICAL_BRAND_ASSETS.logo);
+    const nextFavicon = getCanonicalBrandValue(settings.favicon, CANONICAL_BRAND_ASSETS.favicon);
+    if (settings.logo !== nextLogo) {
+        settings.logo = nextLogo;
+        settingsUpdated = true;
+    }
+    if (settings.favicon !== nextFavicon) {
+        settings.favicon = nextFavicon;
+        settingsUpdated = true;
+    }
+    if (settingsUpdated) await settings.save();
     let home = await HomePage.findOne();
     if (!home) home = await HomePage.create({});
     return { settings, home };
@@ -153,6 +214,13 @@ export const updateSettings = async (req: Request, res: Response) => {
 
         const current = await WebsiteSettings.findOne();
 
+        if (!files?.logo?.[0] && LEGACY_BRAND_PATHS.has(String(current?.logo || '').trim())) {
+            payload.logo = CANONICAL_BRAND_ASSETS.logo;
+        }
+        if (!files?.favicon?.[0] && LEGACY_BRAND_PATHS.has(String(current?.favicon || '').trim())) {
+            payload.favicon = CANONICAL_BRAND_ASSETS.favicon;
+        }
+
         // Handle JSON-like payload fields coming through multipart/form-data.
         const parseIfStringifiedObject = (rawValue: unknown) => {
             if (typeof rawValue !== 'string') return rawValue;
@@ -198,6 +266,17 @@ export const updateSettings = async (req: Request, res: Response) => {
             { $set: payload },
             { new: true, upsert: true, runValidators: true }
         );
+
+        if (settings) {
+            const nextLogo = getCanonicalBrandValue(settings.logo, CANONICAL_BRAND_ASSETS.logo);
+            const nextFavicon = getCanonicalBrandValue(settings.favicon, CANONICAL_BRAND_ASSETS.favicon);
+            if (settings.logo !== nextLogo || settings.favicon !== nextFavicon) {
+                settings.logo = nextLogo;
+                settings.favicon = nextFavicon;
+                await settings.save();
+            }
+            await cleanupBrandLikeUploads([settings.logo, settings.favicon]);
+        }
 
         console.log('Settings updated in DB:', settings);
         broadcastHomeStreamEvent({ type: 'home-updated', meta: { section: 'website-settings' } });

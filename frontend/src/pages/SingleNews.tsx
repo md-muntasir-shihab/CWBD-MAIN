@@ -290,6 +290,14 @@ export default function SingleNewsPage() {
                                 />
                             ) : null}
                         </div>
+                        {newsItem.aiEnrichment?.studentFriendlyExplanation ? (
+                            <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/8 px-4 py-3 text-sm text-slate-700 dark:text-slate-200">
+                                <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-600 dark:text-cyan-200">
+                                    Student-Friendly Explanation
+                                </p>
+                                <p>{newsItem.aiEnrichment.studentFriendlyExplanation}</p>
+                            </div>
+                        ) : null}
                     </div>
                 </motion.header>
 
@@ -302,6 +310,21 @@ export default function SingleNewsPage() {
                                     Open original source
                                 </a>
                                 .
+                            </div>
+                        ) : null}
+                        {newsItem.aiEnrichment?.keyPoints?.length ? (
+                            <div className="mb-5 rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-4 dark:border-white/10 dark:bg-slate-900/50">
+                                <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">
+                                    Key Points
+                                </p>
+                                <ul className="space-y-2 text-sm text-slate-700 dark:text-slate-200">
+                                    {newsItem.aiEnrichment.keyPoints.slice(0, 6).map((point) => (
+                                        <li key={`${newsItem._id}-${point}`} className="flex gap-2">
+                                            <span className="mt-1 h-1.5 w-1.5 rounded-full bg-cyan-500" />
+                                            <span>{point}</span>
+                                        </li>
+                                    ))}
+                                </ul>
                             </div>
                         ) : null}
                         <div

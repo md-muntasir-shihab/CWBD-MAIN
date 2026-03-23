@@ -36,7 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const mongoose_1 = __importStar(require("mongoose"));
 const ResourceSchema = new mongoose_1.Schema({
     title: { type: String, required: true, trim: true },
-    slug: { type: String, sparse: true, index: true },
+    slug: { type: String },
     description: { type: String },
     type: { type: String, enum: ['pdf', 'link', 'video', 'audio', 'image', 'note'], required: true },
     category: { type: String, default: 'General' },

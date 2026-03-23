@@ -61,7 +61,8 @@ export function getFilenameFromDisposition(disposition?: string): string {
 function toBlob(data: Blob | ArrayBuffer | ArrayBufferView | string, contentType?: string): Blob {
     if (data instanceof Blob) return data;
     if (ArrayBuffer.isView(data)) {
-        return new Blob([data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)], { type: contentType || 'application/octet-stream' });
+        const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+        return new Blob([bytes as unknown as BlobPart], { type: contentType || 'application/octet-stream' });
     }
     return new Blob([data], { type: contentType || 'application/octet-stream' });
 }

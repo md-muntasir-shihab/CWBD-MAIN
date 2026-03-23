@@ -12,14 +12,15 @@
 
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import User from '../models/User';
 import StudentProfile from '../models/StudentProfile';
 import AuditLog from '../models/AuditLog';
-import { isPasswordCompliant } from './securityCenterService';
+import ActiveSession from '../models/ActiveSession';
 import { getSecurityConfig } from './securityConfigService';
 import { terminateSessionsForUser } from './sessionSecurityService';
-import { upsertCredentialMirror } from './credentialVaultService';
-import { sendAccountInfo, resendCredentials } from './notificationOrchestrationService';
+import { issueSecurityToken } from './securityTokenService';
+import { sendCampusMail } from '../utils/mailer';
 
 /* ================================================================
    Types
@@ -68,33 +69,64 @@ export interface CreateStudentResult {
     sendResult?: { sent: number; failed: number };
 }
 
-/* ================================================================
-   Admin: set password for student
-   ================================================================ */
+const APP_DOMAIN = process.env.APP_DOMAIN || process.env.FRONTEND_URL || 'http://localhost:5173';
 
-export async function adminSetPassword(opts: AdminSetPasswordOpts): Promise<AdminSetPasswordResult> {
-    const security = await getSecurityConfig(true);
-    const policyCheck = isPasswordCompliant(opts.newPassword, security.passwordPolicy);
-    if (!policyCheck.ok) {
-        return { success: false, message: policyCheck.message || 'Password does not meet policy.' };
-    }
+function newRandomPassword(length = 24): string {
+    return crypto.randomBytes(length).toString('base64url').slice(0, length);
+}
 
-    const user = await User.findById(opts.studentId).select('+password');
-    if (!user) {
-        return { success: false, message: 'Student not found.' };
-    }
+async function issueSetPasswordInvite(
+    user: { _id: mongoose.Types.ObjectId; email?: string; full_name?: string; username: string },
+    adminId: string,
+): Promise<boolean> {
+    const email = String(user.email || '').trim().toLowerCase();
+    if (!email) return false;
 
-    const hashed = await bcrypt.hash(opts.newPassword, 12);
-    user.password = hashed;
-    user.passwordSetByAdminId = new mongoose.Types.ObjectId(opts.adminId);
+    const { rawToken } = await issueSecurityToken({
+        userId: user._id,
+        purpose: 'set_password',
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        channel: 'email',
+        replaceExisting: true,
+        createdBy: new mongoose.Types.ObjectId(adminId),
+        meta: { email },
+    });
+
+    const setPasswordUrl = `${APP_DOMAIN}/student/reset-password?token=${rawToken}`;
+    return sendCampusMail({
+        to: email,
+        subject: 'CampusWay: Set your password',
+        text: `Set your CampusWay password: ${setPasswordUrl}`,
+        html: `<p>Hello ${user.full_name || user.username},</p><p>Your CampusWay account is ready.</p><p><a href="${setPasswordUrl}">Set your password</a></p><p>This link expires in 24 hours and can be used once.</p>`,
+    });
+}
+
+async function applyInviteOnlyPasswordState(
+    user: InstanceType<typeof User>,
+    adminId: string,
+): Promise<void> {
+    user.password = await bcrypt.hash(newRandomPassword(), 12);
+    user.passwordSetByAdminId = new mongoose.Types.ObjectId(adminId);
     user.passwordLastChangedAtUTC = new Date();
     user.passwordChangedByType = 'admin';
     user.forcePasswordResetRequired = true;
     user.mustChangePassword = true;
     user.password_updated_at = new Date();
-    await user.save();
+    user.passwordExpiresAt = null;
+}
 
-    await upsertCredentialMirror(user._id, opts.newPassword, new mongoose.Types.ObjectId(opts.adminId));
+/* ================================================================
+   Admin: set password for student
+   ================================================================ */
+
+export async function adminSetPassword(opts: AdminSetPasswordOpts): Promise<AdminSetPasswordResult> {
+    const user = await User.findById(opts.studentId).select('+password');
+    if (!user) {
+        return { success: false, message: 'Student not found.' };
+    }
+
+    await applyInviteOnlyPasswordState(user, opts.adminId);
+    await user.save();
 
     if (opts.revokeExistingSessions !== false) {
         await terminateSessionsForUser(String(user._id), 'admin_password_reset', {
@@ -106,26 +138,29 @@ export async function adminSetPassword(opts: AdminSetPasswordOpts): Promise<Admi
     await AuditLog.create({
         actor_id: new mongoose.Types.ObjectId(opts.adminId),
         actor_role: 'admin',
-        action: 'admin_set_student_password',
+        action: 'admin_reset_student_password',
         target_id: user._id,
         target_type: 'User',
         ip_address: opts.ipAddress,
-        details: { revokedSessions: opts.revokeExistingSessions !== false },
+        details: {
+            revokedSessions: opts.revokeExistingSessions !== false,
+            flow: 'invite_only',
+        },
     });
 
     let sendResult: { sent: number; failed: number } | undefined;
-    if (opts.sendVia?.length) {
-        sendResult = await sendAccountInfo(
-            opts.studentId,
-            opts.sendVia,
-            { username: user.username, tempPassword: opts.newPassword },
-            opts.adminId,
-        );
+    if (!opts.sendVia || opts.sendVia.includes('email')) {
+        const inviteSent = await issueSetPasswordInvite(user, opts.adminId);
+        sendResult = { sent: inviteSent ? 1 : 0, failed: inviteSent ? 0 : 1 };
+        user.accountInfoLastSentAtUTC = inviteSent ? new Date() : user.accountInfoLastSentAtUTC;
+        user.accountInfoLastSentChannels = inviteSent ? ['email'] : user.accountInfoLastSentChannels;
+        user.credentialsLastResentAtUTC = new Date();
+        await user.save();
     }
 
     return {
         success: true,
-        message: 'Password updated successfully.',
+        message: sendResult?.sent ? 'Password reset link issued successfully.' : 'Password reset prepared. No invite was delivered.',
         sendResult,
     };
 }
@@ -146,13 +181,7 @@ export async function createStudentWithPassword(opts: CreateStudentWithPasswordO
         return { success: false, message: 'A user with this username or email already exists.' };
     }
 
-    const security = await getSecurityConfig(true);
-    const policyCheck = isPasswordCompliant(opts.password, security.passwordPolicy);
-    if (!policyCheck.ok) {
-        return { success: false, message: policyCheck.message || 'Password does not meet policy.' };
-    }
-
-    const hashed = await bcrypt.hash(opts.password, 12);
+    const hashed = await bcrypt.hash(newRandomPassword(), 12);
     const user = await User.create({
         username: opts.username,
         email: opts.email,
@@ -166,9 +195,8 @@ export async function createStudentWithPassword(opts: CreateStudentWithPasswordO
         passwordChangedByType: 'admin',
         forcePasswordResetRequired: true,
         mustChangePassword: true,
+        passwordExpiresAt: null,
     });
-
-    await upsertCredentialMirror(user._id, opts.password, new mongoose.Types.ObjectId(opts.adminId));
 
     // Create student profile
     if (opts.profileData || opts.role === 'student') {
@@ -194,22 +222,24 @@ export async function createStudentWithPassword(opts: CreateStudentWithPasswordO
         target_id: user._id,
         target_type: 'User',
         ip_address: opts.ipAddress,
-        details: { sendVia: opts.sendVia },
+        details: {
+            sendVia: opts.sendVia,
+            flow: 'invite_only',
+        },
     });
 
     let sendResult: { sent: number; failed: number } | undefined;
-    if (opts.sendVia?.length) {
-        sendResult = await sendAccountInfo(
-            String(user._id),
-            opts.sendVia,
-            { username: opts.username, tempPassword: opts.password },
-            opts.adminId,
-        );
+    const inviteSent = await issueSetPasswordInvite(user, opts.adminId);
+    sendResult = { sent: inviteSent ? 1 : 0, failed: inviteSent ? 0 : 1 };
+    if (inviteSent) {
+        user.accountInfoLastSentAtUTC = new Date();
+        user.accountInfoLastSentChannels = ['email'];
+        await user.save();
     }
 
     return {
         success: true,
-        message: 'Student created successfully.',
+        message: inviteSent ? 'Student created and password setup link sent.' : 'Student created. No password setup invite was delivered.',
         userId: String(user._id),
         sendResult,
     };
@@ -222,18 +252,33 @@ export async function createStudentWithPassword(opts: CreateStudentWithPasswordO
 export async function adminResendAccountInfo(
     studentId: string,
     channels: ('sms' | 'email')[],
-    tempPassword: string,
     adminId: string,
 ): Promise<{ sent: number; failed: number }> {
-    const user = await User.findById(studentId).select('username').lean();
+    const user = await User.findById(studentId).select('username full_name email').lean();
     if (!user) throw new Error('Student not found');    
 
-    return resendCredentials(
-        studentId,
-        channels,
-        { username: user.username, tempPassword },
-        adminId,
-    );
+    const inviteSent = (!channels.length || channels.includes('email'))
+        ? await issueSetPasswordInvite(user as unknown as { _id: mongoose.Types.ObjectId; email?: string; full_name?: string; username: string }, adminId)
+        : false;
+
+    await User.findByIdAndUpdate(studentId, {
+        $set: {
+            accountInfoLastSentAtUTC: inviteSent ? new Date() : undefined,
+            accountInfoLastSentChannels: inviteSent ? ['email'] : undefined,
+            credentialsLastResentAtUTC: new Date(),
+        },
+    });
+
+    await AuditLog.create({
+        actor_id: new mongoose.Types.ObjectId(adminId),
+        actor_role: 'admin',
+        action: 'account_setup_invite_resent',
+        target_id: new mongoose.Types.ObjectId(studentId),
+        target_type: 'User',
+        details: { channels, inviteSent },
+    });
+
+    return { sent: inviteSent ? 1 : 0, failed: inviteSent ? 0 : 1 };
 }
 
 /* ================================================================
@@ -296,7 +341,15 @@ export async function studentChangePassword(
     ipAddress?: string,
 ): Promise<{ success: boolean; message: string }> {
     const security = await getSecurityConfig(true);
-    const policyCheck = isPasswordCompliant(newPassword, security.passwordPolicy);
+    const policyCheck = {
+        ok:
+            String(newPassword || '').length >= security.passwordPolicies.student.minLength &&
+            (!security.passwordPolicies.student.requireUppercase || /[A-Z]/.test(newPassword)) &&
+            (!security.passwordPolicies.student.requireLowercase || /[a-z]/.test(newPassword)) &&
+            (!security.passwordPolicies.student.requireNumber || /\d/.test(newPassword)) &&
+            (!security.passwordPolicies.student.requireSpecial || /[^A-Za-z0-9]/.test(newPassword)),
+        message: 'Password does not meet policy.',
+    };
     if (!policyCheck.ok) {
         return { success: false, message: policyCheck.message || 'Password does not meet policy.' };
     }
@@ -319,7 +372,6 @@ export async function studentChangePassword(
     user.password_updated_at = new Date();
     await user.save();
 
-    await upsertCredentialMirror(user._id, newPassword, user._id);
     await terminateSessionsForUser(String(user._id), 'password_changed', {
         initiatedBy: String(user._id),
         meta: { trigger: 'student_change_password' },
@@ -347,10 +399,15 @@ export async function getStudentSecurityMeta(studentId: string) {
             'passwordSetByAdminId passwordLastChangedAtUTC passwordChangedByType ' +
             'forcePasswordResetRequired mustChangePassword accountInfoLastSentAtUTC ' +
             'accountInfoLastSentChannels credentialsLastResentAtUTC loginAttempts ' +
-            'lockUntil password_updated_at status',
+            'lockUntil password_updated_at status lastLoginAtUTC email phone_number full_name role',
         )
         .lean();
     if (!user) return null;
+
+    const activeSessions = await ActiveSession.countDocuments({
+        user_id: new mongoose.Types.ObjectId(studentId),
+        status: 'active',
+    });
 
     const recentAudit = await AuditLog.find({
         target_id: new mongoose.Types.ObjectId(studentId),
@@ -358,9 +415,9 @@ export async function getStudentSecurityMeta(studentId: string) {
         action: {
             $in: [
                 'admin_set_student_password',
+                'admin_reset_student_password',
                 'student_password_changed',
-                'account_info_sent',
-                'credentials_resent',
+                'account_setup_invite_resent',
                 'admin_revoked_student_sessions',
                 'force_password_reset_enabled',
                 'force_password_reset_disabled',
@@ -372,7 +429,13 @@ export async function getStudentSecurityMeta(studentId: string) {
         .lean();
 
     return {
+        userId: String(user._id),
+        fullName: user.full_name || '',
+        email: user.email || '',
+        phone: user.phone_number || '',
+        role: user.role,
         passwordSetByAdminId: user.passwordSetByAdminId,
+        passwordSetByAdmin: Boolean(user.passwordSetByAdminId),
         passwordLastChangedAtUTC: user.passwordLastChangedAtUTC,
         passwordChangedByType: user.passwordChangedByType,
         forcePasswordResetRequired: user.forcePasswordResetRequired,
@@ -384,6 +447,9 @@ export async function getStudentSecurityMeta(studentId: string) {
         lockUntil: user.lockUntil,
         passwordUpdatedAt: user.password_updated_at,
         status: user.status,
+        lastLoginAt: user.lastLoginAtUTC,
+        activeSessions,
         recentSecurityAudit: recentAudit,
+        recentAudit: recentAudit,
     };
 }

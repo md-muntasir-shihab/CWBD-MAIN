@@ -56,8 +56,8 @@ export async function createAdminStudent(
     status?: 'active' | 'suspended' | 'blocked' | 'pending';
     planCode?: string;
   },
-): Promise<{ message?: string; student?: StudentRow; generatedPassword?: string }> {
-  return request<{ message?: string; student?: StudentRow; generatedPassword?: string }>(
+): Promise<{ message?: string; student?: StudentRow; inviteSent?: boolean }> {
+  return request<{ message?: string; student?: StudentRow; inviteSent?: boolean }>(
     `/api/${ADMIN_PATH}/students`,
     token,
     'POST',
@@ -208,28 +208,6 @@ export async function createExpense(
 
 export async function getRuntimeSettings(token: string): Promise<RuntimeSettingsPayload> {
   return request<RuntimeSettingsPayload>(`/api/${ADMIN_PATH}/settings/runtime`, token);
-}
-
-export async function adminMfaConfirm(token: string, password: string): Promise<{ message?: string; mfaToken?: string }> {
-  return request<{ message?: string; mfaToken?: string }>(
-    `/api/${ADMIN_PATH}/auth/mfa/confirm`,
-    token,
-    'POST',
-    { password },
-  );
-}
-
-export async function adminRevealStudentPassword(
-  token: string,
-  studentId: string,
-  payload: { mfaToken: string; reason: string },
-): Promise<{ message?: string; password?: string }> {
-  return request<{ message?: string; password?: string }>(
-    `/api/${ADMIN_PATH}/students/${studentId}/password/reveal`,
-    token,
-    'POST',
-    payload,
-  );
 }
 
 export async function createSupportTicket(token: string, payload: { subject: string; message: string; priority?: 'low' | 'medium' | 'high' }): Promise<{ message?: string }> {

@@ -16,6 +16,7 @@ import {
   CheckCircle, XCircle, UserMinus, BookOpen, Megaphone, FileSpreadsheet,
   ExternalLink, Phone, Mail, UserCheck, Upload, FileDown, AlertCircle, Loader2,
 } from 'lucide-react';
+import ModernToggle from '../../../components/ui/ModernToggle';
 
 type Tab = 'overview' | 'members' | 'exams' | 'campaigns' | 'exports' | 'settings';
 type Toast = { show: boolean; message: string; type: 'success' | 'error' };
@@ -255,7 +256,7 @@ export default function StudentGroupDetailPage() {
 
       {/* Header */}
       <div className="flex items-center gap-4">
-        <button onClick={() => navigate(adminUi('student-management/groups'))} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+        <button onClick={() => navigate(adminUi('student-management/groups'))} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800" title="Back to groups">
           <ArrowLeft size={18} />
         </button>
         <div className="flex h-12 w-12 items-center justify-center rounded-xl" style={{ backgroundColor: `${color}20` }}>
@@ -340,6 +341,8 @@ export default function StudentGroupDetailPage() {
               <input
                 className={`${inputCls} pl-8`}
                 placeholder="Search members..."
+                aria-label="Search members"
+                title="Search members"
                 value={memberSearch}
                 onChange={e => { setMemberSearch(e.target.value); setMemberPage(1); }}
               />
@@ -361,7 +364,7 @@ export default function StudentGroupDetailPage() {
 
           {/* Quick add by IDs */}
           <div className="flex gap-2">
-            <input value={addIds} onChange={e => setAddIds(e.target.value)} className={inputCls} placeholder="Add members by ID (comma-separated)" />
+            <input aria-label="Add members by ID" title="Add members by ID" value={addIds} onChange={e => setAddIds(e.target.value)} className={inputCls} placeholder="Add members by ID (comma-separated)" />
             <button onClick={handleAddMembers} disabled={!addIds.trim()} className="flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 whitespace-nowrap">
               <Plus size={14} /> Add
             </button>
@@ -395,7 +398,7 @@ export default function StudentGroupDetailPage() {
                       {m.joinedAtUTC ? new Date(m.joinedAtUTC as string).toLocaleDateString() : '—'}
                     </td>
                     <td className="px-4 py-3">
-                      <button onClick={() => handleRemoveMember((m.studentId || m._id) as string)} className="text-xs text-red-500 hover:text-red-700">
+                      <button onClick={() => handleRemoveMember((m.studentId || m._id) as string)} className="text-xs text-red-500 hover:text-red-700" title="Remove member">
                         <UserMinus size={14} />
                       </button>
                     </td>
@@ -652,55 +655,57 @@ export default function StudentGroupDetailPage() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <label className={labelCls}>Name</label>
-                  <input className={inputCls} value={(editForm.name ?? '') as string} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} />
+                  <input aria-label="Group name" title="Group name" className={inputCls} value={(editForm.name ?? '') as string} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} />
                 </div>
                 <div>
                   <label className={labelCls}>Short Code</label>
-                  <input className={inputCls} value={(editForm.shortCode ?? '') as string} onChange={e => setEditForm(f => ({ ...f, shortCode: e.target.value }))} maxLength={10} />
+                  <input aria-label="Short code" title="Short code" className={inputCls} value={(editForm.shortCode ?? '') as string} onChange={e => setEditForm(f => ({ ...f, shortCode: e.target.value }))} maxLength={10} />
                 </div>
                 <div>
                   <label className={labelCls}>Color</label>
                   <div className="flex items-center gap-2">
-                    <input type="color" value={(editForm.color ?? '#6366f1') as string} onChange={e => setEditForm(f => ({ ...f, color: e.target.value }))} className="h-8 w-8 cursor-pointer rounded border-0" />
-                    <input className={inputCls} value={(editForm.color ?? '') as string} onChange={e => setEditForm(f => ({ ...f, color: e.target.value }))} maxLength={7} />
+                    <input aria-label="Pick color" title="Pick color" type="color" value={(editForm.color ?? '#6366f1') as string} onChange={e => setEditForm(f => ({ ...f, color: e.target.value }))} className="h-8 w-8 cursor-pointer rounded border-0" />
+                    <input aria-label="Color hex" title="Color hex" className={inputCls} value={(editForm.color ?? '') as string} onChange={e => setEditForm(f => ({ ...f, color: e.target.value }))} maxLength={7} />
                   </div>
                 </div>
                 <div>
                   <label className={labelCls}>Card Style</label>
-                  <select className={inputCls} value={(editForm.cardStyleVariant ?? 'solid') as string} onChange={e => setEditForm(f => ({ ...f, cardStyleVariant: e.target.value }))}>
+                  <select aria-label="Card style" title="Card style" className={inputCls} value={(editForm.cardStyleVariant ?? 'solid') as string} onChange={e => setEditForm(f => ({ ...f, cardStyleVariant: e.target.value }))}>
                     {['solid', 'gradient', 'outline', 'minimal'].map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className={labelCls}>Sort Order</label>
-                  <input className={inputCls} type="number" min={0} value={(editForm.sortOrder ?? 0) as number} onChange={e => setEditForm(f => ({ ...f, sortOrder: parseInt(e.target.value) || 0 }))} />
+                  <input aria-label="Sort order" title="Sort order" className={inputCls} type="number" min={0} value={(editForm.sortOrder ?? 0) as number} onChange={e => setEditForm(f => ({ ...f, sortOrder: parseInt(e.target.value) || 0 }))} />
                 </div>
                 <div>
                   <label className={labelCls}>Department</label>
-                  <select className={inputCls} value={(editForm.department ?? '') as string} onChange={e => setEditForm(f => ({ ...f, department: e.target.value }))}>
+                  <select aria-label="Department" title="Department" className={inputCls} value={(editForm.department ?? '') as string} onChange={e => setEditForm(f => ({ ...f, department: e.target.value }))}>
                     <option value="">None</option>
                     {['science', 'arts', 'commerce'].map(d => <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className={labelCls}>Batch</label>
-                  <input className={inputCls} value={(editForm.batch ?? '') as string} onChange={e => setEditForm(f => ({ ...f, batch: e.target.value }))} />
+                  <input aria-label="Batch" title="Batch" className={inputCls} value={(editForm.batch ?? '') as string} onChange={e => setEditForm(f => ({ ...f, batch: e.target.value }))} />
                 </div>
                 <div>
                   <label className={labelCls}>Exam Visibility</label>
-                  <select className={inputCls} value={(editForm.defaultExamVisibility ?? 'all_students') as string} onChange={e => setEditForm(f => ({ ...f, defaultExamVisibility: e.target.value }))}>
+                  <select aria-label="Exam visibility" title="Exam visibility" className={inputCls} value={(editForm.defaultExamVisibility ?? 'all_students') as string} onChange={e => setEditForm(f => ({ ...f, defaultExamVisibility: e.target.value }))}>
                     {['all_students', 'group_only', 'hidden'].map(v => <option key={v} value={v}>{v.replace(/_/g, ' ')}</option>)}
                   </select>
                 </div>
                 <div className="sm:col-span-2">
                   <label className={labelCls}>Description</label>
-                  <textarea className={`${inputCls} resize-none`} rows={2} value={(editForm.description ?? '') as string} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} />
+                  <textarea aria-label="Description" title="Description" className={`${inputCls} resize-none`} rows={2} value={(editForm.description ?? '') as string} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
-                    <input type="checkbox" checked={(editForm.isFeatured ?? false) as boolean} onChange={e => setEditForm(f => ({ ...f, isFeatured: e.target.checked }))} className="rounded border-slate-300" />
-                    <Star size={14} className="text-amber-500" /> Featured group
-                  </label>
+                  <ModernToggle
+                    label={<span className="flex items-center gap-2"><Star size={14} className="text-amber-500" /> Featured group</span>}
+                    checked={(editForm.isFeatured ?? false) as boolean}
+                    onChange={v => setEditForm(f => ({ ...f, isFeatured: v }))}
+                    size="sm"
+                  />
                 </div>
               </div>
               <div className="flex justify-end gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">

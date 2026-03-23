@@ -103,7 +103,7 @@ test.describe('Phase4 Pipelines Validation', () => {
             await request.delete(`/api/${ADMIN_PATH}/news/${id}`, { headers: authHeader(adminToken) }).catch(() => undefined);
         }
         for (const id of createdSourceIds) {
-            await request.delete(`/api/${ADMIN_PATH}/rss-sources/${id}`, { headers: authHeader(adminToken) }).catch(() => undefined);
+            await request.delete(`/api/${ADMIN_PATH}/news/sources/${id}`, { headers: authHeader(adminToken) }).catch(() => undefined);
         }
         for (const id of createdPlanIds) {
             await request.delete(`/api/${ADMIN_PATH}/subscription-plans/${id}`, { headers: authHeader(adminToken) }).catch(() => undefined);
@@ -118,7 +118,7 @@ test.describe('Phase4 Pipelines Validation', () => {
 
     test('P4.1 rss ingestion creates pending items and dedupes duplicates', async ({ request }) => {
         const marker = `rss-source-${Date.now()}`;
-        const createSource = await request.post(`/api/${ADMIN_PATH}/rss-sources`, {
+        const createSource = await request.post(`/api/${ADMIN_PATH}/news/sources`, {
             headers: authHeader(adminToken),
             data: {
                 name: marker,
@@ -136,7 +136,7 @@ test.describe('Phase4 Pipelines Validation', () => {
         expect(sourceId).not.toBe('');
         createdSourceIds.push(sourceId);
 
-        const fetchNow = await request.post(`/api/${ADMIN_PATH}/rss/fetch-now`, {
+        const fetchNow = await request.post(`/api/${ADMIN_PATH}/news/fetch-now`, {
             headers: authHeader(adminToken),
             data: { sourceIds: [sourceId] },
         });
@@ -161,7 +161,7 @@ test.describe('Phase4 Pipelines Validation', () => {
         const pendingItemId = String(pendingItem?._id || '');
         if (pendingItemId) createdNewsIds.push(pendingItemId);
 
-        const fetchAgain = await request.post(`/api/${ADMIN_PATH}/rss/fetch-now`, {
+        const fetchAgain = await request.post(`/api/${ADMIN_PATH}/news/fetch-now`, {
             headers: authHeader(adminToken),
             data: { sourceIds: [sourceId] },
         });
@@ -176,7 +176,7 @@ test.describe('Phase4 Pipelines Validation', () => {
         test.setTimeout(180_000);
         const marker = `phase4-news-${Date.now()}`;
 
-        const settingsRes = await request.get(`/api/${ADMIN_PATH}/news-settings`, {
+        const settingsRes = await request.get(`/api/${ADMIN_PATH}/news/settings`, {
             headers: authHeader(adminToken),
         });
         expect(settingsRes.ok(), await settingsRes.text()).toBeTruthy();
@@ -208,7 +208,7 @@ test.describe('Phase4 Pipelines Validation', () => {
         const beforeArticleBody = await beforeArticle.json();
         const beforeBanner = String(beforeArticleBody?.item?.coverImageUrl || '');
 
-        const updateSettings = await request.put(`/api/${ADMIN_PATH}/news-settings`, {
+        const updateSettings = await request.put(`/api/${ADMIN_PATH}/news/settings`, {
             headers: authHeader(adminToken),
             data: { defaultBannerUrl: newDefaultBanner },
         });
@@ -223,7 +223,7 @@ test.describe('Phase4 Pipelines Validation', () => {
         expect(afterBanner).toContain(`seed/${marker}`);
 
         // Restore default banner to avoid cross-suite visual drift.
-        await request.put(`/api/${ADMIN_PATH}/news-settings`, {
+        await request.put(`/api/${ADMIN_PATH}/news/settings`, {
             headers: authHeader(adminToken),
             data: { defaultBannerUrl: currentDefaultBanner },
         });
@@ -455,7 +455,7 @@ test.describe('Phase4 Pipelines Validation', () => {
             });
             expect(auditRes.ok(), await auditRes.text()).toBeTruthy();
         } else {
-            const newsAuditRes = await request.get(`/api/${ADMIN_PATH}/news-v2/audit-logs`, {
+            const newsAuditRes = await request.get(`/api/${ADMIN_PATH}/news/audit-logs`, {
                 headers: authHeader(adminToken),
                 params: { limit: 20 },
             });

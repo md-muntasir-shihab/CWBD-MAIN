@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Mail, RefreshCw, Search, Trash2 } from 'lucide-react';
+import AdminGuideButton, { type AdminGuideButtonProps } from './AdminGuideButton';
 import {
     adminDeleteContactMessage,
     adminGetContactMessages,
@@ -21,6 +22,14 @@ type Msg = {
 };
 
 type FilterMode = 'all' | 'unread' | 'replied';
+type InlineGuide = Omit<AdminGuideButtonProps, 'variant' | 'tone'>;
+
+const CONTACT_GUIDES: Record<'refresh' | 'markRead' | 'markReplied' | 'delete', InlineGuide> = {
+    refresh: { title: 'Refresh Contact Messages', content: 'Reload the latest contact submissions from the backend.', affected: 'Current admin review only.' },
+    markRead: { title: 'Mark Read / Unread', content: 'Toggle whether this contact message remains unread for admins.', affected: 'Admin unread state and review priority.' },
+    markReplied: { title: 'Mark Replied / Unreplied', content: 'Toggle whether this contact message is considered replied.', affected: 'Admin workflow tracking for contact follow-up.' },
+    delete: { title: 'Delete Contact Message', content: 'Delete this stored contact submission after confirmation.', affected: 'The selected contact message record.' },
+};
 
 export default function ContactPanel() {
     const [searchParams] = useSearchParams();
@@ -104,6 +113,7 @@ export default function ContactPanel() {
                         <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                         Refresh
                     </button>
+                    <AdminGuideButton {...CONTACT_GUIDES.refresh} tone="indigo" />
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -183,25 +193,34 @@ export default function ContactPanel() {
                                 </div>
 
                                 <div className="mt-4 flex flex-wrap gap-2">
-                                    <button
-                                        onClick={() => void patchMessage(message._id, { isRead: !message.isRead })}
-                                        className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
-                                    >
-                                        {message.isRead ? 'Mark unread' : 'Mark read'}
-                                    </button>
-                                    <button
-                                        onClick={() => void patchMessage(message._id, { isReplied: !message.isReplied, isRead: true })}
-                                        className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
-                                    >
-                                        {message.isReplied ? 'Mark unreplied' : 'Mark replied'}
-                                    </button>
-                                    <button
-                                        onClick={() => void onDelete(message._id)}
-                                        className="inline-flex items-center gap-2 rounded-xl border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 dark:border-rose-500/20 dark:hover:bg-rose-500/10"
-                                    >
-                                        <Trash2 className="h-4 w-4" />
-                                        Delete
-                                    </button>
+                                    <div className="flex items-center gap-1">
+                                        <button
+                                            onClick={() => void patchMessage(message._id, { isRead: !message.isRead })}
+                                            className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                                        >
+                                            {message.isRead ? 'Mark unread' : 'Mark read'}
+                                        </button>
+                                        <AdminGuideButton {...CONTACT_GUIDES.markRead} tone="indigo" />
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <button
+                                            onClick={() => void patchMessage(message._id, { isReplied: !message.isReplied, isRead: true })}
+                                            className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                                        >
+                                            {message.isReplied ? 'Mark unreplied' : 'Mark replied'}
+                                        </button>
+                                        <AdminGuideButton {...CONTACT_GUIDES.markReplied} tone="indigo" />
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <button
+                                            onClick={() => void onDelete(message._id)}
+                                            className="inline-flex items-center gap-2 rounded-xl border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 dark:border-rose-500/20 dark:hover:bg-rose-500/10"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                            Delete
+                                        </button>
+                                        <AdminGuideButton {...CONTACT_GUIDES.delete} tone="indigo" />
+                                    </div>
                                 </div>
                             </div>
                         );

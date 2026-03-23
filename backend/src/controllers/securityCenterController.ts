@@ -25,6 +25,17 @@ const ALLOWED_ROOT_KEYS = [
     'retention',
     'panic',
     'rateLimit',
+    'authentication',
+    'passwordPolicies',
+    'twoFactor',
+    'sessions',
+    'accessControl',
+    'verificationRecovery',
+    'uploadSecurity',
+    'alerting',
+    'exportSecurity',
+    'backupRestore',
+    'runtimeGuards',
 ];
 
 function isObject(value: unknown): value is Record<string, unknown> {

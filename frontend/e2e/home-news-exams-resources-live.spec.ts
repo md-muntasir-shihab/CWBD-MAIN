@@ -1,83 +1,84 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { attachHealthTracker, expectPageHealthy, loginAsAdmin } from './helpers';
 
 const ADMIN_PATH = process.env.E2E_ADMIN_PATH || 'campusway-secure-admin';
 
 type VisibilityKey = 'newsPreview' | 'resourcesPreview' | 'examsWidget';
 
-async function readAccessToken(page: Page): Promise<string> {
-    const token = await page.evaluate(() => (
-        window.sessionStorage.getItem('campusway-token')
-        || window.localStorage.getItem('campusway-token')
-        || ''
-    ));
-    return token || '';
+type LoginResult = {
+    token: string;
+};
+
+function authHeader(token: string): Record<string, string> {
+    return { Authorization: `Bearer ${token}` };
 }
 
-async function adminGetHomeSettings(page: Page, token: string): Promise<{ ok: boolean; status: number; body: any }> {
-    return page.evaluate(async ({ authToken, preferred }) => {
-        const bases = [`/api/${preferred}`, '/api/admin'];
-        for (const base of bases) {
-            const response = await fetch(`${base}/settings/home`, {
-                method: 'GET',
-                headers: {
-                    Authorization: `Bearer ${authToken}`,
-                },
-                credentials: 'include',
-            });
-            if (response.status !== 404) {
-                let body: any = null;
-                try {
-                    body = await response.json();
-                } catch {
-                    body = null;
-                }
-                return { ok: response.ok, status: response.status, body };
+async function apiLogin(
+    request: APIRequestContext,
+    identifier: string,
+    password: string,
+): Promise<LoginResult> {
+    const response = await request.post('/api/auth/login', {
+        data: { identifier, password },
+    });
+    expect(response.status(), `Login failed for ${identifier}`).toBe(200);
+    const body = (await response.json()) as LoginResult;
+    expect(String(body.token || '')).not.toBe('');
+    return body;
+}
+
+async function adminGetHomeSettings(
+    request: APIRequestContext,
+    token: string,
+): Promise<{ ok: boolean; status: number; body: any }> {
+    const bases = [`/api/${ADMIN_PATH}`, '/api/admin'];
+    for (const base of bases) {
+        const response = await request.get(`${base}/settings/home`, {
+            headers: authHeader(token),
+        });
+        if (response.status() !== 404) {
+            let body: any = null;
+            try {
+                body = await response.json();
+            } catch {
+                body = null;
             }
+            return { ok: response.ok(), status: response.status(), body };
         }
-        return { ok: false, status: 404, body: null };
-    }, { authToken: token, preferred: ADMIN_PATH });
+    }
+    return { ok: false, status: 404, body: null };
 }
 
 async function adminSetSectionVisibility(
-    page: Page,
+    request: APIRequestContext,
     token: string,
     key: VisibilityKey,
     value: boolean,
 ): Promise<{ ok: boolean; status: number; body: any }> {
-    return page.evaluate(async ({ authToken, preferred, sectionKey, sectionValue }) => {
-        const bases = [`/api/${preferred}`, '/api/admin'];
-        for (const base of bases) {
-            const response = await fetch(`${base}/settings/home`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${authToken}`,
+    const bases = [`/api/${ADMIN_PATH}`, '/api/admin'];
+    for (const base of bases) {
+        const response = await request.put(`${base}/settings/home`, {
+            headers: {
+                'Content-Type': 'application/json',
+                ...authHeader(token),
+            },
+            data: {
+                sectionVisibility: {
+                    [key]: value,
                 },
-                credentials: 'include',
-                body: JSON.stringify({
-                    sectionVisibility: {
-                        [sectionKey]: sectionValue,
-                    },
-                }),
-            });
-            if (response.status !== 404) {
-                let body: any = null;
-                try {
-                    body = await response.json();
-                } catch {
-                    body = null;
-                }
-                return { ok: response.ok, status: response.status, body };
+            },
+        });
+        if (response.status() !== 404) {
+            let body: any = null;
+            try {
+                body = await response.json();
+            } catch {
+                body = null;
             }
+            return { ok: response.ok(), status: response.status(), body };
         }
-        return { ok: false, status: 404, body: null };
-    }, {
-        authToken: token,
-        preferred: ADMIN_PATH,
-        sectionKey: key,
-        sectionValue: value,
-    });
+    }
+    return { ok: false, status: 404, body: null };
 }
 
 async function readHomeShape(page: Page): Promise<{
@@ -159,18 +160,23 @@ test.describe('Home News/Exams/Resources Smoke', () => {
         tracker.detach();
     });
 
-    test('home reflects admin live visibility updates for news/resources/exams', async ({ page }) => {
+    test('home reflects admin live visibility updates for news/resources/exams', async ({ page, request }) => {
         const tracker = attachHealthTracker(page);
 
         await loginAsAdmin(page);
-        const token = await readAccessToken(page);
+        const login = await apiLogin(
+            request,
+            process.env.E2E_ADMIN_DESKTOP_EMAIL || 'e2e_admin_desktop@campusway.local',
+            process.env.E2E_ADMIN_DESKTOP_PASSWORD || 'E2E_Admin#12345',
+        );
+        const token = login.token;
         expect(token.length).toBeGreaterThan(0);
 
         await page.goto('/');
         const homeShape = await readHomeShape(page);
         expect(homeShape.ok, JSON.stringify(homeShape)).toBeTruthy();
 
-        const settingsBefore = await adminGetHomeSettings(page, token);
+        const settingsBefore = await adminGetHomeSettings(request, token);
         expect(settingsBefore.ok, JSON.stringify(settingsBefore)).toBeTruthy();
 
         const candidates: Array<{ key: VisibilityKey; heading: RegExp; hasItems: boolean }> = [
@@ -184,21 +190,21 @@ test.describe('Home News/Exams/Resources Smoke', () => {
         const heading = page.getByRole('heading', { name: chosen.heading }).first();
 
         try {
-            const enableResult = await adminSetSectionVisibility(page, token, chosen.key, true);
+            const enableResult = await adminSetSectionVisibility(request, token, chosen.key, true);
             expect(enableResult.ok, JSON.stringify(enableResult)).toBeTruthy();
 
             if (chosen.hasItems) {
                 await expect(heading).toBeVisible({ timeout: 45000 });
             }
 
-            const disableResult = await adminSetSectionVisibility(page, token, chosen.key, false);
+            const disableResult = await adminSetSectionVisibility(request, token, chosen.key, false);
             expect(disableResult.ok, JSON.stringify(disableResult)).toBeTruthy();
 
             if (chosen.hasItems) {
                 await expect(heading).toHaveCount(0, { timeout: 45000 });
             }
         } finally {
-            const restoreResult = await adminSetSectionVisibility(page, token, chosen.key, previousValue);
+            const restoreResult = await adminSetSectionVisibility(request, token, chosen.key, previousValue);
             expect(restoreResult.ok, JSON.stringify(restoreResult)).toBeTruthy();
         }
 

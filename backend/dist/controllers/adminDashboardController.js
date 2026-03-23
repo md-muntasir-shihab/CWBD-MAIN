@@ -29,6 +29,7 @@ const StudentBadge_1 = __importDefault(require("../models/StudentBadge"));
 const StudentProfile_1 = __importDefault(require("../models/StudentProfile"));
 const ExamResult_1 = __importDefault(require("../models/ExamResult"));
 const studentDashboardStream_1 = require("../realtime/studentDashboardStream");
+const secureUploadService_1 = require("../services/secureUploadService");
 function hashOtp(code) {
     return crypto_1.default.createHash('sha256').update(code).digest('hex');
 }
@@ -52,6 +53,7 @@ const DEFAULT_CELEBRATION_RULES = {
     dismissible: true,
     maxShowsPerDay: 2,
 };
+const NOTIFICATION_ATTACHMENT_ACCESS_ROLES = ['student', 'superadmin', 'admin', 'moderator', 'editor', 'viewer', 'support_agent', 'finance_agent', 'chairman'];
 function normalizeCelebrationRules(raw) {
     const input = (raw && typeof raw === 'object') ? raw : {};
     const mode = String(input.ruleMode || DEFAULT_CELEBRATION_RULES.ruleMode).trim().toLowerCase();
@@ -83,8 +85,16 @@ async function adminGetNotifications(_req, res) {
 }
 async function adminCreateNotification(req, res) {
     try {
+        const attachmentUrl = await (0, secureUploadService_1.ensureSecureUploadUrl)({
+            url: String(req.body?.attachmentUrl || '').trim(),
+            category: 'admin_upload',
+            visibility: 'protected',
+            uploadedBy: req.user?._id || null,
+            accessRoles: NOTIFICATION_ATTACHMENT_ACCESS_ROLES,
+        });
         const payload = {
             ...req.body,
+            attachmentUrl,
             createdBy: toObjectIdOrUndefined(req.user?._id),
             updatedBy: toObjectIdOrUndefined(req.user?._id),
         };
@@ -99,7 +109,17 @@ async function adminCreateNotification(req, res) {
 }
 async function adminUpdateNotification(req, res) {
     try {
-        const item = await Notification_1.default.findByIdAndUpdate(req.params.id, { ...req.body, updatedBy: toObjectIdOrUndefined(req.user?._id) }, { new: true, runValidators: true });
+        const nextBody = { ...req.body };
+        if (nextBody.attachmentUrl !== undefined) {
+            nextBody.attachmentUrl = await (0, secureUploadService_1.ensureSecureUploadUrl)({
+                url: String(nextBody.attachmentUrl || '').trim(),
+                category: 'admin_upload',
+                visibility: 'protected',
+                uploadedBy: req.user?._id || null,
+                accessRoles: NOTIFICATION_ATTACHMENT_ACCESS_ROLES,
+            });
+        }
+        const item = await Notification_1.default.findByIdAndUpdate(req.params.id, { ...nextBody, updatedBy: toObjectIdOrUndefined(req.user?._id) }, { new: true, runValidators: true });
         if (!item) {
             res.status(404).json({ message: 'Notification not found' });
             return;

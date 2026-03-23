@@ -8,6 +8,7 @@ import SocialLinksManager from './SocialLinksManager';
 import { invalidateQueryGroup, invalidationGroups, queryKeys } from '../../lib/queryKeys';
 import { useAdminRuntimeFlags } from '../../hooks/useAdminRuntimeFlags';
 import InfoHint from '../ui/InfoHint';
+import AdminGuideButton from './AdminGuideButton';
 
 type SiteSettingsForm = {
     websiteName: string;
@@ -188,6 +189,33 @@ export default function SiteSettingsPanel() {
         return <div className="flex justify-center py-20"><RefreshCw className="w-6 h-6 text-indigo-400 animate-spin" /></div>;
     }
 
+    const renderToggleCard = (
+        title: string,
+        checked: boolean,
+        onChange: (value: boolean) => void,
+        guide: {
+            content: string;
+            enabledNote: string;
+            disabledNote: string;
+            affected?: string;
+        },
+    ) => (
+        <div className="rounded-xl border border-indigo-500/15 bg-slate-950/65 px-3 py-2">
+            <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{title}</span>
+                <AdminGuideButton
+                    title={title}
+                    content={guide.content}
+                    enabledNote={guide.enabledNote}
+                    disabledNote={guide.disabledNote}
+                    affected={guide.affected}
+                    tone="indigo"
+                />
+            </div>
+            <CyberToggle checked={checked} onChange={onChange} label={title} />
+        </div>
+    );
+
     return (
         <div className="space-y-6 max-w-5xl">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -203,6 +231,23 @@ export default function SiteSettingsPanel() {
                         ) : null}
                     </h2>
                     <p className="text-xs text-slate-500">Global identity, theme, social and pricing controls</p>
+                    <div className="mt-2">
+                        <AdminGuideButton
+                            title="Website Settings"
+                            content="This page controls global branding, public contact data, theme defaults, pricing display rules, and subscription-page presentation."
+                            actions={[
+                                { label: 'Save', description: 'Apply global settings to the live public and student experience after the admin save completes.' },
+                                { label: 'Upload logo or favicon', description: 'Replace brand assets used in navigation, browser tabs, and shared UI surfaces.' },
+                            ]}
+                            enabledNote="When a UI toggle is enabled, the matching theme or pricing behaviour becomes available after save."
+                            disabledNote="When a UI toggle is disabled, the linked mode or formatting behaviour stops appearing even though the data remains stored."
+                            affected="Public visitors, students, and any page using shared site settings."
+                            bestPractice="Verify the public site after changing branding, theme, or pricing settings because this page has global impact."
+                            variant="full"
+                            tone="indigo"
+                            actionLabel="View control guide"
+                        />
+                    </div>
                 </div>
                 <button onClick={onSave} disabled={saveMutation.isPending} className="bg-gradient-to-r from-indigo-600 to-cyan-600 text-white text-sm px-6 py-2 rounded-xl flex items-center gap-2 hover:opacity-90 disabled:opacity-50">
                     {saveMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
@@ -355,10 +400,30 @@ export default function SiteSettingsPanel() {
                             </div>
                         </div>
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                            <div className="rounded-xl border border-indigo-500/15 bg-slate-950/65 px-3 py-2"><CyberToggle checked={settings.theme.allowSystemMode} onChange={(value) => setSettings({ ...settings, theme: { ...settings.theme, allowSystemMode: value } })} label="Allow System Mode" /></div>
-                            <div className="rounded-xl border border-indigo-500/15 bg-slate-950/65 px-3 py-2"><CyberToggle checked={settings.socialUi.clusterEnabled} onChange={(value) => setSettings({ ...settings, socialUi: { ...settings.socialUi, clusterEnabled: value } })} label="Enable Social Cluster" /></div>
-                            <div className="rounded-xl border border-indigo-500/15 bg-slate-950/65 px-3 py-2"><CyberToggle checked={settings.socialUi.showLabels} onChange={(value) => setSettings({ ...settings, socialUi: { ...settings.socialUi, showLabels: value } })} label="Show Social Labels" /></div>
-                            <div className="rounded-xl border border-indigo-500/15 bg-slate-950/65 px-3 py-2"><CyberToggle checked={settings.pricingUi.thousandSeparator} onChange={(value) => setSettings({ ...settings, pricingUi: { ...settings.pricingUi, thousandSeparator: value } })} label="Use Thousand Separator" /></div>
+                            {renderToggleCard('Allow System Mode', settings.theme.allowSystemMode, (value) => setSettings({ ...settings, theme: { ...settings.theme, allowSystemMode: value } }), {
+                                content: 'Controls whether the public theme switcher can follow the device or browser preference.',
+                                enabledNote: 'Users can select or inherit system mode, and the UI follows device preference when applicable.',
+                                disabledNote: 'System mode is removed, so users only get the manually allowed light or dark options.',
+                                affected: 'Public visitors and students using theme controls.',
+                            })}
+                            {renderToggleCard('Enable Social Cluster', settings.socialUi.clusterEnabled, (value) => setSettings({ ...settings, socialUi: { ...settings.socialUi, clusterEnabled: value } }), {
+                                content: 'Controls whether grouped social links are shown as a shared cluster instead of isolated placements.',
+                                enabledNote: 'The social cluster layout remains visible where the public design expects grouped links.',
+                                disabledNote: 'Grouped social links are removed, so only remaining standalone surfaces stay visible.',
+                                affected: 'Public footer or contact-style surfaces using social links.',
+                            })}
+                            {renderToggleCard('Show Social Labels', settings.socialUi.showLabels, (value) => setSettings({ ...settings, socialUi: { ...settings.socialUi, showLabels: value } }), {
+                                content: 'Controls whether social buttons show readable text labels beside their icons.',
+                                enabledNote: 'Visitors see both icon and text, which improves clarity but uses more horizontal space.',
+                                disabledNote: 'Only the icon-style treatment remains, which is more compact but less explicit.',
+                                affected: 'Public and student UI surfaces that render social buttons.',
+                            })}
+                            {renderToggleCard('Use Thousand Separator', settings.pricingUi.thousandSeparator, (value) => setSettings({ ...settings, pricingUi: { ...settings.pricingUi, thousandSeparator: value } }), {
+                                content: 'Controls whether prices and numeric amounts are formatted with thousand separators.',
+                                enabledNote: 'Large amounts are easier to scan because pricing uses grouped numeric formatting.',
+                                disabledNote: 'Amounts render as plain digits, which is denser and easier to misread.',
+                                affected: 'Pricing cards, plan details, and any public or student price display using this format.',
+                            })}
                         </div>
                     </div>
 

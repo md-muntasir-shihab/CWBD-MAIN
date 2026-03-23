@@ -162,7 +162,11 @@ function clusterSharedConfigToUpdate(config, overrides) {
     const businessExamDate = hasOverride('businessExamDate')
         ? normalizeExamDateValue(source.businessExamDate)
         : normalizeExamDateValue(config.businessExamDate ?? config.commerceExamDate);
-    return {
+    const hasAdmissionOverride = hasOverride('admissionWebsite') || hasOverride('admissionUrl');
+    const admissionWebsite = hasAdmissionOverride
+        ? pickString(source.admissionWebsite || source.admissionUrl)
+        : pickString(config.admissionWebsite);
+    const update = {
         applicationStartDate: hasOverride('applicationStartDate')
             ? parseDateValue(source.applicationStartDate)
             : parseDateValue(config.applicationStartDate),
@@ -177,6 +181,11 @@ function clusterSharedConfigToUpdate(config, overrides) {
         examDateBusiness: businessExamDate,
         examCenters: normalizeExamCenters(config.examCenters || []),
     };
+    if (admissionWebsite) {
+        update.admissionWebsite = admissionWebsite;
+        update.admissionUrl = admissionWebsite;
+    }
+    return update;
 }
 async function ensureUniversityCategoryByName(name) {
     const normalizedName = (0, universityCategories_1.normalizeUniversityCategory)(name || universityCategories_1.DEFAULT_UNIVERSITY_CATEGORY);

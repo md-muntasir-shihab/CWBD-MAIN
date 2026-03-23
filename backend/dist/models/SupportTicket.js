@@ -48,8 +48,26 @@ const SupportTicketSchema = new mongoose_1.Schema({
     status: { type: String, enum: ['open', 'in_progress', 'resolved', 'closed'], default: 'open', index: true },
     priority: { type: String, enum: ['low', 'medium', 'high', 'urgent'], default: 'medium' },
     assignedTo: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', default: null },
+    subscriptionSnapshot: { type: mongoose_1.Schema.Types.Mixed, default: {} },
+    messageCount: { type: Number, default: 0, min: 0 },
+    latestMessagePreview: { type: String, trim: true, default: '' },
+    lastMessageAt: { type: Date, default: null, index: true },
+    lastMessageSenderType: { type: String, enum: ['student', 'admin', 'system', null], default: null },
+    unreadCountForAdmin: { type: Number, default: 0, min: 0, index: true },
+    unreadCountForUser: { type: Number, default: 0, min: 0, index: true },
+    threadState: {
+        type: String,
+        enum: ['pending', 'replied', 'idle', 'resolved', 'closed'],
+        default: 'pending',
+        index: true,
+    },
     timeline: { type: [SupportTicketTimelineSchema], default: [] },
 }, { timestamps: true, collection: 'support_tickets' });
 SupportTicketSchema.index({ status: 1, createdAt: -1 });
+SupportTicketSchema.index({ studentId: 1, lastMessageAt: -1 });
+SupportTicketSchema.index({ status: 1, lastMessageAt: -1 });
+SupportTicketSchema.index({ threadState: 1, lastMessageAt: -1 });
+SupportTicketSchema.index({ unreadCountForAdmin: 1, lastMessageAt: -1 });
+SupportTicketSchema.index({ unreadCountForUser: 1, lastMessageAt: -1 });
 exports.default = mongoose_1.default.model('SupportTicket', SupportTicketSchema);
 //# sourceMappingURL=SupportTicket.js.map

@@ -2,13 +2,16 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.adminGetActionableAlerts = adminGetActionableAlerts;
 exports.adminMarkActionableAlertsRead = adminMarkActionableAlertsRead;
+exports.adminGetActionableAlertsUnreadCount = adminGetActionableAlertsUnreadCount;
+exports.adminMarkSingleActionableAlertRead = adminMarkSingleActionableAlertRead;
+exports.adminMarkAllActionableAlertsRead = adminMarkAllActionableAlertsRead;
 const adminAlertService_1 = require("../services/adminAlertService");
 function ensureAlertAdmin(req, res) {
     if (!req.user) {
         res.status(401).json({ message: 'Authentication required' });
         return null;
     }
-    if (!['superadmin', 'admin', 'moderator'].includes(req.user.role)) {
+    if (!['superadmin', 'admin', 'moderator', 'viewer', 'support_agent', 'finance_agent'].includes(req.user.role)) {
         res.status(403).json({ message: 'Admin access required' });
         return null;
     }
@@ -26,6 +29,8 @@ async function adminGetActionableAlerts(req, res) {
             role,
             page,
             limit,
+            unread: String(req.query.filter || '').trim().toLowerCase() === 'unread',
+            type: String(req.query.type || '').trim(),
         });
         res.json(result);
     }
@@ -48,6 +53,45 @@ async function adminMarkActionableAlertsRead(req, res) {
     }
     catch (error) {
         console.error('adminMarkActionableAlertsRead error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+}
+async function adminGetActionableAlertsUnreadCount(req, res) {
+    try {
+        const role = ensureAlertAdmin(req, res);
+        if (!role || !req.user)
+            return;
+        const result = await (0, adminAlertService_1.countAdminUnreadAlerts)(req.user._id, role, String(req.query.type || '').trim());
+        res.json(result);
+    }
+    catch (error) {
+        console.error('adminGetActionableAlertsUnreadCount error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+}
+async function adminMarkSingleActionableAlertRead(req, res) {
+    try {
+        const role = ensureAlertAdmin(req, res);
+        if (!role || !req.user)
+            return;
+        const result = await (0, adminAlertService_1.markAdminAlertsRead)(req.user._id, [String(req.params.id || '').trim()], role);
+        res.json(result);
+    }
+    catch (error) {
+        console.error('adminMarkSingleActionableAlertRead error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+}
+async function adminMarkAllActionableAlertsRead(req, res) {
+    try {
+        const role = ensureAlertAdmin(req, res);
+        if (!role || !req.user)
+            return;
+        const result = await (0, adminAlertService_1.markAdminAlertsRead)(req.user._id, [], role);
+        res.json(result);
+    }
+    catch (error) {
+        console.error('adminMarkAllActionableAlertsRead error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 }

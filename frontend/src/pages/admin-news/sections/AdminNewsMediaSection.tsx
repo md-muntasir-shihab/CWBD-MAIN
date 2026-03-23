@@ -1,6 +1,7 @@
 import { ChangeEvent, FormEvent, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import NewsHelpButton from '../../../components/admin/NewsHelpButton';
 import {
     ApiNewsV2Media,
     adminNewsV2DeleteMedia,
@@ -83,7 +84,24 @@ export default function AdminNewsMediaSection() {
         <div className="space-y-4">
             <div className="grid gap-4 xl:grid-cols-2">
                 <form onSubmit={onUpload} className="card-flat border border-cyan-500/20 p-4">
-                    <h2 className="text-lg font-semibold">Upload Media</h2>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="space-y-1">
+                            <h2 className="text-lg font-semibold">Upload Media</h2>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">Upload reusable images for stories, banners, and source icons.</p>
+                        </div>
+                        <NewsHelpButton
+                            title="Media Uploads"
+                            content="This area stores reusable media assets used by news items and source icons."
+                            impact="It keeps editors from re-uploading the same images repeatedly."
+                            affected="Editors and admins managing story assets."
+                            publishNote="Once an image is attached to a published story, the public view will use the stored media URL."
+                            publishSendNote="If a published item is later sent, the same media can be reused in the communication payload."
+                            enabledNote="Centralized media makes later edits and deletes easier to audit."
+                            disabledNote="Scattered uploads are harder to clean up and can leave stale assets behind."
+                            bestPractice="Use descriptive alt text so cards and previews stay accessible."
+                            variant="full"
+                        />
+                    </div>
                     <div className="mt-3 space-y-3">
                         <input type="file" accept="image/*" onChange={onSelectFile} className="input-field" />
                         <input
@@ -107,7 +125,12 @@ export default function AdminNewsMediaSection() {
                 </form>
 
                 <form onSubmit={onImportUrl} className="card-flat border border-cyan-500/20 p-4">
-                    <h2 className="text-lg font-semibold">Import From URL</h2>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="space-y-1">
+                            <h2 className="text-lg font-semibold">Import From URL</h2>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">Import a remote image when upload is not available.</p>
+                        </div>
+                    </div>
                     <div className="mt-3 space-y-3">
                         <input
                             className="input-field"

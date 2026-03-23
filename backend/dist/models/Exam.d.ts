@@ -10,6 +10,7 @@ export interface IScheduleWindow {
 }
 export interface IExam extends Document {
     title: string;
+    slug?: string;
     title_bn?: string;
     type?: 'Science' | 'Arts' | 'Commerce' | 'Mixed';
     group_category?: 'SSC' | 'HSC' | 'Admission' | 'Custom';
@@ -43,6 +44,15 @@ export interface IExam extends Document {
     answerEditLimitPerQuestion?: number;
     deliveryMode?: 'internal' | 'external_link';
     externalExamUrl?: string;
+    examCenterId?: mongoose.Types.ObjectId | null;
+    examCenterSnapshot?: {
+        name?: string;
+        address?: string;
+        code?: string;
+        note?: string;
+    };
+    templateId?: mongoose.Types.ObjectId | null;
+    importProfileId?: mongoose.Types.ObjectId | null;
     logoUrl?: string;
     share_link?: string;
     short_link?: string;

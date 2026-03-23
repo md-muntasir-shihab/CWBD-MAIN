@@ -1,9 +1,10 @@
-﻿import axios from 'axios';
+import axios from 'axios';
+import { promptForSensitiveActionProof } from '../utils/sensitiveAction';
 
 const RAW_ADMIN_PATH = String(import.meta.env.VITE_ADMIN_PATH || 'campusway-secure-admin').trim();
 const ADMIN_PATH = RAW_ADMIN_PATH.replace(/^\/+|\/+$/g, '') || 'campusway-secure-admin';
 const BROWSER_FP_KEY = 'campusway-browser-fingerprint';
-const ACCESS_TOKEN_KEY = 'campusway-token';
+const AUTH_SESSION_HINT_KEY = 'campusway-auth-session-hint';
 const API_BASE_FROM_ENV = String(import.meta.env.VITE_API_BASE_URL || '').trim();
 const API_BASE_URL = API_BASE_FROM_ENV || '/api';
 const API_PROXY_TARGET = String(import.meta.env.VITE_API_PROXY_TARGET || '').trim();
@@ -49,27 +50,161 @@ function emitForceLogout(reason: string): void {
     window.dispatchEvent(new CustomEvent('campusway:force-logout', { detail: { reason } }));
 }
 
-function writeAccessToken(token: string): void {
-    if (typeof window === 'undefined') return;
-    window.sessionStorage.setItem(ACCESS_TOKEN_KEY, token);
-    window.localStorage.setItem(ACCESS_TOKEN_KEY, token);
-}
-
-function clearAccessToken(): void {
-    if (typeof window === 'undefined') return;
-    window.sessionStorage.removeItem(ACCESS_TOKEN_KEY);
-    window.localStorage.removeItem(ACCESS_TOKEN_KEY);
-}
-
-function readAccessToken(): string {
+function readLocalStorageValue(key: string): string {
     if (typeof window === 'undefined') return '';
-    const fromSession = window.sessionStorage.getItem(ACCESS_TOKEN_KEY);
-    if (fromSession) return fromSession;
-    const fromLocal = window.localStorage.getItem(ACCESS_TOKEN_KEY);
-    if (fromLocal) {
-        window.sessionStorage.setItem(ACCESS_TOKEN_KEY, fromLocal);
+    try {
+        return String(window.localStorage.getItem(key) || '').trim();
+    } catch {
+        return '';
     }
-    return fromLocal || '';
+}
+
+function writeLocalStorageValue(key: string, value: string): void {
+    if (typeof window === 'undefined') return;
+    try {
+        window.localStorage.setItem(key, value);
+    } catch {
+        // ignore storage failures
+    }
+}
+
+function removeLocalStorageValue(key: string): void {
+    if (typeof window === 'undefined') return;
+    try {
+        window.localStorage.removeItem(key);
+    } catch {
+        // ignore storage failures
+    }
+}
+
+let inMemoryAccessToken = '';
+
+export function setAccessToken(token: string): void {
+    inMemoryAccessToken = String(token || '').trim();
+    if (inMemoryAccessToken) {
+        api.defaults.headers.common.Authorization = `Bearer ${inMemoryAccessToken}`;
+        return;
+    }
+    delete api.defaults.headers.common.Authorization;
+}
+
+export function clearAccessToken(): void {
+    inMemoryAccessToken = '';
+    delete api.defaults.headers.common.Authorization;
+}
+
+export function readAccessToken(): string {
+    return inMemoryAccessToken;
+}
+
+export function markAuthSessionHint(portal?: 'student' | 'admin' | 'chairman' | string): void {
+    const nextValue = JSON.stringify({
+        active: true,
+        portal: String(portal || '').trim().toLowerCase() || 'unknown',
+        updatedAt: Date.now(),
+    });
+    writeLocalStorageValue(AUTH_SESSION_HINT_KEY, nextValue);
+}
+
+export function clearAuthSessionHint(): void {
+    removeLocalStorageValue(AUTH_SESSION_HINT_KEY);
+}
+
+export function hasAuthSessionHint(): boolean {
+    return readLocalStorageValue(AUTH_SESSION_HINT_KEY).length > 0;
+}
+
+function isProtectedBootstrapPath(pathname: string): boolean {
+    const path = String(pathname || '').trim();
+    if (!path) return false;
+
+    const publicAuthPaths = new Set([
+        '/login',
+        '/student/login',
+        '/student/register',
+        '/student/forgot-password',
+        '/student/reset-password',
+        '/chairman/login',
+        '/__cw_admin__/login',
+        '/admin/login',
+        '/otp-verify',
+    ]);
+
+    if (publicAuthPaths.has(path)) {
+        return false;
+    }
+
+    const protectedPrefixes = [
+        '/__cw_admin__',
+        '/campusway-secure-admin',
+        '/admin',
+        '/admin-dashboard',
+        '/chairman',
+        '/student/dashboard',
+        '/student/profile',
+        '/student/security',
+        '/student/applications',
+        '/student/resources',
+        '/student/exams-hub',
+        '/dashboard',
+        '/profile',
+        '/results',
+        '/payments',
+        '/notifications',
+        '/support',
+        '/exam/',
+    ];
+
+    if (protectedPrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`) || path.startsWith(prefix))) {
+        return true;
+    }
+
+    return /^\/exams\/[^/]+/.test(path);
+}
+
+export function shouldAttemptAuthBootstrap(): boolean {
+    if (typeof window === 'undefined') return false;
+    return hasAuthSessionHint() || isProtectedBootstrapPath(window.location.pathname);
+}
+
+export interface SensitiveActionProof {
+    currentPassword: string;
+    reason: string;
+    otpCode?: string;
+}
+
+export function buildSensitiveActionHeaders(proof?: SensitiveActionProof): Record<string, string> | undefined {
+    if (!proof) return undefined;
+
+    const headers: Record<string, string> = {};
+    const currentPassword = String(proof.currentPassword || '').trim();
+    const reason = String(proof.reason || '').trim();
+    const otpCode = String(proof.otpCode || '').trim();
+
+    if (currentPassword) headers['x-current-password'] = currentPassword;
+    if (reason) headers['x-sensitive-reason'] = reason;
+    if (otpCode) headers['x-otp-code'] = otpCode;
+
+    return Object.keys(headers).length > 0 ? headers : undefined;
+}
+
+export async function resolveSensitiveActionHeaders(options: {
+    actionLabel: string;
+    defaultReason?: string;
+    requireOtpHint?: boolean;
+    proof?: SensitiveActionProof;
+}): Promise<Record<string, string> | undefined> {
+    const resolvedProof = options.proof || await promptForSensitiveActionProof({
+        actionLabel: options.actionLabel,
+        defaultReason: options.defaultReason || options.actionLabel,
+        requireOtpHint: options.requireOtpHint,
+    });
+
+    if (!resolvedProof) {
+        throw new Error('Sensitive action cancelled');
+    }
+
+    return buildSensitiveActionHeaders(resolvedProof);
 }
 
 function resolveLoginRedirectPath(): string {
@@ -83,9 +218,66 @@ function resolveLoginRedirectPath(): string {
     return '/login';
 }
 
+function hasSensitiveActionHeaders(headers: unknown): boolean {
+    if (!headers || typeof headers !== 'object') return false;
+    const record = headers as Record<string, unknown>;
+    return ['x-current-password', 'x-sensitive-reason', 'x-otp-code'].some((key) => {
+        const value = record[key] ?? record[key.toLowerCase()] ?? record[key.toUpperCase()];
+        return String(value || '').trim().length > 0;
+    });
+}
+
+function shouldPromptForSensitiveAction(error: unknown): {
+    requireOtpHint: boolean;
+    actionLabel: string;
+    defaultReason: string;
+} | null {
+    const response = (error as { response?: { status?: number; data?: { message?: string } } })?.response;
+    const config = (error as { config?: Record<string, unknown> })?.config || {};
+    const status = Number(response?.status || 0);
+    const message = String(response?.data?.message || '').trim();
+    const requestUrl = String(config.url || '');
+    const method = String(config.method || 'request').trim().toUpperCase();
+
+    if (status !== 400 || !message || !requestUrl.includes(`/${ADMIN_PATH}/`)) {
+        return null;
+    }
+
+    if (Boolean(config.__sensitiveActionPrompted) || Boolean(config.__skipSensitiveActionPrompt)) {
+        return null;
+    }
+
+    const requiresPrompt = [
+        'Current password is required for this action.',
+        'A reason is required for this action.',
+        'Authenticator or backup code is required for this action.',
+    ].includes(message);
+
+    const invalidExistingProof = hasSensitiveActionHeaders(config.headers)
+        && (message === 'Current password is incorrect' || message === 'Invalid authenticator or backup code');
+
+    if (!requiresPrompt && !invalidExistingProof) {
+        return null;
+    }
+
+    const compactUrl = requestUrl
+        .replace(/^\/+/, '')
+        .replace(`${ADMIN_PATH}/`, '')
+        .split('?')[0]
+        .replace(/\/[0-9a-fA-F-]{8,}/g, '/item')
+        .replace(/[-_/]+/g, ' ')
+        .trim();
+
+    return {
+        requireOtpHint: message.includes('Authenticator or backup code'),
+        actionLabel: compactUrl ? `${method.toLowerCase()} ${compactUrl}` : 'complete this admin action',
+        defaultReason: `Admin ${method.toLowerCase()} on ${compactUrl || 'protected resource'}`,
+    };
+}
+
 let refreshInFlight: Promise<string | null> | null = null;
 
-async function refreshAccessToken(): Promise<string | null> {
+export async function refreshAccessToken(): Promise<string | null> {
     if (refreshInFlight) return refreshInFlight;
 
     refreshInFlight = axios
@@ -97,8 +289,8 @@ async function refreshAccessToken(): Promise<string | null> {
         .then((res) => {
             const nextToken = String(res.data?.token || '').trim();
             if (!nextToken) return null;
-            writeAccessToken(nextToken);
-            api.defaults.headers.common.Authorization = `Bearer ${nextToken}`;
+            setAccessToken(nextToken);
+            markAuthSessionHint();
             return nextToken;
         })
         .catch(() => null)
@@ -136,6 +328,26 @@ api.interceptors.response.use(
             requestUrl.includes('/auth/chairman/login');
         const isVerify2faCall = requestUrl.includes('/auth/verify-2fa');
         const canRetry = !originalConfig.__isRetryRequest && !isAuthRefreshCall;
+        const sensitiveActionPrompt = shouldPromptForSensitiveAction(error);
+
+        if (sensitiveActionPrompt) {
+            const proof = await promptForSensitiveActionProof({
+                actionLabel: sensitiveActionPrompt.actionLabel,
+                defaultReason: sensitiveActionPrompt.defaultReason,
+                requireOtpHint: sensitiveActionPrompt.requireOtpHint,
+            });
+
+            if (!proof) {
+                return Promise.reject(error);
+            }
+
+            originalConfig.__sensitiveActionPrompted = true;
+            originalConfig.headers = {
+                ...(originalConfig.headers || {}),
+                ...(buildSensitiveActionHeaders(proof) || {}),
+            };
+            return api(originalConfig);
+        }
 
         if (status === 401 && hasToken) {
             if (code === 'SESSION_INVALIDATED' || code === 'LEGACY_TOKEN_NOT_ALLOWED') {
@@ -951,6 +1163,8 @@ export interface HomeApiResponse {
         upcoming: HomeExamWidgetItem[];
         items: HomeExamWidgetItem[];
     };
+    featuredNews?: ApiNews[];
+    featuredNewsItems?: ApiNews[];
     newsPreview: ApiNews[];
     newsPreviewItems?: ApiNews[];
     resourcesPreview: Array<{
@@ -1164,6 +1378,7 @@ export interface SecurityCenterSettings {
     twoPersonApproval: {
         enabled: boolean;
         riskyActions: Array<
+            | 'data.destructive_change'
             | 'students.bulk_delete'
             | 'universities.bulk_delete'
             | 'news.bulk_delete'
@@ -1184,6 +1399,146 @@ export interface SecurityCenterSettings {
         disableStudentLogins: boolean;
         disablePaymentWebhooks: boolean;
         disableExamStarts: boolean;
+    };
+    authentication?: {
+        loginAttemptsLimit: number;
+        lockDurationMinutes: number;
+        genericErrorMessages: boolean;
+        verificationRequired: boolean;
+        allowedLoginMethods: Array<'username' | 'email' | 'phone'>;
+        accountLockEnabled: boolean;
+        newDeviceAlerts: boolean;
+        suspiciousLoginAlerts: boolean;
+        adminLoginAlerts: boolean;
+        throttleWindowMinutes: number;
+        otpResendLimit: number;
+        otpVerifyLimit: number;
+        recaptchaEnabled: boolean;
+    };
+    passwordPolicies?: {
+        default: {
+            minLength: number;
+            requireUppercase: boolean;
+            requireLowercase: boolean;
+            requireNumber: boolean;
+            requireSpecial: boolean;
+            denyCommonPasswords: boolean;
+            preventReuseCount: number;
+            expiryDays: number;
+            forceResetOnFirstLogin: boolean;
+        };
+        admin: {
+            minLength: number;
+            requireUppercase: boolean;
+            requireLowercase: boolean;
+            requireNumber: boolean;
+            requireSpecial: boolean;
+            denyCommonPasswords: boolean;
+            preventReuseCount: number;
+            expiryDays: number;
+            forceResetOnFirstLogin: boolean;
+        };
+        staff: {
+            minLength: number;
+            requireUppercase: boolean;
+            requireLowercase: boolean;
+            requireNumber: boolean;
+            requireSpecial: boolean;
+            denyCommonPasswords: boolean;
+            preventReuseCount: number;
+            expiryDays: number;
+            forceResetOnFirstLogin: boolean;
+        };
+        student: {
+            minLength: number;
+            requireUppercase: boolean;
+            requireLowercase: boolean;
+            requireNumber: boolean;
+            requireSpecial: boolean;
+            denyCommonPasswords: boolean;
+            preventReuseCount: number;
+            expiryDays: number;
+            forceResetOnFirstLogin: boolean;
+        };
+        strengthMeterEnabled: boolean;
+    };
+    twoFactor?: {
+        requireForRoles: string[];
+        optionalForStudents: boolean;
+        allowedMethods: Array<'authenticator' | 'email' | 'sms'>;
+        defaultMethod: 'authenticator' | 'email' | 'sms';
+        emailFallbackEnabled: boolean;
+        smsFallbackEnabled: boolean;
+        backupCodesEnabled: boolean;
+        stepUpForSensitiveActions: boolean;
+        otpExpiryMinutes: number;
+        maxAttempts: number;
+    };
+    sessions?: {
+        accessTokenTTLMinutes: number;
+        refreshTokenTTLDays: number;
+        idleTimeoutMinutes: number;
+        absoluteTimeoutHours: number;
+        rememberDeviceDays: number;
+        maxActiveSessionsPerUser: number;
+        allowConcurrentSessions: boolean;
+    };
+    accessControl?: {
+        enforceRoutePolicies: boolean;
+        allowedAdminIPs: string[];
+        requireApprovalForRiskyActions: boolean;
+        sensitiveActionReasonRequired: boolean;
+        exportAllowedRoles: string[];
+    };
+    verificationRecovery?: {
+        requireVerifiedEmailForStudents: boolean;
+        requireVerifiedEmailForAdmins: boolean;
+        phoneVerificationEnabled: boolean;
+        emailVerificationExpiryHours: number;
+        passwordResetExpiryMinutes: number;
+        resendCooldownMinutes: number;
+        allowAdminRecovery: boolean;
+    };
+    uploadSecurity?: {
+        publicAllowedExtensions: string[];
+        protectedAllowedExtensions: string[];
+        maxImageSizeMB: number;
+        maxDocumentSizeMB: number;
+        blockDangerousExtensions: boolean;
+        protectedAccessEnabled: boolean;
+        virusScanStatus: 'disabled' | 'hook_ready' | 'enabled';
+    };
+    alerting?: {
+        recipients: string[];
+        failedLoginThreshold: number;
+        otpFailureThreshold: number;
+        backupFailureAlerts: boolean;
+        providerChangeAlerts: boolean;
+        exportAlerts: boolean;
+        suspiciousAdminAlerts: boolean;
+    };
+    exportSecurity?: {
+        allowedRoles: string[];
+        requireApproval: boolean;
+        requireReason: boolean;
+        logAllExports: boolean;
+        maskSensitiveFields: boolean;
+    };
+    backupRestore?: {
+        backupHealthWarnAfterHours: number;
+        requireRestoreApproval: boolean;
+        archiveBeforeHardDelete: boolean;
+        showStatusOnDashboard: boolean;
+    };
+    runtimeGuards?: {
+        maintenanceMode: boolean;
+        blockNewRegistrations: boolean;
+        readOnlyMode: boolean;
+        disableStudentLogins: boolean;
+        disablePaymentWebhooks: boolean;
+        disableExamStarts: boolean;
+        adminPanelEnabled: boolean;
+        testingAccessMode: boolean;
     };
     updatedBy?: string | null;
     updatedAt?: string | null;
@@ -1536,6 +1891,47 @@ export interface ApiNews {
         citations?: string[];
         noHallucinationPassed?: boolean;
         warning?: string;
+    };
+    aiEnrichment?: {
+        shortSummary?: string;
+        detailedExplanation?: string;
+        studentFriendlyExplanation?: string;
+        keyPoints?: string[];
+        suggestedCategory?: string;
+        suggestedTags?: string[];
+        importanceHint?: string;
+        suggestedAudience?: string;
+        smsText?: string;
+        emailSubject?: string;
+        emailBody?: string;
+        importantDates?: string[];
+        citations?: string[];
+        confidence?: number;
+        provider?: string;
+        model?: string;
+        warning?: string;
+    };
+    classification?: {
+        primaryCategory?: string;
+        tags?: string[];
+        universityIds?: string[];
+        clusterIds?: string[];
+        groupIds?: string[];
+    };
+    priority?: 'normal' | 'priority' | 'breaking';
+    displayType?: 'news' | 'update';
+    publishOutcome?: {
+        type?: 'news' | 'notice' | 'update';
+        targetId?: string;
+        publishedAt?: string;
+        publishedBy?: string;
+    };
+    deliveryMeta?: {
+        lastJobId?: string;
+        lastChannel?: string;
+        lastAudienceSummary?: string;
+        lastSentAt?: string;
+        lastStatus?: string;
     };
     reviewMeta?: {
         reviewerId?: { _id: string; fullName: string; email: string };
@@ -2485,7 +2881,7 @@ export interface ApiCertificateVerification {
     };
 }
 
-/* â”€â”€ Public Universities â”€â”€ */
+/* — Public Universities — */
 export interface UniversityCategorySummary {
     categoryName: string;
     order: number;
@@ -2502,8 +2898,8 @@ export interface UniversityListQuery {
     limit?: number;
 }
 
-export const getUniversities = (params: Record<string, string | number> = {}) =>
-    api.get<{ universities: ApiUniversity[]; pagination: { total: number; page: number; limit: number; pages: number } }>('/universities', { params });
+export const getUniversities = (params: Record<string, string | number> = {}, signal?: AbortSignal) =>
+    api.get<{ universities: ApiUniversity[]; pagination: { total: number; page: number; limit: number; pages: number } }>('/universities', { params, signal });
 
 export const getUniversityCategories = () =>
     api.get<{ categories: UniversityCategorySummary[] }>('/university-categories');
@@ -2511,15 +2907,15 @@ export const getUniversityCategories = () =>
 export const getUniversityBySlug = (slug: string) =>
     api.get<{ university: ApiUniversity }>(`/universities/${slug}`);
 
-/* â”€â”€ Contact â”€â”€ */
+/* — Contact — */
 export interface ContactPayload { name: string; email: string; phone?: string; subject: string; message: string; }
 export const submitContact = (data: ContactPayload) => api.post('/contact', data);
 
-/* â”€â”€ Public Resources â”€â”€ */
+/* — Public Resources — */
 export const getResources = (params: Record<string, string | number> = {}) =>
     api.get('/resources', { params });
 
-/* â”€â”€ Public Dynamic Home System & Settings â”€â”€ */
+/* — Public Dynamic Home System & Settings — */
 export const getPublicSettings = () => api.get<ApiWebsiteSettings>('/settings/public');
 export const getPublicSocialLinks = () =>
     api.get<{ items: PublicSocialLinkItem[] }>('/social-links/public');
@@ -2732,8 +3128,19 @@ export const adminToggleUniversityCategory = (id: string) =>
 export const adminDeleteUniversityCategory = (id: string) =>
     api.delete<{ message: string }>(`/${ADMIN_PATH}/university-categories/${id}`);
 
-export const adminExportUniversitiesSheet = (params: Record<string, string | number> = {}) =>
-    api.get(`/${ADMIN_PATH}/universities/export`, { params, responseType: 'blob' });
+export const adminExportUniversitiesSheet = async (
+    params: Record<string, string | number> = {},
+    proof?: SensitiveActionProof,
+) =>
+    api.get(`/${ADMIN_PATH}/universities/export`, {
+        params,
+        responseType: 'blob',
+        headers: await resolveSensitiveActionHeaders({
+            actionLabel: 'export university data',
+            defaultReason: 'Export university records',
+            proof,
+        }),
+    });
 
 export interface AdminUniversityCluster {
     _id: string;
@@ -3211,7 +3618,8 @@ export const adminGetUserById = (id: string) => api.get(`/${ADMIN_PATH}/users/${
 export const adminCreateUser = (data: Record<string, unknown>) => api.post(`/${ADMIN_PATH}/users`, data);
 export const adminUpdateUser = (id: string, data: Record<string, unknown>) => api.put(`/${ADMIN_PATH}/users/${id}`, data);
 export const adminDeleteUser = (id: string) => api.delete(`/${ADMIN_PATH}/users/${id}`);
-export const adminUpdateUserRole = (id: string, role: string) => api.patch(`/${ADMIN_PATH}/users/${id}/role`, { role });
+export const adminUpdateUserRole = (id: string, role: string, proof?: SensitiveActionProof) =>
+    api.patch(`/${ADMIN_PATH}/users/${id}/role`, { role }, { headers: buildSensitiveActionHeaders(proof) });
 export const adminSetUserStatus = (id: string, status: string) => api.patch(`/${ADMIN_PATH}/users/${id}/status`, { status });
 export const adminToggleUserStatus = (id: string) => api.patch(`/${ADMIN_PATH}/users/${id}/toggle-status`);
 export const adminSetUserPermissions = (id: string, permissions: Record<string, boolean>) =>
@@ -3263,16 +3671,12 @@ export const adminGetStudentProfile = (id: string) => api.get(`/${ADMIN_PATH}/us
 export const adminUpdateStudentProfile = (id: string, data: any) => api.put(`/${ADMIN_PATH}/users/${id}/student-profile`, data);
 export const adminGetAdminProfile = (id: string) => api.get(`/${ADMIN_PATH}/users/${id}/admin-profile`);
 export const adminUpdateAdminProfile = (id: string, data: Record<string, unknown>) => api.put(`/${ADMIN_PATH}/users/${id}/admin-profile`, data);
-export const adminResetUserPassword = (userId: string, newPassword?: string) =>
-    api.post(`/${ADMIN_PATH}/users/${userId}/reset-password`, { newPassword });
-export const adminMfaConfirm = (password: string) =>
-    api.post<{ message: string; mfaToken: string }>(`/${ADMIN_PATH}/auth/mfa/confirm`, { password });
-export const adminRevealStudentPassword = (studentId: string, payload: { mfaToken: string; reason: string }) =>
-    api.post<{
-        message: string;
-        user: { _id: string; username: string; email: string; role: string };
-        password: string;
-    }>(`/${ADMIN_PATH}/students/${studentId}/password/reveal`, payload);
+export const adminResetUserPassword = (userId: string, proof?: SensitiveActionProof) =>
+    api.post<{ message?: string; inviteSent?: boolean }>(
+        `/${ADMIN_PATH}/users/${userId}/reset-password`,
+        {},
+        { headers: buildSensitiveActionHeaders(proof) },
+    );
 export const adminIssueGuardianOtp = (studentId: string) =>
     api.post(`/${ADMIN_PATH}/users/${studentId}/guardian-otp/issue`);
 export const adminConfirmGuardianOtp = (studentId: string, code: string) =>
@@ -3302,11 +3706,18 @@ export const adminGetStudents = (params: AdminStudentFilter) => api.get<{
     summary: Record<string, number>;
 }>(`/${ADMIN_PATH}/students`, { params });
 
-export const adminExportStudents = (
-    params: (AdminStudentFilter & { format?: 'csv' | 'xlsx' }) | undefined = undefined
+export const adminExportStudents = async (
+    params: (AdminStudentFilter & { format?: 'csv' | 'xlsx' }) | undefined = undefined,
+    proof?: SensitiveActionProof,
 ) => api.get(`/${ADMIN_PATH}/export-students`, {
     params: { ...params, format: params?.format || 'xlsx' },
     responseType: 'blob',
+    headers: await resolveSensitiveActionHeaders({
+        actionLabel: 'export student data',
+        defaultReason: 'Export student records',
+        requireOtpHint: true,
+        proof,
+    }),
 });
 
 export const adminCreateStudent = (data: Record<string, unknown>) =>
@@ -3327,12 +3738,19 @@ export const adminGetStudentExams = (id: string) =>
 export const adminGetStudentGroups = () =>
     api.get<{ items: AdminStudentGroup[]; lastUpdatedAt: string }>(`/${ADMIN_PATH}/student-groups`);
 
-export const adminExportStudentGroups = (
-    params: { q?: string; format?: 'csv' | 'xlsx' } = {}
+export const adminExportStudentGroups = async (
+    params: { q?: string; format?: 'csv' | 'xlsx' } = {},
+    proof?: SensitiveActionProof,
 ) =>
     api.get(`/${ADMIN_PATH}/student-groups/export`, {
         params: { ...params, format: params.format || 'xlsx' },
         responseType: 'blob',
+        headers: await resolveSensitiveActionHeaders({
+            actionLabel: 'export student group data',
+            defaultReason: 'Export student groups',
+            requireOtpHint: true,
+            proof,
+        }),
     });
 
 export const adminImportStudentGroups = (formData: FormData) =>
@@ -3538,6 +3956,23 @@ export interface AdminNoticeItem {
     message: string;
     target: 'all' | 'groups' | 'students';
     targetIds?: string[];
+    sourceNewsId?: string;
+    priority?: 'normal' | 'priority' | 'breaking';
+    classification?: {
+        primaryCategory?: string;
+        tags?: string[];
+        universityIds?: string[];
+        clusterIds?: string[];
+        groupIds?: string[];
+    };
+    deliveryMeta?: {
+        lastJobId?: string;
+        lastChannel?: 'sms' | 'email' | 'both';
+        lastAudienceSummary?: string;
+        lastSentAt?: string;
+    };
+    templateRef?: string;
+    triggerRef?: string;
     startAt?: string;
     endAt?: string | null;
     isActive: boolean;
@@ -3705,20 +4140,44 @@ export const adminDispatchReminders = () =>
 
 export const adminGetNotices = (params?: { page?: number; limit?: number; target?: string; status?: string }) =>
     api.get<{ items: AdminNoticeItem[]; total: number; page: number; pages: number }>(`/${ADMIN_PATH}/notices`, { params });
+export const adminNewsV2GetNotices = (params?: { page?: number; limit?: number; target?: string; status?: string; sourceNewsId?: string }) =>
+    api.get<{ items: AdminNoticeItem[]; total: number; page: number; pages: number }>(`/${ADMIN_PATH}/news/notices`, { params });
 
 export const adminCreateNotice = (data: {
     title: string;
     message: string;
     target?: 'all' | 'groups' | 'students';
     targetIds?: string[];
+    sourceNewsId?: string;
+    priority?: 'normal' | 'priority' | 'breaking';
+    classification?: AdminNoticeItem['classification'];
+    templateRef?: string;
+    triggerRef?: string;
     startAt?: string;
     endAt?: string;
     isActive?: boolean;
 }) =>
     api.post<{ item: AdminNoticeItem; message: string }>(`/${ADMIN_PATH}/notices`, data);
+export const adminNewsV2CreateNotice = (data: {
+    title: string;
+    message: string;
+    target?: 'all' | 'groups' | 'students';
+    targetIds?: string[];
+    sourceNewsId?: string;
+    priority?: 'normal' | 'priority' | 'breaking';
+    classification?: AdminNoticeItem['classification'];
+    templateRef?: string;
+    triggerRef?: string;
+    startAt?: string;
+    endAt?: string;
+    isActive?: boolean;
+}) =>
+    api.post<{ item: AdminNoticeItem; message: string }>(`/${ADMIN_PATH}/news/notices`, data);
 
 export const adminToggleNotice = (id: string) =>
     api.patch<{ item: AdminNoticeItem; message: string }>(`/${ADMIN_PATH}/notices/${id}/toggle`);
+export const adminNewsV2ToggleNotice = (id: string) =>
+    api.patch<{ item: AdminNoticeItem; message: string }>(`/${ADMIN_PATH}/news/notices/${id}/toggle`);
 
 export const adminGetSupportTickets = (params?: {
     page?: number;
@@ -3753,10 +4212,11 @@ export const adminRunBackup = (data?: { type?: 'full' | 'incremental'; storage?:
 export const adminListBackups = (params?: { page?: number; limit?: number }) =>
     api.get<{ items: AdminBackupJobItem[]; total: number; page: number; pages: number }>(`/${ADMIN_PATH}/backups`, { params });
 
-export const adminRestoreBackup = (id: string, confirmation: string) =>
+export const adminRestoreBackup = (id: string, confirmation: string, proof?: SensitiveActionProof) =>
     api.post<{ message: string; restoredFrom: string; preRestoreSnapshotId: string }>(
         `/${ADMIN_PATH}/backups/${id}/restore`,
         { confirmation },
+        { headers: buildSensitiveActionHeaders(proof) },
     );
 
 export const adminDownloadBackup = (id: string) =>
@@ -3764,32 +4224,35 @@ export const adminDownloadBackup = (id: string) =>
 
 export const getAdminBackupDownloadUrl = (id: string) => resolveApiUrl(`/${ADMIN_PATH}/backups/${id}/download`);
 
-/* Admin - Security */
-export const adminGetSecuritySettings = () =>
-    api.get<{ security: AdminSecuritySettings }>(`/${ADMIN_PATH}/security/settings`);
-
-export const adminUpdateSecuritySettings = (data: Partial<AdminSecuritySettings>) =>
-    api.put<{ security: AdminSecuritySettings; message: string }>(`/${ADMIN_PATH}/security/settings`, data);
-
 export const adminGetSecurityCenterSettings = () =>
     api.get<{ settings: SecurityCenterSettings }>(`/${ADMIN_PATH}/security-settings`);
 
-export const adminUpdateSecurityCenterSettings = (data: Partial<SecurityCenterSettings>) =>
-    api.put<{ settings: SecurityCenterSettings; message: string }>(`/${ADMIN_PATH}/security-settings`, data);
-
-export const adminResetSecurityCenterSettings = () =>
-    api.post<{ settings: SecurityCenterSettings; message: string }>(`/${ADMIN_PATH}/security-settings/reset-defaults`);
-
-export const adminForceLogoutAllUsers = (reason?: string) =>
-    api.post<{ terminatedCount: number; terminatedAt: string; message: string }>(
-        `/${ADMIN_PATH}/security-settings/force-logout-all`,
-        { reason },
+export const adminUpdateSecurityCenterSettings = (data: Partial<SecurityCenterSettings>, proof?: SensitiveActionProof) =>
+    api.put<{ settings: SecurityCenterSettings; message: string }>(
+        `/${ADMIN_PATH}/security-settings`,
+        data,
+        { headers: buildSensitiveActionHeaders(proof) },
     );
 
-export const adminSetAdminPanelLockState = (adminPanelEnabled: boolean) =>
+export const adminResetSecurityCenterSettings = (proof?: SensitiveActionProof) =>
+    api.post<{ settings: SecurityCenterSettings; message: string }>(
+        `/${ADMIN_PATH}/security-settings/reset-defaults`,
+        {},
+        { headers: buildSensitiveActionHeaders(proof) },
+    );
+
+export const adminForceLogoutAllUsers = (reason?: string, proof?: SensitiveActionProof) =>
+    api.post<{ terminatedCount: number; terminatedAt: string; message: string }>(
+        `/${ADMIN_PATH}/security-settings/force-logout-all`,
+        { reason: reason || proof?.reason },
+        { headers: buildSensitiveActionHeaders(proof) },
+    );
+
+export const adminSetAdminPanelLockState = (adminPanelEnabled: boolean, proof?: SensitiveActionProof) =>
     api.post<{ settings: SecurityCenterSettings; message: string }>(
         `/${ADMIN_PATH}/security-settings/admin-panel-lock`,
         { adminPanelEnabled },
+        { headers: buildSensitiveActionHeaders(proof) },
     );
 
 export const adminGetPendingApprovals = (params?: { limit?: number }) =>
@@ -3829,8 +4292,12 @@ export const adminGetSecuritySessions = (params?: {
 }) =>
     api.get<{ items: AdminSecuritySessionItem[]; total: number; page: number; pages: number }>(`/${ADMIN_PATH}/security/sessions`, { params });
 
-export const adminForceLogout = (payload: { userId?: string; sessionId?: string; reason?: string }) =>
-    api.post<{ terminatedCount: number; sessionIds: string[]; terminatedAt: string; message: string }>(`/${ADMIN_PATH}/security/force-logout`, payload);
+export const adminForceLogout = (payload: { userId?: string; sessionId?: string; reason?: string }, proof?: SensitiveActionProof) =>
+    api.post<{ terminatedCount: number; sessionIds: string[]; terminatedAt: string; message: string }>(
+        `/${ADMIN_PATH}/security/force-logout`,
+        payload,
+        { headers: buildSensitiveActionHeaders(proof) },
+    );
 
 export const adminGetTwoFactorUsers = (params?: {
     role?: string;
@@ -3841,11 +4308,19 @@ export const adminGetTwoFactorUsers = (params?: {
 }) =>
     api.get<{ items: AdminTwoFactorUserItem[]; total: number; page: number; pages: number }>(`/${ADMIN_PATH}/security/2fa/users`, { params });
 
-export const adminUpdateTwoFactorUser = (id: string, data: { twoFactorEnabled?: boolean; two_factor_method?: 'email' | 'sms' | 'authenticator' | null }) =>
-    api.patch<{ message: string; user: AdminTwoFactorUserItem }>(`/${ADMIN_PATH}/security/2fa/users/${id}`, data);
+export const adminUpdateTwoFactorUser = (
+    id: string,
+    data: { twoFactorEnabled?: boolean; two_factor_method?: 'email' | 'sms' | 'authenticator' | null },
+    proof?: SensitiveActionProof,
+) =>
+    api.patch<{ message: string; user: AdminTwoFactorUserItem }>(
+        `/${ADMIN_PATH}/security/2fa/users/${id}`,
+        data,
+        { headers: buildSensitiveActionHeaders(proof) },
+    );
 
-export const adminResetTwoFactorUser = (id: string) =>
-    api.post<{ message: string }>(`/${ADMIN_PATH}/security/2fa/users/${id}/reset`);
+export const adminResetTwoFactorUser = (id: string, proof?: SensitiveActionProof) =>
+    api.post<{ message: string }>(`/${ADMIN_PATH}/security/2fa/users/${id}/reset`, {}, { headers: buildSensitiveActionHeaders(proof) });
 
 export const adminGetTwoFactorFailures = (params?: {
     userId?: string;
@@ -3885,9 +4360,21 @@ export const adminAssignBadge = (studentId: string, badgeId: string, note?: stri
     api.post(`/${ADMIN_PATH}/badges/assign`, { studentId, badgeId, note });
 export const adminRevokeBadge = (studentId: string, badgeId: string) =>
     api.delete(`/${ADMIN_PATH}/badges/assign/${studentId}/${badgeId}`);
-export const adminUploadMedia = (file: File) => {
+export const adminUploadMedia = (
+    file: File,
+    options: {
+        visibility?: 'public' | 'protected';
+        category?: 'profile_photo' | 'student_document' | 'payment_proof' | 'support_attachment' | 'exam_upload' | 'admin_upload';
+        accessRoles?: string[];
+    } = {},
+) => {
     const formData = new FormData();
     formData.append('file', file);
+    if (options.visibility) formData.append('visibility', options.visibility);
+    if (options.category) formData.append('category', options.category);
+    if (Array.isArray(options.accessRoles) && options.accessRoles.length > 0) {
+        formData.append('accessRoles', options.accessRoles.join(','));
+    }
     return api.post<{ url: string; filename: string; mimetype: string; size: number }>(`/${ADMIN_PATH}/upload`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
     });
@@ -3922,6 +4409,27 @@ export interface ApiNewsV2Source {
     lastFetchedAt?: string;
     lastSuccessAt?: string;
     lastError?: string;
+    lastHttpStatus?: number;
+    lastParseError?: string;
+    lastDuplicateRate?: number;
+    lastCreatedCount?: number;
+    lastExtractionMode?: string;
+    consecutiveFailureCount?: number;
+    lastFetchStatus?: string;
+    healthState?: 'healthy' | 'warning' | 'failed' | 'inactive' | 'invalid_config';
+    inactiveSource?: boolean;
+    placeholderSource?: boolean;
+    sourceWarnings?: string[];
+    recentJobs?: Array<{
+        _id?: string;
+        status?: string;
+        startedAt?: string;
+        endedAt?: string;
+        createdCount?: number;
+        duplicateCount?: number;
+        failedCount?: number;
+        jobErrors?: Array<{ sourceId?: string; message?: string }>;
+    }>;
     language?: string;
     tagsDefault: string[];
     categoryDefault?: string;
@@ -3981,6 +4489,8 @@ export interface ApiNewsV2Settings {
         stylePreset: 'short' | 'standard' | 'detailed';
         apiProviderUrl: string;
         apiKey: string;
+        apiKeyConfigured?: boolean;
+        apiKeyMasked?: string;
         customPrompt: string;
         strictNoHallucination: boolean;
         maxLength: number;
@@ -4000,6 +4510,8 @@ export interface ApiNewsV2Settings {
         maxLength: number;
         promptTemplate?: string;
         autoRemoveDuplicates?: boolean;
+        apiKeyConfigured?: boolean;
+        apiKeyMasked?: string;
     };
     appearance: {
         layoutMode: 'rss_reader' | 'grid' | 'list';
@@ -4055,16 +4567,38 @@ export interface ApiNewsV2Settings {
         openOriginalWhenExtractionIncomplete?: boolean;
         autoExpireDays?: number | null;
     };
+    communication?: {
+        allowPublishSend?: boolean;
+        allowNoticeConversion?: boolean;
+        defaultChannels?: Array<'sms' | 'email'>;
+        defaultAudienceType?: 'all' | 'group' | 'filter' | 'manual';
+        defaultRecipientMode?: 'student' | 'guardian' | 'both';
+        defaultNoticeTarget?: 'all' | 'groups' | 'students';
+        exposeStudentFriendlyExplanation?: boolean;
+        exposeKeyPoints?: boolean;
+    };
+    cleanup?: {
+        staleDraftDays?: number | null;
+        archiveAfterPublishDays?: number | null;
+        removeUnusedMediaAfterDays?: number | null;
+        disableSourceAfterFailureCount?: number | null;
+    };
+    help?: {
+        enabled?: boolean;
+        mode?: 'drawer' | 'popover';
+        version?: string;
+    };
 }
 
 export const adminNewsV2GetDashboard = () =>
     api.get<{
-        cards: { pending: number; duplicate: number; published: number; scheduled: number; fetchFailed: number; activeSources: number };
+        cards: { pending: number; duplicate: number; published: number; scheduled: number; fetchFailed: number; activeSources: number; unhealthySources?: number };
+        health?: { activeSources: number; unhealthySources: number; lastFetchCompletedAt?: string | null };
         latestJobs: any[];
         latestRssItems: ApiNews[];
-    }>(`/${ADMIN_PATH}/news-v2/dashboard`);
+    }>(`/${ADMIN_PATH}/news/dashboard`);
 export const adminNewsV2FetchNow = (sourceIds: string[] = []) =>
-    api.post<{ message: string; stats: { fetchedCount: number; createdCount: number; duplicateCount: number; failedCount: number; errors: Array<{ sourceId?: string; message: string }> } }>(`/${ADMIN_PATH}/rss/fetch-now`, { sourceIds });
+    api.post<{ message: string; stats: { fetchedCount: number; createdCount: number; duplicateCount: number; failedCount: number; errors: Array<{ sourceId?: string; message: string }> } }>(`/${ADMIN_PATH}/news/fetch-now`, { sourceIds });
 export const adminNewsV2GetItems = (params: Record<string, string | number | boolean> = {}) =>
     api.get<{ items: ApiNews[]; total: number; page: number; pages: number }>(`/${ADMIN_PATH}/news`, { params });
 export const adminNewsV2GetItemById = (id: string) =>
@@ -4083,10 +4617,61 @@ export const adminNewsV2Reject = (id: string, reason = '') =>
     api.post<{ item: ApiNews; message: string }>(`/${ADMIN_PATH}/news/${id}/reject`, { reason });
 export const adminNewsV2PublishNow = (id: string) =>
     api.post<{ item: ApiNews; message: string }>(`/${ADMIN_PATH}/news/${id}/publish-now`);
+export const adminNewsV2PublishSend = (
+    id: string,
+    payload: {
+        campaignName?: string;
+        channels?: Array<'sms' | 'email'>;
+        templateKey?: string;
+        customBody?: string;
+        customSubject?: string;
+        audienceType?: 'all' | 'group' | 'filter' | 'manual';
+        audienceGroupId?: string;
+        audienceFilters?: Record<string, unknown>;
+        manualStudentIds?: string[];
+        guardianTargeted?: boolean;
+        recipientMode?: 'student' | 'guardian' | 'both';
+        scheduledAtUTC?: string;
+        convertToNotice?: boolean;
+        publishAsNotice?: boolean;
+        target?: 'all' | 'groups' | 'students';
+        targetIds?: string[];
+        templateRef?: string;
+        triggerRef?: string;
+        reason?: string;
+    } = {},
+    proof?: SensitiveActionProof,
+) =>
+    api.post<{
+        item: ApiNews;
+        notice?: AdminNoticeItem;
+        delivery?: { jobId: string; sent: number; failed: number; skipped: number };
+        message: string;
+        warning?: string;
+        warnings?: string[];
+    }>(`/${ADMIN_PATH}/news/${id}/publish-send`, payload, { headers: buildSensitiveActionHeaders(proof) });
 export const adminNewsV2Schedule = (id: string, scheduleAt: string) =>
     api.post<{ item: ApiNews; message: string }>(`/${ADMIN_PATH}/news/${id}/schedule`, { scheduleAt });
 export const adminNewsV2MoveToDraft = (id: string) =>
     api.post<{ item: ApiNews; message: string }>(`/${ADMIN_PATH}/news/${id}/move-to-draft`);
+export const adminNewsV2Archive = (id: string) =>
+    api.post<{ item: ApiNews; message: string }>(`/${ADMIN_PATH}/news/${id}/archive`);
+export const adminNewsV2ConvertToNotice = (
+    id: string,
+    payload: {
+        title?: string;
+        message?: string;
+        target?: 'all' | 'groups' | 'students';
+        targetIds?: string[];
+        startAt?: string;
+        endAt?: string;
+        priority?: 'normal' | 'priority' | 'breaking';
+        templateRef?: string;
+        triggerRef?: string;
+        isActive?: boolean;
+    } = {},
+) =>
+    api.post<{ item: ApiNews; notice: AdminNoticeItem; message: string }>(`/${ADMIN_PATH}/news/${id}/convert-to-notice`, payload);
 export const adminNewsV2PublishAnyway = (id: string) =>
     api.post<{ item: ApiNews; message: string }>(`/${ADMIN_PATH}/news/${id}/publish-anyway`);
 export const adminNewsV2MergeDuplicate = (
@@ -4112,58 +4697,58 @@ export const adminNewsV2AiCheckItem = (
         };
     }>(`/${ADMIN_PATH}/news/${id}/ai-check`, payload);
 export const adminNewsV2BulkApprove = (ids: string[]) =>
-    api.post<{ modifiedCount: number; message: string }>(`/${ADMIN_PATH}/news-v2/items/bulk-approve`, { ids });
+    api.post<{ modifiedCount: number; message: string }>(`/${ADMIN_PATH}/news/bulk-approve`, { ids });
 export const adminNewsV2BulkReject = (ids: string[], reason = '') =>
-    api.post<{ modifiedCount: number; message: string }>(`/${ADMIN_PATH}/news-v2/items/bulk-reject`, { ids, reason });
+    api.post<{ modifiedCount: number; message: string }>(`/${ADMIN_PATH}/news/bulk-reject`, { ids, reason });
 
 export const adminNewsV2GetSources = () =>
-    api.get<{ items: ApiNewsV2Source[] }>(`/${ADMIN_PATH}/rss-sources`);
+    api.get<{ items: ApiNewsV2Source[] }>(`/${ADMIN_PATH}/news/sources`);
 export const adminGetRssSources = () =>
-    api.get<{ items: ApiNewsV2Source[] }>(`/${ADMIN_PATH}/rss-sources`);
+    api.get<{ items: ApiNewsV2Source[] }>(`/${ADMIN_PATH}/news/sources`);
 export const adminNewsV2CreateSource = (data: Partial<ApiNewsV2Source>) =>
-    api.post<{ item: ApiNewsV2Source; message: string }>(`/${ADMIN_PATH}/rss-sources`, data);
+    api.post<{ item: ApiNewsV2Source; message: string }>(`/${ADMIN_PATH}/news/sources`, data);
 export const adminCreateRssSource = (data: Partial<ApiNewsV2Source>) =>
-    api.post<{ item: ApiNewsV2Source; message: string }>(`/${ADMIN_PATH}/rss-sources`, data);
+    api.post<{ item: ApiNewsV2Source; message: string }>(`/${ADMIN_PATH}/news/sources`, data);
 export const adminNewsV2UpdateSource = (id: string, data: Partial<ApiNewsV2Source>) =>
-    api.put<{ item: ApiNewsV2Source; message: string }>(`/${ADMIN_PATH}/rss-sources/${id}`, data);
+    api.put<{ item: ApiNewsV2Source; message: string }>(`/${ADMIN_PATH}/news/sources/${id}`, data);
 export const adminUpdateRssSource = (id: string, data: Partial<ApiNewsV2Source>) =>
-    api.put<{ item: ApiNewsV2Source; message: string }>(`/${ADMIN_PATH}/rss-sources/${id}`, data);
+    api.put<{ item: ApiNewsV2Source; message: string }>(`/${ADMIN_PATH}/news/sources/${id}`, data);
 export const adminNewsV2DeleteSource = (id: string) =>
-    api.delete<{ message: string }>(`/${ADMIN_PATH}/rss-sources/${id}`);
+    api.delete<{ message: string }>(`/${ADMIN_PATH}/news/sources/${id}`);
 export const adminDeleteRssSource = (id: string) =>
-    api.delete<{ message: string }>(`/${ADMIN_PATH}/rss-sources/${id}`);
+    api.delete<{ message: string }>(`/${ADMIN_PATH}/news/sources/${id}`);
 export const adminNewsV2TestSource = (id: string) =>
-    api.post<{ ok: boolean; title?: string; preview?: Array<{ title: string; link: string; pubDate: string }>; message?: string }>(`/${ADMIN_PATH}/rss-sources/${id}/test`);
+    api.post<{ ok: boolean; title?: string; preview?: Array<{ title: string; link: string; pubDate: string }>; message?: string }>(`/${ADMIN_PATH}/news/sources/${id}/test`);
 export const adminTestRssSource = (id: string) =>
-    api.post<{ ok: boolean; title?: string; preview?: Array<{ title: string; link: string; pubDate: string }>; message?: string }>(`/${ADMIN_PATH}/rss-sources/${id}/test`);
+    api.post<{ ok: boolean; title?: string; preview?: Array<{ title: string; link: string; pubDate: string }>; message?: string }>(`/${ADMIN_PATH}/news/sources/${id}/test`);
 export const adminNewsV2ReorderSources = (ids: string[]) =>
-    api.post<{ message: string }>(`/${ADMIN_PATH}/news-v2/sources/reorder`, { ids });
+    api.post<{ message: string }>(`/${ADMIN_PATH}/news/sources/reorder`, { ids });
 
 export const adminNewsV2GetAppearance = () =>
-    api.get<{ appearance: ApiNewsV2Settings['appearance'] }>(`/${ADMIN_PATH}/news-v2/settings/appearance`);
+    api.get<{ appearance: ApiNewsV2Settings['appearance'] }>(`/${ADMIN_PATH}/news/settings/appearance`);
 export const adminNewsV2UpdateAppearance = (data: Partial<ApiNewsV2Settings['appearance']>) =>
-    api.put<{ appearance: ApiNewsV2Settings['appearance']; message: string }>(`/${ADMIN_PATH}/news-v2/settings/appearance`, data);
+    api.put<{ appearance: ApiNewsV2Settings['appearance']; message: string }>(`/${ADMIN_PATH}/news/settings/appearance`, data);
 export const adminNewsV2GetAiSettings = () =>
-    api.get<{ ai: ApiNewsV2Settings['ai'] }>(`/${ADMIN_PATH}/news-v2/settings/ai`);
+    api.get<{ ai: ApiNewsV2Settings['ai'] }>(`/${ADMIN_PATH}/news/settings/ai`);
 export const adminNewsV2UpdateAiSettings = (data: Partial<ApiNewsV2Settings['ai']>) =>
-    api.put<{ ai: ApiNewsV2Settings['ai']; message: string }>(`/${ADMIN_PATH}/news-v2/settings/ai`, data);
+    api.put<{ ai: ApiNewsV2Settings['ai']; message: string }>(`/${ADMIN_PATH}/news/settings/ai`, data);
 export const adminNewsV2GetShareSettings = () =>
-    api.get<{ share: ApiNewsV2Settings['share'] }>(`/${ADMIN_PATH}/news-v2/settings/share`);
+    api.get<{ share: ApiNewsV2Settings['share'] }>(`/${ADMIN_PATH}/news/settings/share`);
 export const adminNewsV2UpdateShareSettings = (data: Partial<ApiNewsV2Settings['share']>) =>
-    api.put<{ share: ApiNewsV2Settings['share']; message: string }>(`/${ADMIN_PATH}/news-v2/settings/share`, data);
+    api.put<{ share: ApiNewsV2Settings['share']; message: string }>(`/${ADMIN_PATH}/news/settings/share`, data);
 export const adminGetNewsSettings = () =>
-    api.get<{ settings: ApiNewsV2Settings }>(`/${ADMIN_PATH}/news-settings`);
+    api.get<{ settings: ApiNewsV2Settings }>(`/${ADMIN_PATH}/news/settings`);
 export const adminUpdateNewsSettings = (data: Partial<ApiNewsV2Settings>) =>
-    api.put<{ settings: ApiNewsV2Settings; message: string }>(`/${ADMIN_PATH}/news-settings`, data);
+    api.put<{ settings: ApiNewsV2Settings; message: string }>(`/${ADMIN_PATH}/news/settings`, data);
 
 export const adminNewsV2GetMedia = (params: Record<string, string | number> = {}) =>
-    api.get<{ items: ApiNewsV2Media[]; total: number; page: number; pages: number }>(`/${ADMIN_PATH}/news-v2/media`, { params });
+    api.get<{ items: ApiNewsV2Media[]; total: number; page: number; pages: number }>(`/${ADMIN_PATH}/news/media`, { params });
 export const adminNewsV2UploadMedia = (file: File, payload?: { altText?: string; isDefaultBanner?: boolean }) => {
     const formData = new FormData();
     formData.append('file', file);
     if (payload?.altText) formData.append('altText', payload.altText);
     if (payload?.isDefaultBanner) formData.append('isDefaultBanner', 'true');
-    return api.post<{ item: ApiNewsV2Media; message: string }>(`/${ADMIN_PATH}/news-v2/media/upload`, formData, {
+    return api.post<{ item: ApiNewsV2Media; message: string }>(`/${ADMIN_PATH}/news/media/upload`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
     });
 };
@@ -4177,9 +4762,9 @@ export const adminUploadNewsMedia = (file: File, payload?: { altText?: string; i
     });
 };
 export const adminNewsV2MediaFromUrl = (url: string, altText = '', isDefaultBanner = false) =>
-    api.post<{ item: ApiNewsV2Media; message: string }>(`/${ADMIN_PATH}/news-v2/media/from-url`, { url, altText, isDefaultBanner });
+    api.post<{ item: ApiNewsV2Media; message: string }>(`/${ADMIN_PATH}/news/media/from-url`, { url, altText, isDefaultBanner });
 export const adminNewsV2DeleteMedia = (id: string) =>
-    api.delete<{ message: string }>(`/${ADMIN_PATH}/news-v2/media/${id}`);
+    api.delete<{ message: string }>(`/${ADMIN_PATH}/news/media/${id}`);
 
 export const adminNewsV2ExportNews = (
     options: {
@@ -4202,16 +4787,48 @@ export const adminNewsV2ExportNews = (
         responseType: 'blob',
     });
 };
-export const adminNewsV2ExportSources = (format: 'csv' | 'xlsx' = 'xlsx') =>
-    api.get(`/${ADMIN_PATH}/news/rss-sources/export`, { params: { format }, responseType: 'blob' });
-export const adminNewsV2ExportLogs = (format: 'csv' | 'xlsx' = 'xlsx') =>
-    api.get(`/${ADMIN_PATH}/news-v2/exports/logs`, { params: { format }, responseType: 'blob' });
-export const adminExportNewsHub = (params: Record<string, string | number> = {}) =>
-    api.get(`/${ADMIN_PATH}/news/export`, { params, responseType: 'blob' });
-export const adminExportRssSources = (format: 'csv' | 'xlsx' = 'xlsx') =>
-    api.get(`/${ADMIN_PATH}/news/rss-sources/export`, { params: { format }, responseType: 'blob' });
+export const adminNewsV2ExportSources = async (format: 'csv' | 'xlsx' = 'xlsx', proof?: SensitiveActionProof) =>
+    api.get(`/${ADMIN_PATH}/news/exports/sources`, {
+        params: { format },
+        responseType: 'blob',
+        headers: await resolveSensitiveActionHeaders({
+            actionLabel: 'export RSS source data',
+            defaultReason: 'Export RSS source records',
+            proof,
+        }),
+    });
+export const adminNewsV2ExportLogs = async (format: 'csv' | 'xlsx' = 'xlsx', proof?: SensitiveActionProof) =>
+    api.get(`/${ADMIN_PATH}/news/exports/logs`, {
+        params: { format },
+        responseType: 'blob',
+        headers: await resolveSensitiveActionHeaders({
+            actionLabel: 'export news logs',
+            defaultReason: 'Export news ingestion logs',
+            proof,
+        }),
+    });
+export const adminExportNewsHub = async (params: Record<string, string | number> = {}, proof?: SensitiveActionProof) =>
+    api.get(`/${ADMIN_PATH}/news/export`, {
+        params,
+        responseType: 'blob',
+        headers: await resolveSensitiveActionHeaders({
+            actionLabel: 'export news data',
+            defaultReason: 'Export news records',
+            proof,
+        }),
+    });
+export const adminExportRssSources = async (format: 'csv' | 'xlsx' = 'xlsx', proof?: SensitiveActionProof) =>
+    api.get(`/${ADMIN_PATH}/news/exports/sources`, {
+        params: { format },
+        responseType: 'blob',
+        headers: await resolveSensitiveActionHeaders({
+            actionLabel: 'export RSS sources',
+            defaultReason: 'Export RSS source records',
+            proof,
+        }),
+    });
 export const adminNewsV2GetAuditLogs = (params: Record<string, string | number> = {}) =>
-    api.get<{ items: ApiNewsV2AuditLog[]; total: number; page: number; pages: number }>(`/${ADMIN_PATH}/news-v2/audit-logs`, { params });
+    api.get<{ items: ApiNewsV2AuditLog[]; total: number; page: number; pages: number }>(`/${ADMIN_PATH}/news/audit-logs`, { params });
 export const adminGetNewsAuditLogs = (params: Record<string, string | number> = {}) =>
     api.get<{ items: ApiNewsV2AuditLog[]; total: number; page: number; pages: number }>(`/${ADMIN_PATH}/audit-logs`, {
         params: { ...params, module: 'news' },
@@ -4222,9 +4839,9 @@ export const getPublicNewsV2List = (params: Record<string, string | number> = {}
 export const getPublicNewsV2BySlug = (slug: string) =>
     api.get<{ item: ApiNews; related?: ApiNews[] }>(`/news/${slug}`);
 export const getPublicNewsV2Appearance = () =>
-    api.get<{ appearance: ApiNewsV2Settings['appearance'] }>('/news-v2/config/appearance');
+    api.get<{ appearance: ApiNewsV2Settings['appearance'] }>('/news/appearance');
 export const getPublicNewsV2Widgets = () =>
-    api.get<{ trending: ApiNews[]; categories: Array<{ _id: string; count: number }>; tags: Array<{ _id: string; count: number }> }>('/news-v2/widgets');
+    api.get<{ trending: ApiNews[]; categories: Array<{ _id: string; count: number }>; tags: Array<{ _id: string; count: number }> }>('/news/widgets');
 export const getPublicNewsSources = () =>
     api.get<{ items: ApiNewsPublicSource[] }>('/news/sources');
 export const getPublicNewsSettings = () =>
@@ -4333,27 +4950,61 @@ export const adminUpdateSettings = (data: Record<string, unknown>) =>
 
 
 /* â”€â”€ Admin â€” Data Exports â”€â”€ */
-export const adminExportNews = (format: 'csv' | 'xlsx' = 'xlsx') =>
+export const adminExportNews = async (format: 'csv' | 'xlsx' = 'xlsx', proof?: SensitiveActionProof) =>
     api.get(`/${ADMIN_PATH}/news/export`, {
         params: { format },
         responseType: 'blob',
+        headers: await resolveSensitiveActionHeaders({
+            actionLabel: 'export news data',
+            defaultReason: 'Export news records',
+            proof,
+        }),
     });
-export const adminExportSubscriptionPlans = (format: 'csv' | 'xlsx' = 'xlsx') =>
+export const adminExportSubscriptionPlans = async (format: 'csv' | 'xlsx' = 'xlsx', proof?: SensitiveActionProof) =>
     api.get(`/${ADMIN_PATH}/subscription-plans/export`, {
         params: { format },
         responseType: 'blob',
+        headers: await resolveSensitiveActionHeaders({
+            actionLabel: 'export subscription plans',
+            defaultReason: 'Export subscription plan records',
+            proof,
+        }),
     });
-export const adminExportSubscriptionPlansLegacyJson = () =>
-    api.get(`/${ADMIN_PATH}/export-subscription-plans`);
-export const adminExportSubscriptions = (format: 'csv' | 'xlsx' = 'xlsx', status?: UserSubscriptionStatus['status']) =>
+export const adminExportSubscriptionPlansLegacyJson = async (proof?: SensitiveActionProof) =>
+    api.get(`/${ADMIN_PATH}/export-subscription-plans`, {
+        headers: await resolveSensitiveActionHeaders({
+            actionLabel: 'export legacy subscription plans',
+            defaultReason: 'Export legacy subscription plan records',
+            proof,
+        }),
+    });
+export const adminExportSubscriptions = async (
+    format: 'csv' | 'xlsx' = 'xlsx',
+    status?: UserSubscriptionStatus['status'],
+    proof?: SensitiveActionProof,
+) =>
     api.get(`/${ADMIN_PATH}/subscriptions/export`, {
         params: { format, ...(status ? { status } : {}) },
         responseType: 'blob',
+        headers: await resolveSensitiveActionHeaders({
+            actionLabel: 'export user subscriptions',
+            defaultReason: 'Export user subscription records',
+            requireOtpHint: true,
+            proof,
+        }),
     });
-export const adminExportUniversities = (params: Record<string, string | number> = {}) =>
+export const adminExportUniversities = async (
+    params: Record<string, string | number> = {},
+    proof?: SensitiveActionProof,
+) =>
     api.get(`/${ADMIN_PATH}/universities/export`, {
         params: { ...params, format: params['format'] || 'xlsx' },
         responseType: 'blob',
+        headers: await resolveSensitiveActionHeaders({
+            actionLabel: 'export university data',
+            defaultReason: 'Export university records',
+            proof,
+        }),
     });
 export const adminExportStudentExamHistory = (format: 'csv' | 'xlsx' = 'xlsx') =>
     api.get(`/${ADMIN_PATH}/export/student-exam-history`, { params: { format }, responseType: 'blob' });
@@ -4361,6 +5012,36 @@ export const adminExportStudentExamHistory = (format: 'csv' | 'xlsx' = 'xlsx') =
 /* â”€â”€ Admin â€” Password Change â”€â”€ */
 export const changePassword = (currentPassword: string, newPassword: string) =>
     api.post('/auth/change-password', { currentPassword, newPassword });
+
+export interface SecuritySessionItem {
+    sessionId: string;
+    status: 'active' | 'terminated' | string;
+    current: boolean;
+    loginAt?: string;
+    lastActiveAt?: string;
+    ipAddress?: string;
+    deviceInfo?: string;
+    browser?: string;
+    platform?: string;
+    locationSummary?: string;
+    riskScore?: number;
+    riskFlags?: string[];
+}
+
+export const getMySecuritySessions = () =>
+    api.get<{ sessions: SecuritySessionItem[] }>('/auth/security/sessions');
+export const revokeMySecuritySession = (sessionId: string) =>
+    api.delete<{ message: string; terminatedCount: number }>(`/auth/security/sessions/${sessionId}`);
+export const logoutAllMySessions = () =>
+    api.post<{ message: string; terminatedCount: number }>('/auth/security/logout-all');
+export const beginTotpSetup = (currentPassword: string) =>
+    api.post<{ secret: string; otpAuthUrl: string; backupCodes: string[] }>('/auth/security/2fa/setup', { currentPassword });
+export const confirmTotpSetup = (code: string) =>
+    api.post<{ message: string }>('/auth/security/2fa/confirm', { code });
+export const regenerateBackupCodes = (currentPassword: string) =>
+    api.post<{ backupCodes: string[] }>('/auth/security/2fa/backup-codes', { currentPassword });
+export const disableTwoFactor = (currentPassword: string) =>
+    api.post<{ message: string }>('/auth/security/2fa/disable', { currentPassword });
 
 /* â”€â”€ Admin â€” Dynamic Home Page System â”€â”€ */
 export const adminGetHomeSystem = () => api.get<HomeApiResponse>('/home');
@@ -4381,6 +5062,151 @@ export const adminUpdateHomeConfig = (data: Partial<HomeConfigResponse>) =>
 
 export const adminGetSettingsSite = () => api.get(`/${ADMIN_PATH}/settings/site`);
 export const adminUpdateSettingsSite = (data: FormData) => api.put(`/${ADMIN_PATH}/settings/site`, data);
+export interface AdminUiLayoutSettings {
+    sidebarOrder: string[];
+    settingsCardOrder: string[];
+}
+type AdminUiLayoutResponse = {
+    layout: AdminUiLayoutSettings;
+    updatedAt?: string | null;
+    updatedBy?: string | null;
+};
+
+const ADMIN_UI_LAYOUT_STORAGE_KEY = 'campusway-admin-ui-layout';
+let adminUiLayoutEndpointAvailable: boolean | null = null;
+
+function sanitizeAdminUiLayoutKeys(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    const seen = new Set<string>();
+    const normalized: string[] = [];
+    for (const raw of value) {
+        const key = String(raw || '').trim();
+        if (!key || key.length > 80) continue;
+        if (!/^[a-zA-Z0-9_-]+$/.test(key)) continue;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        normalized.push(key);
+        if (normalized.length >= 120) break;
+    }
+    return normalized;
+}
+
+function normalizeAdminUiLayout(layout?: Partial<AdminUiLayoutSettings> | null): AdminUiLayoutSettings {
+    return {
+        sidebarOrder: sanitizeAdminUiLayoutKeys(layout?.sidebarOrder),
+        settingsCardOrder: sanitizeAdminUiLayoutKeys(layout?.settingsCardOrder),
+    };
+}
+
+function readAdminUiLayoutFromStorage(): AdminUiLayoutSettings {
+    if (typeof window === 'undefined') {
+        return { sidebarOrder: [], settingsCardOrder: [] };
+    }
+    try {
+        const raw = window.localStorage.getItem(ADMIN_UI_LAYOUT_STORAGE_KEY);
+        if (!raw) return { sidebarOrder: [], settingsCardOrder: [] };
+        return normalizeAdminUiLayout(JSON.parse(raw) as Partial<AdminUiLayoutSettings>);
+    } catch {
+        return { sidebarOrder: [], settingsCardOrder: [] };
+    }
+}
+
+function writeAdminUiLayoutToStorage(layout: AdminUiLayoutSettings): void {
+    if (typeof window === 'undefined') return;
+    try {
+        window.localStorage.setItem(ADMIN_UI_LAYOUT_STORAGE_KEY, JSON.stringify(layout));
+    } catch {
+        // ignore storage errors
+    }
+}
+
+function readAdminUiLayoutEndpointAvailability(): boolean | null {
+    return adminUiLayoutEndpointAvailable;
+}
+
+function rememberAdminUiLayoutEndpointAvailability(value: boolean): void {
+    adminUiLayoutEndpointAvailable = value;
+}
+
+function isAdminUiLayoutUnavailableError(error: unknown): boolean {
+    const status = Number((error as { response?: { status?: number } })?.response?.status || 0);
+    return status === 404 || status === 405 || status === 501;
+}
+
+export const adminGetAdminUiLayout = async () => {
+    if (readAdminUiLayoutEndpointAvailability() === false) {
+        return {
+            data: {
+                layout: readAdminUiLayoutFromStorage(),
+                updatedAt: null,
+                updatedBy: null,
+            },
+        } as { data: AdminUiLayoutResponse };
+    }
+
+    try {
+        const response = await api.get<AdminUiLayoutResponse>(`/${ADMIN_PATH}/settings/admin-ui`);
+        const normalized = normalizeAdminUiLayout(response.data?.layout);
+        writeAdminUiLayoutToStorage(normalized);
+        rememberAdminUiLayoutEndpointAvailability(true);
+        response.data = {
+            ...response.data,
+            layout: normalized,
+        };
+        return response;
+    } catch (error) {
+        if (!isAdminUiLayoutUnavailableError(error)) throw error;
+        rememberAdminUiLayoutEndpointAvailability(false);
+        return {
+            data: {
+                layout: readAdminUiLayoutFromStorage(),
+                updatedAt: null,
+                updatedBy: null,
+            },
+        } as { data: AdminUiLayoutResponse };
+    }
+};
+
+export const adminUpdateAdminUiLayout = async (layout: Partial<AdminUiLayoutSettings>) => {
+    const previous = readAdminUiLayoutFromStorage();
+    const fallbackLayout = normalizeAdminUiLayout({
+        sidebarOrder: layout.sidebarOrder ?? previous.sidebarOrder,
+        settingsCardOrder: layout.settingsCardOrder ?? previous.settingsCardOrder,
+    });
+    writeAdminUiLayoutToStorage(fallbackLayout);
+
+    if (readAdminUiLayoutEndpointAvailability() === false) {
+        return {
+            data: {
+                layout: fallbackLayout,
+                updatedAt: null,
+                updatedBy: null,
+            },
+        } as { data: AdminUiLayoutResponse };
+    }
+
+    try {
+        const response = await api.put<AdminUiLayoutResponse>(`/${ADMIN_PATH}/settings/admin-ui`, layout);
+        const normalized = normalizeAdminUiLayout(response.data?.layout);
+        writeAdminUiLayoutToStorage(normalized);
+        rememberAdminUiLayoutEndpointAvailability(true);
+        response.data = {
+            ...response.data,
+            layout: normalized,
+        };
+        return response;
+    } catch (error) {
+        if (!isAdminUiLayoutUnavailableError(error)) throw error;
+        rememberAdminUiLayoutEndpointAvailability(false);
+        return {
+            data: {
+                layout: fallbackLayout,
+                updatedAt: null,
+                updatedBy: null,
+            },
+        } as { data: AdminUiLayoutResponse };
+    }
+};
 export const adminGetDashboardSummary = () => api.get<AdminDashboardSummary>(`/${ADMIN_PATH}/dashboard/summary`);
 export const adminGetSocialLinks = () => api.get<{ items: PublicSocialLinkItem[] }>(`/${ADMIN_PATH}/social-links`);
 export const adminCreateSocialLink = (data: Record<string, unknown>) =>
@@ -4392,8 +5218,11 @@ export const adminBulkImportUniversities = (data: FormData) =>
     api.post(`/${ADMIN_PATH}/universities/import-excel`, data, {
         headers: { 'Content-Type': 'multipart/form-data' },
     });
-export const adminExportExamResults = (examId: string) =>
-    api.get(`/${ADMIN_PATH}/exams/${examId}/export`, { responseType: 'blob' });
+export const adminExportExamResults = (examId: string, proof?: SensitiveActionProof) =>
+    api.get(`/${ADMIN_PATH}/exams/${examId}/export`, {
+        responseType: 'blob',
+        headers: buildSensitiveActionHeaders(proof),
+    });
 export const adminDownloadExamResultImportTemplate = (
     examId: string,
     format: 'csv' | 'xlsx' = 'xlsx',
@@ -4433,10 +5262,12 @@ export const adminImportExternalExamResultsFile = (
 export const adminExportExamReport = (
     examId: string,
     options: { format?: 'xlsx' | 'csv' | 'pdf'; groupId?: string } = {},
+    proof?: SensitiveActionProof,
 ) =>
     api.get(`/${ADMIN_PATH}/exams/${examId}/reports/export`, {
         params: options,
         responseType: 'blob',
+        headers: buildSensitiveActionHeaders(proof),
     });
 export const adminUpdateWebsiteSettings = (data: FormData) => api.put(`/${ADMIN_PATH}/home/settings`, data);
 export const adminUpdateHomePage = (data: Record<string, unknown>) => api.put(`/${ADMIN_PATH}/home`, data);
@@ -4609,20 +5440,54 @@ export const adminUpdateAnalyticsSettings = (data: Partial<AnalyticsSettings>) =
 export const adminGetReportsSummary = (params?: { from?: string; to?: string }) =>
     api.get<AdminReportsSummary>(`/${ADMIN_PATH}/reports/summary`, { params });
 
-export const adminExportReportsSummary = (params?: { from?: string; to?: string; format?: 'csv' | 'xlsx' }) =>
-    api.get(`/${ADMIN_PATH}/reports/export`, { params, responseType: 'blob' });
+export const adminExportReportsSummary = async (
+    params?: { from?: string; to?: string; format?: 'csv' | 'xlsx' },
+    proof?: SensitiveActionProof,
+) =>
+    api.get(`/${ADMIN_PATH}/reports/export`, {
+        params,
+        responseType: 'blob',
+        headers: await resolveSensitiveActionHeaders({
+            actionLabel: 'export reports summary',
+            defaultReason: 'Export reports summary',
+            proof,
+        }),
+    });
 
 export const adminGetAnalyticsOverview = (params?: { from?: string; to?: string; module?: string }) =>
     api.get<AnalyticsOverview>(`/${ADMIN_PATH}/reports/analytics`, { params });
 
-export const adminExportEventLogs = (params?: { from?: string; to?: string; module?: string; format?: 'csv' | 'xlsx' }) =>
-    api.get(`/${ADMIN_PATH}/reports/events/export`, { params, responseType: 'blob' });
+export const adminExportEventLogs = async (
+    params?: { from?: string; to?: string; module?: string; format?: 'csv' | 'xlsx' },
+    proof?: SensitiveActionProof,
+) =>
+    api.get(`/${ADMIN_PATH}/reports/events/export`, {
+        params,
+        responseType: 'blob',
+        headers: await resolveSensitiveActionHeaders({
+            actionLabel: 'export event logs',
+            defaultReason: 'Export analytics event logs',
+            proof,
+        }),
+    });
 
 export const adminGetExamInsightsReport = (examId: string) =>
     api.get<ExamInsightsReport>(`/${ADMIN_PATH}/reports/exams/${examId}/insights`);
 
-export const adminExportExamInsights = (examId: string, format: 'csv' | 'xlsx' = 'csv') =>
-    api.get(`/${ADMIN_PATH}/reports/exams/${examId}/insights/export`, { params: { format }, responseType: 'blob' });
+export const adminExportExamInsights = async (
+    examId: string,
+    format: 'csv' | 'xlsx' = 'csv',
+    proof?: SensitiveActionProof,
+) =>
+    api.get(`/${ADMIN_PATH}/reports/exams/${examId}/insights/export`, {
+        params: { format },
+        responseType: 'blob',
+        headers: await resolveSensitiveActionHeaders({
+            actionLabel: 'export exam insights',
+            defaultReason: 'Export exam insight report',
+            proof,
+        }),
+    });
 
 // ── University Settings ──
 export interface AdminUniversitySettingsData {
@@ -4642,3 +5507,103 @@ export const adminGetUniversitySettings = () =>
 
 export const adminUpdateUniversitySettings = (data: Partial<AdminUniversitySettingsData>) =>
     api.put<{ ok: boolean; data: AdminUniversitySettingsData }>(`/${ADMIN_PATH}/settings/university`, data);
+
+/* ── Security Center — Dashboard & Audit Logs ── */
+
+export interface SecurityDashboardMetrics {
+    activeSessions: number;
+    adminActiveSessions: number;
+    suspiciousLogins24h: number;
+    failedLogins24h: number;
+    lockedAccounts: number;
+    adminsWithout2FA: number;
+    totalAdminUsers: number;
+    unreadAlerts: number;
+    criticalAlerts: number;
+    recentAuditLogs: Array<{
+        _id: string;
+        actor_id?: { _id: string; username?: string; full_name?: string; role?: string } | string;
+        actor_role?: string;
+        action: string;
+        target_id?: string;
+        target_type?: string;
+        timestamp: string;
+        ip_address?: string;
+        details?: Record<string, unknown>;
+    }>;
+    lastBackup: {
+        status: string;
+        type: string;
+        storage: string;
+        createdAt: string;
+        error: string | null;
+    } | null;
+    totalUsers: number;
+    blockedUsers: number;
+    failureTrend: Array<{ date: string; count: number }>;
+}
+
+export interface AdminAuditLogItem {
+    _id: string;
+    actor_id?: { _id: string; username?: string; full_name?: string; role?: string } | string;
+    actor_role?: string;
+    action: string;
+    target_id?: string;
+    target_type?: string;
+    timestamp: string;
+    ip_address?: string;
+    details?: Record<string, unknown> | string;
+}
+
+export interface AdminSecurityAlertItem {
+    _id: string;
+    type: string;
+    severity: 'info' | 'warning' | 'critical';
+    title: string;
+    message: string;
+    metadata?: Record<string, unknown>;
+    isRead: boolean;
+    resolvedAt?: string;
+    resolvedByAdminId?: { _id: string; username?: string; full_name?: string } | string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export const adminGetSecurityDashboard = () =>
+    api.get<SecurityDashboardMetrics>(`/${ADMIN_PATH}/security/dashboard`);
+
+export const adminGetSecurityAuditLogs = (params?: {
+    page?: number;
+    limit?: number;
+    action?: string;
+    actor_role?: string;
+    target_type?: string;
+    from?: string;
+    to?: string;
+}) =>
+    api.get<{ items: AdminAuditLogItem[]; total: number; page: number; pages: number }>(`/${ADMIN_PATH}/audit-logs`, { params });
+
+export const adminGetSecurityAlertsList = (params?: {
+    page?: number;
+    limit?: number;
+    severity?: string;
+    type?: string;
+    isRead?: string;
+}) =>
+    api.get<{ items: AdminSecurityAlertItem[]; total: number; page: number; pages: number; unreadCount: number }>(`/${ADMIN_PATH}/security-alerts`, { params });
+
+export const adminGetSecurityAlertsSummary = () =>
+    api.get<{
+        bySeverity: Array<{ _id: string; count: number }>;
+        byType: Array<{ _id: string; count: number }>;
+        unread: number;
+    }>(`/${ADMIN_PATH}/security-alerts/summary`);
+
+export const adminMarkSecurityAlertRead = (id: string) =>
+    api.post<{ data: AdminSecurityAlertItem; message: string }>(`/${ADMIN_PATH}/security-alerts/${id}/read`);
+
+export const adminMarkAllSecurityAlertsRead = () =>
+    api.post<{ message: string }>(`/${ADMIN_PATH}/security-alerts/mark-all-read`);
+
+export const adminResolveSecurityAlert = (id: string) =>
+    api.post<{ data: AdminSecurityAlertItem; message: string }>(`/${ADMIN_PATH}/security-alerts/${id}/resolve`);

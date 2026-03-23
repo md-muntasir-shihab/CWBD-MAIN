@@ -101,7 +101,7 @@ test.describe('Admin Phase2 Micro Saves', () => {
         let createdSourceId = '';
 
         try {
-            const create = await request.post(`/api/${ADMIN_PATH}/rss-sources`, {
+            const create = await request.post(`/api/${ADMIN_PATH}/news/sources`, {
                 headers: adminHeaders(adminToken),
                 data: {
                     name: marker,
@@ -125,7 +125,7 @@ test.describe('Admin Phase2 Micro Saves', () => {
             expect(found).toBeTruthy();
         } finally {
             if (createdSourceId) {
-                await request.delete(`/api/${ADMIN_PATH}/rss-sources/${createdSourceId}`, {
+                await request.delete(`/api/${ADMIN_PATH}/news/sources/${createdSourceId}`, {
                     headers: adminHeaders(adminToken),
                 });
             }

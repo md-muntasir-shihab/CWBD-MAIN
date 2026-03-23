@@ -9,13 +9,14 @@ import {
 } from '../hooks/useSubscriptionPlans';
 import type { SubscriptionPlanPublic } from '../services/api';
 import PlanDetailsDrawer from '../components/subscription/PlanDetailsDrawer';
-import { isExternalUrl, normalizeInternalOrExternalUrl } from '../utils/url';
+import { isExternalUrl } from '../utils/url';
+import {
+    resolveSubscriptionPlanTarget,
+    shouldOpenSubscriptionPlanTargetInNewTab,
+} from '../components/subscription/subscriptionAction';
 
 function resolveTarget(plan: SubscriptionPlanPublic): string {
-    if (plan.ctaMode === 'request_payment') {
-        return `/subscription-plans/checkout/${plan.slug || plan.code || plan._id}`;
-    }
-    return normalizeInternalOrExternalUrl(plan.ctaUrl || plan.contactCtaUrl || '/contact') || '/contact';
+    return resolveSubscriptionPlanTarget(plan);
 }
 
 export default function SubscriptionPlanCheckoutPage() {
@@ -47,7 +48,7 @@ export default function SubscriptionPlanCheckoutPage() {
             return;
         }
 
-        if (isExternalUrl(ctaTarget)) {
+        if (shouldOpenSubscriptionPlanTargetInNewTab(plan)) {
             window.open(ctaTarget, '_blank', 'noopener,noreferrer');
             return;
         }
@@ -162,6 +163,7 @@ export default function SubscriptionPlanCheckoutPage() {
                 open={showDrawer}
                 plan={plan}
                 onClose={() => setShowDrawer(false)}
+                onDismissToContact={() => navigate('/contact')}
                 onPrimaryAction={() => {
                     setShowDrawer(false);
                     void handlePrimaryAction();

@@ -90,9 +90,9 @@ export declare const createInvoiceSchema: z.ZodObject<{
     studentId: z.ZodOptional<z.ZodString>;
     purpose: z.ZodEnum<{
         subscription: "subscription";
-        custom: "custom";
         exam: "exam";
         service: "service";
+        custom: "custom";
     }>;
     planId: z.ZodOptional<z.ZodString>;
     examId: z.ZodOptional<z.ZodString>;
@@ -107,8 +107,8 @@ export declare const updateInvoiceSchema: z.ZodObject<{
     status: z.ZodOptional<z.ZodEnum<{
         partial: "partial";
         paid: "paid";
-        cancelled: "cancelled";
         unpaid: "unpaid";
+        cancelled: "cancelled";
         overdue: "overdue";
     }>>;
     dueDateUTC: z.ZodOptional<z.ZodString>;
@@ -257,8 +257,8 @@ export declare const createRefundSchema: z.ZodObject<{
 }, z.core.$strip>;
 export declare const processRefundSchema: z.ZodObject<{
     action: z.ZodEnum<{
-        reject: "reject";
         approve: "approve";
+        reject: "reject";
     }>;
     rejectionNote: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;

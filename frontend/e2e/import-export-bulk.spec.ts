@@ -70,7 +70,7 @@ test.describe('Import / Export / Bulk Verification', () => {
             `/api/${ADMIN_PATH}/universities/export?format=csv`,
             `/api/${ADMIN_PATH}/subscription-plans/export?format=csv`,
             `/api/${ADMIN_PATH}/question-bank/v2/export?format=csv`,
-            `/api/${ADMIN_PATH}/news-v2/exports/news?format=csv`,
+            `/api/${ADMIN_PATH}/news/export?format=csv`,
         ];
 
         for (const endpoint of exportEndpoints) {

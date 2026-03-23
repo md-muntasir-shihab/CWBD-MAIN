@@ -7,10 +7,15 @@ export interface INotificationDeliveryLog extends Document {
     guardianTargeted: boolean;
     channel: 'sms' | 'email';
     providerUsed: string;
+    templateKey?: string;
+    templateId?: mongoose.Types.ObjectId;
     to: string;
     status: DeliveryLogStatus;
     providerMessageId?: string;
     errorMessage?: string;
+    originModule?: 'campaign' | 'news' | 'notice' | 'trigger';
+    originEntityId?: string;
+    originAction?: string;
     sentAtUTC?: Date;
     costAmount: number;
     retryCount: number;

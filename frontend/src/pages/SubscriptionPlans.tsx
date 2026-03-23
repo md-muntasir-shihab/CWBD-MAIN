@@ -10,14 +10,14 @@ import {
 import type { SubscriptionPlanPublic } from '../services/api';
 import PlanCard from '../components/subscription/PlanCard';
 import PlanDetailsDrawer from '../components/subscription/PlanDetailsDrawer';
+import {
+    resolveSubscriptionPlanTarget,
+    shouldOpenSubscriptionPlanTargetInNewTab,
+} from '../components/subscription/subscriptionAction';
 import SubscriptionComparisonTable from '../components/subscription/SubscriptionComparisonTable';
 import SubscriptionFaqBlock from '../components/subscription/SubscriptionFaqBlock';
 
 type PlanFilter = 'all' | 'free' | 'paid';
-
-function getCheckoutPath(plan: SubscriptionPlanPublic): string {
-    return `/subscription-plans/checkout/${plan.slug || plan.code || plan._id}`;
-}
 
 export default function SubscriptionPlansPage() {
     const navigate = useNavigate();
@@ -48,7 +48,12 @@ export default function SubscriptionPlansPage() {
     }, [filter, plans, search]);
 
     const handlePrimaryAction = (plan: SubscriptionPlanPublic) => {
-        navigate(getCheckoutPath(plan));
+        const target = resolveSubscriptionPlanTarget(plan);
+        if (shouldOpenSubscriptionPlanTargetInNewTab(plan)) {
+            window.open(target, '_blank', 'noopener,noreferrer');
+            return;
+        }
+        navigate(target);
     };
 
     const hasHardLoadError = plansQuery.isError && plans.length === 0;
@@ -188,6 +193,7 @@ export default function SubscriptionPlansPage() {
                 open={Boolean(activePlan)}
                 plan={activePlan}
                 onClose={() => setActivePlan(null)}
+                onDismissToContact={() => navigate('/contact')}
                 onPrimaryAction={handlePrimaryAction}
             />
         </div>

@@ -3,8 +3,6 @@
 import { CSSProperties, FormEvent, useEffect, useMemo, useState } from 'react';
 import {
   assignStudentPlan,
-  adminMfaConfirm,
-  adminRevealStudentPassword,
   createAdminStudent,
   createExpense,
   createPayment,
@@ -15,7 +13,6 @@ import {
   getDues,
   getExpenses,
   getFinanceSummary,
-  getCurrentUser,
   getNotices,
   getRuntimeSettings,
   getStaffPayouts,
@@ -27,7 +24,7 @@ import {
   updateDue,
   updateSupportTicketStatus,
 } from '@/lib/api';
-import { BackupRow, CurrentUserPayload, DueRow, ExpenseRow, FinanceSummary, NoticeRow, PaymentRow, PlanRow, RuntimeSettingsPayload, StaffPayoutRow, StudentRow, TicketRow } from '@/lib/types';
+import { BackupRow, DueRow, ExpenseRow, FinanceSummary, NoticeRow, PaymentRow, PlanRow, RuntimeSettingsPayload, StaffPayoutRow, StudentRow, TicketRow } from '@/lib/types';
 
 type TabId = 'students' | 'plans' | 'finance' | 'expenses' | 'payouts' | 'dues' | 'notices' | 'tickets' | 'backups';
 
@@ -67,7 +64,6 @@ export default function AdminConsole() {
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [backups, setBackups] = useState<BackupRow[]>([]);
   const [runtimeSettings, setRuntimeSettings] = useState<RuntimeSettingsPayload | null>(null);
-  const [currentUser, setCurrentUser] = useState<CurrentUserPayload['user'] | null>(null);
 
   const [quickStudentId, setQuickStudentId] = useState('');
   const [quickPaymentAmount, setQuickPaymentAmount] = useState('0');
@@ -93,12 +89,6 @@ export default function AdminConsole() {
   const [restoreBackupId, setRestoreBackupId] = useState('');
   const [restoreConfirmation, setRestoreConfirmation] = useState('');
   const [uiMessage, setUiMessage] = useState('');
-  const [showRevealModal, setShowRevealModal] = useState(false);
-  const [revealTarget, setRevealTarget] = useState<StudentRow | null>(null);
-  const [adminPassword, setAdminPassword] = useState('');
-  const [revealReason, setRevealReason] = useState('');
-  const [revealedPassword, setRevealedPassword] = useState('');
-  const [revealFeedback, setRevealFeedback] = useState('');
 
   useEffect(() => {
     const stored = window.localStorage.getItem('campusway-token') || '';
@@ -170,10 +160,6 @@ export default function AdminConsole() {
           const res = await getRuntimeSettings(token);
           if (!cancelled) setRuntimeSettings(res);
         }),
-        applySafely(async () => {
-          const res = await getCurrentUser(token);
-          if (!cancelled) setCurrentUser(res.user || null);
-        }),
       ]);
 
       if (!cancelled) setLoading(false);
@@ -189,7 +175,7 @@ export default function AdminConsole() {
     setLoading(true);
     setError('');
     try {
-      const [studentsRes, plansRes, financeRes, paymentsRes, expensesRes, payoutsRes, duesRes, noticesRes, ticketsRes, backupsRes, runtimeRes, meRes] = await Promise.all([
+      const [studentsRes, plansRes, financeRes, paymentsRes, expensesRes, payoutsRes, duesRes, noticesRes, ticketsRes, backupsRes, runtimeRes] = await Promise.all([
         getAdminStudents(token),
         getAdminPlans(token),
         getFinanceSummary(token),
@@ -201,7 +187,6 @@ export default function AdminConsole() {
         getSupportTickets(token),
         getBackups(token),
         getRuntimeSettings(token),
-        getCurrentUser(token),
       ]);
       setStudents(studentsRes.items || []);
       setPlans(plansRes.items || []);
@@ -214,7 +199,6 @@ export default function AdminConsole() {
       setTickets(ticketsRes.items || []);
       setBackups(backupsRes.items || []);
       setRuntimeSettings(runtimeRes);
-      setCurrentUser(meRes.user || null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to refresh.');
     } finally {
@@ -299,9 +283,11 @@ export default function AdminConsole() {
         ...(createStudentPassword.trim() ? { password: createStudentPassword.trim() } : {}),
         ...(createStudentPlanCode.trim() ? { planCode: createStudentPlanCode.trim() } : {}),
       });
-      setUiMessage(res.generatedPassword
-        ? `Student created. Generated password: ${res.generatedPassword}`
-        : 'Student created successfully.');
+      setUiMessage(
+        res.inviteSent
+          ? 'Student created and setup link sent successfully.'
+          : 'Student created successfully.',
+      );
       setCreateStudentName('');
       setCreateStudentUsername('');
       setCreateStudentEmail('');
@@ -455,62 +441,6 @@ export default function AdminConsole() {
     }
   }
 
-  function openRevealModal(student: StudentRow) {
-    setRevealTarget(student);
-    setShowRevealModal(true);
-    setAdminPassword('');
-    setRevealReason('');
-    setRevealedPassword('');
-    setRevealFeedback('');
-  }
-
-  function closeRevealModal() {
-    setShowRevealModal(false);
-    setRevealTarget(null);
-    setAdminPassword('');
-    setRevealReason('');
-    setRevealedPassword('');
-    setRevealFeedback('');
-  }
-
-  async function handleRevealPassword(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!token || !revealTarget?._id) return;
-    if (!adminPassword.trim() || !revealReason.trim()) {
-      setRevealFeedback('Admin password and reveal reason are required.');
-      return;
-    }
-
-    setLoading(true);
-    setRevealFeedback('');
-    try {
-      const mfa = await adminMfaConfirm(token, adminPassword.trim());
-      const mfaToken = String(mfa.mfaToken || '').trim();
-      if (!mfaToken) {
-        throw new Error('Failed to obtain MFA token.');
-      }
-      const reveal = await adminRevealStudentPassword(token, revealTarget._id, {
-        mfaToken,
-        reason: revealReason.trim(),
-      });
-      setRevealedPassword(String(reveal.password || ''));
-      setRevealFeedback('Password revealed. This value will auto-hide in 20 seconds.');
-      setTimeout(() => {
-        setRevealedPassword('');
-      }, 20000);
-    } catch (err) {
-      setRevealFeedback(err instanceof Error ? err.message : 'Reveal failed.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const canRevealPasswords = Boolean(
-    currentUser?.role === 'superadmin' &&
-    currentUser?.permissions?.canRevealPasswords &&
-    runtimeSettings?.featureFlags?.passwordRevealEnabled !== false
-  );
-
   if (!token) {
     return (
       <section className="card">
@@ -529,7 +459,6 @@ export default function AdminConsole() {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.8rem' }}>
           <span className="pill">nextAdminEnabled: {runtimeSettings?.featureFlags?.nextAdminEnabled ? 'true' : 'false'}</span>
           <span className="pill">financeDashboardV1: {runtimeSettings?.featureFlags?.financeDashboardV1 ? 'true' : 'false'}</span>
-          <span className="pill">passwordRevealEnabled: {runtimeSettings?.featureFlags?.passwordRevealEnabled ? 'true' : 'false'}</span>
         </div>
         <div className="grid grid-3">
           {kpis.map((item) => (
@@ -622,7 +551,7 @@ export default function AdminConsole() {
               <input value={createStudentName} onChange={(event) => setCreateStudentName(event.target.value)} placeholder="Full name" style={inputStyle} />
               <input value={createStudentUsername} onChange={(event) => setCreateStudentUsername(event.target.value)} placeholder="Username" style={inputStyle} />
               <input value={createStudentEmail} onChange={(event) => setCreateStudentEmail(event.target.value)} placeholder="Email" style={inputStyle} />
-              <input value={createStudentPassword} onChange={(event) => setCreateStudentPassword(event.target.value)} placeholder="Password (optional, auto-generate if empty)" style={inputStyle} />
+              <input value={createStudentPassword} onChange={(event) => setCreateStudentPassword(event.target.value)} placeholder="Password (optional, leave blank to send setup link)" style={inputStyle} />
               <select value={createStudentPlanCode} onChange={(event) => setCreateStudentPlanCode(event.target.value)} style={inputStyle}>
                 <option value="">Plan (optional)</option>
                 {plans.map((plan) => (
@@ -663,13 +592,6 @@ export default function AdminConsole() {
                   <span className="pill">Batch: {row.batch || 'N/A'}</span>
                   <span className="pill">Dept: {row.department || 'N/A'}</span>
                 </div>
-                {canRevealPasswords && (
-                  <div style={{ marginTop: '0.75rem' }}>
-                    <button className="btn" onClick={() => openRevealModal(row)} disabled={loading}>
-                      Reveal Password (MFA)
-                    </button>
-                  </div>
-                )}
               </article>
             ))}
           </div>
@@ -928,48 +850,6 @@ export default function AdminConsole() {
           </div>
         </section>
       )}
-
-      {showRevealModal && (
-        <div style={overlayStyle}>
-          <div className="card" style={{ width: 'min(520px, 100%)' }}>
-            <h3 style={{ marginTop: 0, marginBottom: '0.5rem' }}>Superadmin Password Reveal</h3>
-            <p style={{ marginTop: 0, opacity: 0.82 }}>
-              Student: <strong>{revealTarget?.fullName || revealTarget?.username || revealTarget?.email}</strong>
-            </p>
-            <form className="grid" onSubmit={handleRevealPassword}>
-              <input
-                type="password"
-                value={adminPassword}
-                onChange={(event) => setAdminPassword(event.target.value)}
-                placeholder="Your admin password (MFA confirm)"
-                style={inputStyle}
-              />
-              <textarea
-                value={revealReason}
-                onChange={(event) => setRevealReason(event.target.value)}
-                placeholder="Reason for reveal (required)"
-                style={inputStyle}
-                rows={3}
-              />
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <button className="btn" type="submit" disabled={loading}>Confirm & Reveal</button>
-                <button className="btn" type="button" onClick={closeRevealModal} style={{ background: 'linear-gradient(120deg, #465a7f, #27344f)' }}>
-                  Close
-                </button>
-              </div>
-            </form>
-            {revealFeedback && (
-              <p style={{ marginTop: '0.8rem', opacity: 0.9 }}>{revealFeedback}</p>
-            )}
-            {revealedPassword && (
-              <div className="card" style={{ marginTop: '0.8rem', borderColor: 'rgba(255,207,112,.5)' }}>
-                <p style={{ marginTop: 0, opacity: 0.8 }}>Revealed Password</p>
-                <code style={{ fontSize: '0.95rem', wordBreak: 'break-all' }}>{revealedPassword}</code>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </section>
   );
 }
@@ -981,16 +861,4 @@ const inputStyle: CSSProperties = {
   color: '#dbe7ff',
   padding: '0.65rem 0.75rem',
   width: '100%',
-};
-
-const overlayStyle: CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(1, 8, 20, 0.78)',
-  backdropFilter: 'blur(6px)',
-  display: 'flex',
-  justifyContent: 'center',
-  alignItems: 'center',
-  padding: '1rem',
-  zIndex: 60,
 };

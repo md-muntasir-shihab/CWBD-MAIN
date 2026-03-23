@@ -88,7 +88,7 @@ async function ensureCriticalIndexes(): Promise<void> {
         ]);
 
         // --- News ---
-        const news = db.db.collection('news_v2');
+        const news = db.db.collection('news');
         await Promise.all([
             news.createIndex({ status: 1, publishedAt: -1 }, { name: 'status_1_publishedAt_-1' }).catch(() => { }),
             news.createIndex({ sourceId: 1 }, { name: 'sourceId_1' }).catch(() => { }),

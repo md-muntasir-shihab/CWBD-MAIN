@@ -5,6 +5,7 @@ import { UserPlus, Eye, EyeOff, Send, X, Search, Plus, Users, CreditCard } from 
 import { createStudent, getStudentGroups } from '../../../api/adminStudentApi';
 import { adminUi } from '../../../lib/appRoutes';
 import { adminGetSubscriptionPlans, type AdminSubscriptionPlan } from '../../../services/api';
+import ModernToggle from '../../../components/ui/ModernToggle';
 
 const DEPARTMENTS = ['science', 'arts', 'commerce'] as const;
 const GENDERS = ['male', 'female', 'other'] as const;
@@ -122,8 +123,8 @@ export default function StudentCreatePage() {
             <div>
               <label className={labelCls}>Password *</label>
               <div className="relative">
-                <input className={inputCls} type={showPassword ? 'text' : 'password'} required minLength={6} value={form.password} onChange={e => set('password', e.target.value)} />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-2 text-slate-400 hover:text-slate-600">
+                <input aria-label="Password" title="Password" className={inputCls} type={showPassword ? 'text' : 'password'} required minLength={6} value={form.password} onChange={e => set('password', e.target.value)} />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-2 text-slate-400 hover:text-slate-600" title={showPassword ? 'Hide password' : 'Show password'}>
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
@@ -137,41 +138,41 @@ export default function StudentCreatePage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div>
               <label className={labelCls}>Department</label>
-              <select className={inputCls} value={form.department} onChange={e => set('department', e.target.value)}>
+              <select aria-label="Department" title="Department" className={inputCls} value={form.department} onChange={e => set('department', e.target.value)}>
                 <option value="">Select</option>
                 {DEPARTMENTS.map(d => <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>)}
               </select>
             </div>
             <div>
               <label className={labelCls}>Gender</label>
-              <select className={inputCls} value={form.gender} onChange={e => set('gender', e.target.value)}>
+              <select aria-label="Gender" title="Gender" className={inputCls} value={form.gender} onChange={e => set('gender', e.target.value)}>
                 <option value="">Select</option>
                 {GENDERS.map(g => <option key={g} value={g}>{g.charAt(0).toUpperCase() + g.slice(1)}</option>)}
               </select>
             </div>
             <div>
               <label className={labelCls}>Date of Birth</label>
-              <input className={inputCls} type="date" value={form.dob} onChange={e => set('dob', e.target.value)} />
+              <input aria-label="Date of Birth" title="Date of Birth" className={inputCls} type="date" value={form.dob} onChange={e => set('dob', e.target.value)} />
             </div>
             <div>
               <label className={labelCls}>SSC Batch</label>
-              <input className={inputCls} value={form.ssc_batch} onChange={e => set('ssc_batch', e.target.value)} placeholder="e.g. 2023" />
+              <input aria-label="SSC Batch" title="SSC Batch" className={inputCls} value={form.ssc_batch} onChange={e => set('ssc_batch', e.target.value)} placeholder="e.g. 2023" />
             </div>
             <div>
               <label className={labelCls}>HSC Batch</label>
-              <input className={inputCls} value={form.hsc_batch} onChange={e => set('hsc_batch', e.target.value)} placeholder="e.g. 2025" />
+              <input aria-label="HSC Batch" title="HSC Batch" className={inputCls} value={form.hsc_batch} onChange={e => set('hsc_batch', e.target.value)} placeholder="e.g. 2025" />
             </div>
             <div>
               <label className={labelCls}>College Name</label>
-              <input className={inputCls} value={form.college_name} onChange={e => set('college_name', e.target.value)} />
+              <input aria-label="College name" title="College name" className={inputCls} value={form.college_name} onChange={e => set('college_name', e.target.value)} />
             </div>
             <div>
               <label className={labelCls}>District</label>
-              <input className={inputCls} value={form.district} onChange={e => set('district', e.target.value)} />
+              <input aria-label="District" title="District" className={inputCls} value={form.district} onChange={e => set('district', e.target.value)} />
             </div>
             <div className="sm:col-span-2">
               <label className={labelCls}>Present Address</label>
-              <input className={inputCls} value={form.present_address} onChange={e => set('present_address', e.target.value)} />
+              <input aria-label="Present address" title="Present address" className={inputCls} value={form.present_address} onChange={e => set('present_address', e.target.value)} />
             </div>
           </div>
         </section>
@@ -182,15 +183,15 @@ export default function StudentCreatePage() {
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
               <label className={labelCls}>Guardian Name</label>
-              <input className={inputCls} value={form.guardian_name} onChange={e => set('guardian_name', e.target.value)} />
+              <input aria-label="Guardian name" title="Guardian name" className={inputCls} value={form.guardian_name} onChange={e => set('guardian_name', e.target.value)} />
             </div>
             <div>
               <label className={labelCls}>Guardian Phone</label>
-              <input className={inputCls} value={form.guardian_phone} onChange={e => set('guardian_phone', e.target.value)} placeholder="01XXXXXXXXX" />
+              <input aria-label="Guardian phone" title="Guardian phone" className={inputCls} value={form.guardian_phone} onChange={e => set('guardian_phone', e.target.value)} placeholder="01XXXXXXXXX" />
             </div>
             <div>
               <label className={labelCls}>Guardian Email</label>
-              <input className={inputCls} type="email" value={form.guardian_email} onChange={e => set('guardian_email', e.target.value)} />
+              <input aria-label="Guardian email" title="Guardian email" className={inputCls} type="email" value={form.guardian_email} onChange={e => set('guardian_email', e.target.value)} />
             </div>
           </div>
         </section>
@@ -212,7 +213,7 @@ export default function StudentCreatePage() {
                   style={{ backgroundColor: `${g.color || '#6366f1'}20`, color: g.color || '#6366f1' }}
                 >
                   {g.name}
-                  <button type="button" onClick={() => removeGroup(g._id)} className="ml-0.5 hover:opacity-70">
+                  <button type="button" onClick={() => removeGroup(g._id)} className="ml-0.5 hover:opacity-70" title="Remove group">
                     <X size={12} />
                   </button>
                 </span>
@@ -271,7 +272,7 @@ export default function StudentCreatePage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className={labelCls}>Assign Plan (Optional)</label>
-              <select className={inputCls} value={form.planId} onChange={e => set('planId', e.target.value)}>
+              <select aria-label="Assign Plan" title="Assign Plan" className={inputCls} value={form.planId} onChange={e => set('planId', e.target.value)}>
                 <option value="">No plan assignment</option>
                 {Array.isArray(plans) && plans.map((p: AdminSubscriptionPlan) => (
                   <option key={p._id} value={p._id}>{p.name} ({p.code})</option>
@@ -279,20 +280,22 @@ export default function StudentCreatePage() {
               </select>
             </div>
             <div className="flex items-end pb-1">
-              <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
-                <input type="checkbox" checked={form.recordPayment} onChange={e => set('recordPayment', e.target.checked)} className="rounded border-slate-300" />
-                Record payment on creation
-              </label>
+              <ModernToggle
+                label="Record payment on creation"
+                checked={Boolean(form.recordPayment)}
+                onChange={v => set('recordPayment', v)}
+                size="sm"
+              />
             </div>
             {form.recordPayment && (
               <>
                 <div>
                   <label className={labelCls}>Payment Amount (BDT)</label>
-                  <input className={inputCls} type="number" min="0" value={form.paymentAmount} onChange={e => set('paymentAmount', e.target.value)} placeholder="0" />
+                  <input aria-label="Payment Amount" title="Payment Amount" className={inputCls} type="number" min="0" value={form.paymentAmount} onChange={e => set('paymentAmount', e.target.value)} placeholder="0" />
                 </div>
                 <div>
                   <label className={labelCls}>Payment Method</label>
-                  <select className={inputCls} value={form.paymentMethod} onChange={e => set('paymentMethod', e.target.value)}>
+                  <select aria-label="Payment Method" title="Payment Method" className={inputCls} value={form.paymentMethod} onChange={e => set('paymentMethod', e.target.value)}>
                     <option value="">Select method</option>
                     {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>)}
                   </select>
@@ -305,11 +308,12 @@ export default function StudentCreatePage() {
         {/* Onboarding */}
         <section className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
           <h3 className="mb-4 text-sm font-semibold text-slate-800 dark:text-slate-200">Onboarding</h3>
-          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
-            <input type="checkbox" checked={form.sendCredentials} onChange={e => set('sendCredentials', e.target.checked)} className="rounded border-slate-300" />
-            <Send size={14} />
-            Send credentials via SMS after creation
-          </label>
+          <ModernToggle
+            label={<span className="flex items-center gap-2"><Send size={14} /> Send credentials via SMS after creation</span>}
+            checked={Boolean(form.sendCredentials)}
+            onChange={v => set('sendCredentials', v)}
+            size="sm"
+          />
         </section>
 
         {/* Actions */}

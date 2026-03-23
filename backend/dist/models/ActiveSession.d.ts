@@ -6,6 +6,14 @@ export interface IActiveSession extends Document {
     browser_fingerprint: string;
     ip_address: string;
     device_type: string;
+    device_name?: string;
+    platform?: string;
+    browser?: string;
+    location_summary?: string;
+    risk_score?: number;
+    risk_flags?: string[];
+    stream_ticket_hash?: string;
+    stream_ticket_expires_at?: Date;
     login_time: Date;
     last_activity: Date;
     status: 'active' | 'terminated';

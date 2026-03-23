@@ -1,22 +1,22 @@
 import { Schema } from "mongoose";
 export declare const ExamQuestionModel: import("mongoose").Model<{
-    tags: string[];
     options: import("mongoose").Types.DocumentArray<{
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }, import("mongoose").Types.Subdocument<import("bson").ObjectId, any, {
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }> & {
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }>;
+    tags: string[];
     examId: string;
     topic?: string | null | undefined;
     marks?: number | null | undefined;
@@ -32,23 +32,23 @@ export declare const ExamQuestionModel: import("mongoose").Model<{
     explanationImageUrl?: string | null | undefined;
     correctKey?: "C" | "D" | "A" | "B" | null | undefined;
 } & import("mongoose").DefaultTimestampProps, {}, {}, {}, import("mongoose").Document<unknown, {}, {
-    tags: string[];
     options: import("mongoose").Types.DocumentArray<{
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }, import("mongoose").Types.Subdocument<import("bson").ObjectId, any, {
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }> & {
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }>;
+    tags: string[];
     examId: string;
     topic?: string | null | undefined;
     marks?: number | null | undefined;
@@ -66,23 +66,23 @@ export declare const ExamQuestionModel: import("mongoose").Model<{
 } & import("mongoose").DefaultTimestampProps, {}, {
     timestamps: true;
 }> & {
-    tags: string[];
     options: import("mongoose").Types.DocumentArray<{
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }, import("mongoose").Types.Subdocument<import("bson").ObjectId, any, {
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }> & {
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }>;
+    tags: string[];
     examId: string;
     topic?: string | null | undefined;
     marks?: number | null | undefined;
@@ -104,23 +104,23 @@ export declare const ExamQuestionModel: import("mongoose").Model<{
 }, Schema<any, import("mongoose").Model<any, any, any, any, any, any>, {}, {}, {}, {}, {
     timestamps: true;
 }, {
-    tags: string[];
     options: import("mongoose").Types.DocumentArray<{
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }, import("mongoose").Types.Subdocument<import("bson").ObjectId, any, {
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }> & {
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }>;
+    tags: string[];
     examId: string;
     topic?: string | null | undefined;
     marks?: number | null | undefined;
@@ -136,23 +136,23 @@ export declare const ExamQuestionModel: import("mongoose").Model<{
     explanationImageUrl?: string | null | undefined;
     correctKey?: "C" | "D" | "A" | "B" | null | undefined;
 } & import("mongoose").DefaultTimestampProps, import("mongoose").Document<unknown, {}, import("mongoose").FlatRecord<{
-    tags: string[];
     options: import("mongoose").Types.DocumentArray<{
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }, import("mongoose").Types.Subdocument<import("bson").ObjectId, any, {
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }> & {
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }>;
+    tags: string[];
     examId: string;
     topic?: string | null | undefined;
     marks?: number | null | undefined;
@@ -170,23 +170,23 @@ export declare const ExamQuestionModel: import("mongoose").Model<{
 } & import("mongoose").DefaultTimestampProps>, {}, import("mongoose").MergeType<import("mongoose").DefaultSchemaOptions, {
     timestamps: true;
 }>> & import("mongoose").FlatRecord<{
-    tags: string[];
     options: import("mongoose").Types.DocumentArray<{
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }, import("mongoose").Types.Subdocument<import("bson").ObjectId, any, {
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }> & {
-        key?: string | null | undefined;
         imageUrl?: string | null | undefined;
+        key?: string | null | undefined;
         text_en?: string | null | undefined;
         text_bn?: string | null | undefined;
     }>;
+    tags: string[];
     examId: string;
     topic?: string | null | undefined;
     marks?: number | null | undefined;

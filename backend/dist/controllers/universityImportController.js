@@ -123,6 +123,15 @@ function csvEscape(value) {
         return `"${text.replace(/"/g, '""')}"`;
     return text;
 }
+function normalizeLooseOptionalText(value) {
+    const text = String(value ?? '').trim();
+    if (!text)
+        return '';
+    const lowered = text.toLowerCase();
+    if (['n/a', 'na', 'none', 'null', '-', '--'].includes(lowered))
+        return '';
+    return text;
+}
 function looksLikeEmail(value) {
     if (!value)
         return true;
@@ -197,9 +206,10 @@ function validateAndNormalizeRows(rows, mapping, defaults) {
         const shortForm = normalizeShortForm(name, shortFormRaw);
         const category = String(rawNormalized.category || '').trim();
         const clusterGroup = String(rawNormalized.clusterGroup || '').trim();
-        const email = String(rawNormalized.email || '').trim();
-        const websiteUrl = String(rawNormalized.websiteUrl || '').trim();
-        const admissionUrl = String(rawNormalized.admissionUrl || '').trim();
+        const email = normalizeLooseOptionalText(rawNormalized.email);
+        const websiteUrl = normalizeLooseOptionalText(rawNormalized.websiteUrl);
+        const admissionUrl = normalizeLooseOptionalText(rawNormalized.admissionUrl);
+        const requestedSlug = String(rawNormalized.slug || '').trim();
         const appStartRaw = rawNormalized.applicationStartDate;
         const appEndRaw = rawNormalized.applicationEndDate;
         const appStartDate = parseDate(appStartRaw);
@@ -236,11 +246,11 @@ function validateAndNormalizeRows(rows, mapping, defaults) {
         if (fileKeySeen.has(fileKey))
             duplicateRows.push(rowNumber);
         fileKeySeen.add(fileKey);
-        if (admissionUrl) {
-            const admissionKey = admissionUrl.toLowerCase();
-            if (admissionKeySeen.has(admissionKey))
+        if (requestedSlug) {
+            const slugKey = requestedSlug.toLowerCase();
+            if (admissionKeySeen.has(slugKey))
                 duplicateRows.push(rowNumber);
-            admissionKeySeen.add(admissionKey);
+            admissionKeySeen.add(slugKey);
         }
         normalizedRows.push((0, universitySyncService_1.normalizeUniversityImportRow)({
             ...rawNormalized,
@@ -275,7 +285,7 @@ function validateAndNormalizeRows(rows, mapping, defaults) {
             clusterSyncLocked: rawNormalized.clusterSyncLocked,
             verificationStatus: String(rawNormalized.verificationStatus || '').trim(),
             remarks: String(rawNormalized.remarks || '').trim(),
-            slug: String(rawNormalized.slug || '').trim(),
+            slug: requestedSlug,
         }));
     });
     return { normalizedRows, failedRows, duplicateRows: Array.from(new Set(duplicateRows)).sort((a, b) => a - b) };
@@ -337,18 +347,17 @@ async function adminValidateUniversityImport(req, res) {
         const defaults = (req.body?.defaults || {});
         const { normalizedRows, failedRows, duplicateRows } = validateAndNormalizeRows((job.rawRows || []), mapping, defaults);
         const existingUniversities = await University_1.default.find({})
-            .select('name shortForm admissionWebsite admissionUrl')
+            .select('name shortForm slug')
             .lean();
         const existingByNameShort = new Set(existingUniversities.map((item) => `${String(item.name || '').trim().toLowerCase()}::${String(item.shortForm || '').trim().toLowerCase()}`));
-        const existingByAdmission = new Set(existingUniversities.flatMap((item) => [
-            String(item.admissionWebsite || '').trim().toLowerCase(),
-            String(item.admissionUrl || '').trim().toLowerCase(),
-        ].filter(Boolean)));
+        const existingBySlug = new Set(existingUniversities
+            .map((item) => String(item.slug || '').trim().toLowerCase())
+            .filter(Boolean));
         const dbDuplicates = normalizedRows
             .filter((row) => {
             const fileKey = `${String(row.name || '').trim().toLowerCase()}::${String(row.shortForm || '').trim().toLowerCase()}`;
-            const admissionKey = String(row.admissionUrl || '').trim().toLowerCase();
-            return existingByNameShort.has(fileKey) || Boolean(admissionKey && existingByAdmission.has(admissionKey));
+            const slugKey = String(row.slug || '').trim().toLowerCase();
+            return existingByNameShort.has(fileKey) || Boolean(slugKey && existingBySlug.has(slugKey));
         })
             .map((row) => Number(row.rowNumber || 0));
         job.mapping = mapping;
@@ -423,22 +432,20 @@ async function adminCommitUniversityImport(req, res) {
             createdClusterNames.add(clusterName);
         }
         const existingUniversities = await University_1.default.find({})
-            .select('_id name shortForm admissionWebsite admissionUrl slug')
+            .select('_id name shortForm slug')
             .lean();
         const existingByNameShort = new Map();
-        const existingByAdmission = new Map();
+        const existingBySlug = new Map();
         const slugOwnerMap = new Map();
         existingUniversities.forEach((item) => {
             const key = `${String(item.name || '').trim().toLowerCase()}::${String(item.shortForm || '').trim().toLowerCase()}`;
             if (key)
                 existingByNameShort.set(key, { _id: item._id, slug: String(item.slug || '') });
-            [item.admissionWebsite, item.admissionUrl]
-                .map((value) => String(value || '').trim().toLowerCase())
-                .filter(Boolean)
-                .forEach((value) => existingByAdmission.set(value, { _id: item._id, slug: String(item.slug || '') }));
             const slug = String(item.slug || '').trim().toLowerCase();
-            if (slug)
+            if (slug) {
+                existingBySlug.set(slug, { _id: item._id, slug: String(item.slug || '') });
                 slugOwnerMap.set(slug, String(item._id));
+            }
         });
         const bulkOps = [];
         const clusterAssignments = new Map();
@@ -463,10 +470,11 @@ async function adminCommitUniversityImport(req, res) {
                 const normalized = (0, universitySyncService_1.normalizeUniversityImportRow)(row);
                 const name = String(normalized.name || '').trim();
                 const shortForm = String(normalized.shortForm || '').trim();
-                const admissionUrl = String(normalized.admissionUrl || '').trim();
+                const admissionUrl = normalizeLooseOptionalText(normalized.admissionUrl);
+                const requestedSlugKey = String(normalized.slug || '').trim().toLowerCase();
                 const lookupKey = `${name.toLowerCase()}::${shortForm.toLowerCase()}`;
-                const existing = existingByNameShort.get(lookupKey)
-                    || (admissionUrl ? existingByAdmission.get(admissionUrl.toLowerCase()) : undefined);
+                const existing = (requestedSlugKey ? existingBySlug.get(requestedSlugKey) : undefined)
+                    || existingByNameShort.get(lookupKey);
                 if (existing && mode === 'create-only') {
                     failedRows.push({ rowNumber: Number(normalized.rowNumber || 0), reason: 'Duplicate existing row (create-only mode).', payload: row });
                     continue;
@@ -553,8 +561,8 @@ async function adminCommitUniversityImport(req, res) {
                     inserted += 1;
                 }
                 existingByNameShort.set(lookupKey, { _id: new mongoose_1.default.Types.ObjectId(universityId), slug });
-                if (admissionUrl) {
-                    existingByAdmission.set(admissionUrl.toLowerCase(), { _id: new mongoose_1.default.Types.ObjectId(universityId), slug });
+                if (slug) {
+                    existingBySlug.set(slug.toLowerCase(), { _id: new mongoose_1.default.Types.ObjectId(universityId), slug });
                 }
                 if (clusterDoc) {
                     const current = clusterAssignments.get(String(clusterDoc._id)) || [];

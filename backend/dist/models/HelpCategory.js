@@ -43,7 +43,6 @@ const HelpCategorySchema = new mongoose_1.Schema({
     displayOrder: { type: Number, default: 0 },
     articleCount: { type: Number, default: 0 },
 }, { timestamps: true, collection: 'help_categories' });
-HelpCategorySchema.index({ slug: 1 }, { unique: true });
 HelpCategorySchema.index({ isActive: 1, displayOrder: 1 });
 exports.default = mongoose_1.default.model('HelpCategory', HelpCategorySchema);
 //# sourceMappingURL=HelpCategory.js.map

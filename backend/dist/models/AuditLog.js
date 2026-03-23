@@ -38,14 +38,23 @@ const AuditLogSchema = new mongoose_1.Schema({
     actor_id: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: true },
     actor_role: { type: String, trim: true },
     action: { type: String, required: true, trim: true },
+    module: { type: String, trim: true, default: '' },
+    status: { type: String, enum: ['success', 'warning', 'failed', 'pending'], default: 'success' },
     target_id: { type: mongoose_1.Schema.Types.ObjectId },
     target_type: { type: String, trim: true },
+    requestId: { type: String, trim: true, default: '' },
+    sessionId: { type: String, trim: true, default: '' },
+    device: { type: String, trim: true, default: '' },
+    reason: { type: String, trim: true, default: '' },
+    before: { type: mongoose_1.Schema.Types.Mixed, default: null },
+    after: { type: mongoose_1.Schema.Types.Mixed, default: null },
     timestamp: { type: Date, default: Date.now },
     ip_address: { type: String },
     details: { type: mongoose_1.Schema.Types.Mixed }
 });
 AuditLogSchema.index({ actor_id: 1 });
 AuditLogSchema.index({ action: 1 });
+AuditLogSchema.index({ module: 1, status: 1, timestamp: -1 });
 AuditLogSchema.index({ timestamp: -1 });
 exports.default = mongoose_1.default.model('AuditLog', AuditLogSchema);
 //# sourceMappingURL=AuditLog.js.map

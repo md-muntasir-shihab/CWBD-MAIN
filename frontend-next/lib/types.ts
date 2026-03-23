@@ -138,7 +138,6 @@ export type StudentDashboardProfile = {
 export type RuntimeSettingsPayload = {
   featureFlags?: {
     studentRegistrationEnabled?: boolean;
-    passwordRevealEnabled?: boolean;
     financeDashboardV1?: boolean;
     smsReminderEnabled?: boolean;
     emailReminderEnabled?: boolean;

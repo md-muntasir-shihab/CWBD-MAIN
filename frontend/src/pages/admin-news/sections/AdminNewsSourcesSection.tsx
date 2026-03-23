@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import NewsHelpButton from '../../../components/admin/NewsHelpButton';
 import {
     ApiNewsV2Source,
     adminNewsV2CreateSource,
@@ -116,10 +117,30 @@ export default function AdminNewsSourcesSection() {
     return (
         <div className="space-y-4">
             <form onSubmit={onSubmit} className="card-flat border border-cyan-500/20 p-4">
-                <h2 className="mb-3 text-lg font-semibold">{editingId ? 'Edit Source' : 'Add RSS Source'}</h2>
-                <div className="grid gap-3 md:grid-cols-2">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-1">
+                        <h2 className="text-lg font-semibold">{editingId ? 'Edit Source' : 'Add RSS Source'}</h2>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">Manage feed health, fetch timing, and source defaults in one place.</p>
+                    </div>
+                    <NewsHelpButton
+                        title="RSS Source Management"
+                        content="Add, edit, test, disable, and reorder RSS feeds from this screen."
+                        impact="It keeps feed ownership and fetch behavior visible before content reaches review."
+                        affected="Admins and editors responsible for RSS ingestion."
+                        publishNote="A source only affects published content after its items are reviewed and published."
+                        publishSendNote="If source items later enter publish + send, the communication layer will use the chosen audience/template settings."
+                        enabledNote="Active sources keep the queue fresh without manual re-entry."
+                        disabledNote="Disabled sources stop contributing new items until re-enabled."
+                        bestPractice="Keep one source per upstream feed and use source health chips to spot broken feeds early."
+                        variant="full"
+                    />
+                </div>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
                     <input className="input-field" placeholder="Source Name" value={form.name || ''} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} required />
                     <input className="input-field" placeholder="Feed URL" value={form.feedUrl || ''} onChange={(e) => setForm((prev) => ({ ...prev, feedUrl: e.target.value }))} required />
+                    <div className="md:col-span-2 rounded-2xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
+                        Use a live RSS or Atom feed URL here. Placeholder `example.com` feeds are rejected so broken demo sources do not keep polluting the queue.
+                    </div>
                     <div className="space-y-2 md:col-span-2">
                         <input
                             className="input-field"
@@ -170,13 +191,62 @@ export default function AdminNewsSourcesSection() {
             </form>
 
             <div className="card-flat border border-cyan-500/20 p-4">
-                <div className="overflow-x-auto">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                    <div className="space-y-1">
+                        <h3 className="text-lg font-semibold">Source List</h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">Review health, fetch cadence, and quick actions without opening a wide table.</p>
+                    </div>
+                    <span className="rounded-full border border-slate-300/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 dark:border-slate-700/70 dark:text-slate-400">
+                        {sourcesQuery.data?.items?.length || 0} sources
+                    </span>
+                </div>
+                <div className="grid gap-3 lg:hidden">
+                    {(sourcesQuery.data?.items || []).map((source) => (
+                        <div key={source._id} className="rounded-2xl border border-slate-200/80 bg-slate-100/70 p-3 dark:border-slate-800/70 dark:bg-slate-950/50">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <h4 className="truncate text-sm font-semibold text-slate-900 dark:text-white">{source.name}</h4>
+                                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">{source.feedUrl}</p>
+                                </div>
+                                <StatusPill active={source.isActive} />
+                            </div>
+                            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                                <MetaChip label="Interval" value={`${source.fetchIntervalMin}m`} />
+                                <MetaChip label="Health" value={formatHealthLabel(source)} />
+                                <MetaChip label="Created" value={source.lastCreatedCount ?? 0} />
+                                <MetaChip label="Dup Rate" value={formatRate(source.lastDuplicateRate)} />
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                                <button className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 dark:border-slate-600 dark:text-slate-200" onClick={() => { setEditingId(source._id); setForm(source); setTagsInput((source.tagsDefault || []).join(', ')); }}>Edit</button>
+                                <button className="rounded border border-cyan-600/60 px-2 py-1 text-xs text-cyan-200" onClick={() => actionMutation.mutate({ type: 'test', id: source._id })}>Test</button>
+                                <button className="rounded border border-indigo-600/60 px-2 py-1 text-xs text-indigo-200" onClick={() => actionMutation.mutate({ type: 'toggle', id: source._id, enabled: !source.isActive })}>
+                                    {source.isActive ? 'Disable' : 'Enable'}
+                                </button>
+                                <button className="rounded border border-slate-500/60 px-2 py-1 text-xs text-slate-200" onClick={() => reorderSource(source._id, 'up')}>
+                                    Up
+                                </button>
+                                <button className="rounded border border-slate-500/60 px-2 py-1 text-xs text-slate-200" onClick={() => reorderSource(source._id, 'down')}>
+                                    Down
+                                </button>
+                                <button className="rounded border border-rose-600/60 px-2 py-1 text-xs text-rose-200" onClick={() => actionMutation.mutate({ type: 'delete', id: source._id })}>Delete</button>
+                            </div>
+                            {renderSourceHealth(source)}
+                        </div>
+                    ))}
+                    {!sourcesQuery.data?.items?.length ? (
+                        <p className="rounded-xl border border-dashed border-slate-300 px-3 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                            No sources yet.
+                        </p>
+                    ) : null}
+                </div>
+                <div className="hidden overflow-x-auto lg:block">
                     <table className="min-w-full text-sm">
                         <thead>
                             <tr className="border-b border-cyan-500/20 text-left text-xs uppercase tracking-wider text-slate-400">
                                 <th className="py-2 pr-3">Name</th>
                                 <th className="py-2 pr-3">Feed URL</th>
                                 <th className="py-2 pr-3">Interval</th>
+                                <th className="py-2 pr-3">Health</th>
                                 <th className="py-2 pr-3">Status</th>
                                 <th className="py-2 pr-3">Actions</th>
                             </tr>
@@ -187,6 +257,13 @@ export default function AdminNewsSourcesSection() {
                                     <td className="py-2 pr-3">{source.name}</td>
                                     <td className="py-2 pr-3 text-xs text-slate-600 dark:text-slate-300">{source.feedUrl}</td>
                                     <td className="py-2 pr-3">{source.fetchIntervalMin}m</td>
+                                    <td className="py-2 pr-3 text-xs text-slate-500 dark:text-slate-400">
+                                        <div className="flex flex-wrap gap-1.5">
+                                            <span className="rounded-full border border-slate-300 px-2 py-0.5 dark:border-slate-600">{formatHealthLabel(source)}</span>
+                                            <span className="rounded-full border border-slate-300 px-2 py-0.5 dark:border-slate-600">{formatRate(source.lastDuplicateRate)}</span>
+                                            <span className="rounded-full border border-slate-300 px-2 py-0.5 dark:border-slate-600">{source.lastCreatedCount ?? 0} created</span>
+                                        </div>
+                                    </td>
                                     <td className="py-2 pr-3">{source.isActive ? 'Active' : 'Disabled'}</td>
                                     <td className="py-2 pr-3">
                                         <div className="flex flex-wrap gap-1">
@@ -208,7 +285,7 @@ export default function AdminNewsSourcesSection() {
                             ))}
                             {!sourcesQuery.data?.items?.length && (
                                 <tr>
-                                    <td colSpan={5} className="py-4 text-center text-slate-500 dark:text-slate-400">No sources yet.</td>
+                                    <td colSpan={6} className="py-4 text-center text-slate-500 dark:text-slate-400">No sources yet.</td>
                                 </tr>
                             )}
                         </tbody>
@@ -217,4 +294,65 @@ export default function AdminNewsSourcesSection() {
             </div>
         </div>
     );
+}
+
+function StatusPill({ active }: { active: boolean }) {
+    return (
+        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] ${active ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200' : 'border-slate-400/40 bg-slate-500/10 text-slate-300'}`}>
+            {active ? 'Active' : 'Disabled'}
+        </span>
+    );
+}
+
+function MetaChip({ label, value }: { label: string; value: number | string }) {
+    return (
+        <div className="rounded-xl border border-slate-200/70 bg-white/70 px-2.5 py-2 dark:border-slate-800/70 dark:bg-slate-950/50">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">{label}</p>
+            <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{value}</p>
+        </div>
+    );
+}
+
+function formatRate(value?: number | null): string {
+    if (value === null || value === undefined) return 'n/a';
+    if (value <= 1) return `${Math.round(value * 100)}%`;
+    return `${value}%`;
+}
+
+function renderSourceHealth(source: ApiNewsV2Source) {
+    const chips = [
+        source.healthState ? `Health: ${formatHealthLabel(source)}` : null,
+        source.consecutiveFailureCount ? `Fails: ${source.consecutiveFailureCount}` : null,
+        source.lastHttpStatus ? `HTTP ${source.lastHttpStatus}` : null,
+        source.lastParseError ? `Parse issue` : null,
+        source.lastExtractionMode ? `Mode: ${source.lastExtractionMode}` : null,
+    ].filter(Boolean) as string[];
+
+    if (!chips.length) return null;
+
+    return (
+        <div className="mt-3 space-y-2">
+            <div className="flex flex-wrap gap-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+                {chips.map((chip) => (
+                    <span key={chip} className="rounded-full border border-slate-300 px-2 py-0.5 dark:border-slate-700">
+                        {chip}
+                    </span>
+                ))}
+            </div>
+            {source.sourceWarnings?.length ? (
+                <div className="space-y-1 text-xs text-amber-700 dark:text-amber-200">
+                    {source.sourceWarnings.map((warning) => (
+                        <p key={warning} className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2">
+                            {warning}
+                        </p>
+                    ))}
+                </div>
+            ) : null}
+        </div>
+    );
+}
+
+function formatHealthLabel(source: ApiNewsV2Source): string {
+    if (source.healthState === 'invalid_config') return 'invalid config';
+    return source.lastFetchStatus || source.healthState || 'unknown';
 }

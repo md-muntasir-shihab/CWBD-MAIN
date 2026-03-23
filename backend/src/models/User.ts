@@ -35,7 +35,11 @@ export interface IUser extends Document {
     permissions: IUserPermissions;
     permissionsV2?: IUserPermissionsV2;
     phone_number?: string;
+    phoneVerifiedAt?: Date | null;
+    phoneVerificationPendingAt?: Date | null;
     profile_photo?: string;
+    emailVerifiedAt?: Date | null;
+    emailVerificationPendingAt?: Date | null;
     mustChangePassword: boolean;
     passwordResetRequired: boolean;
     passwordSetByAdminId?: mongoose.Types.ObjectId;
@@ -49,9 +53,25 @@ export interface IUser extends Document {
     credentialsLastResentAtUTC?: Date;
     loginAttempts: number;
     lockUntil?: Date;
+    lockReason?: string | null;
+    lockedByUserId?: mongoose.Types.ObjectId | null;
+    lastLockAt?: Date | null;
     twoFactorEnabled: boolean;
     twoFactorSecret?: string;
     two_factor_method?: 'email' | 'sms' | 'authenticator' | null;
+    twoFactorBackupCodes?: Array<{
+        codeHash: string;
+        usedAt?: Date | null;
+    }>;
+    twoFactorRecoveryLastIssuedAt?: Date | null;
+    twoFactorLastVerifiedAt?: Date | null;
+    lastSecurityNoticeAt?: Date | null;
+    passwordHistory?: Array<{
+        hash: string;
+        createdAt: Date;
+        source?: 'admin' | 'user' | 'reset';
+    }>;
+    passwordExpiresAt?: Date | null;
     lastLogin?: Date;
     lastLoginAtUTC?: Date;
     ip_address?: string;
@@ -126,7 +146,11 @@ const UserSchema = new Schema<IUser>(
             default: () => ({}),
         },
         phone_number: { type: String, unique: true, sparse: true, index: true },
+        phoneVerifiedAt: { type: Date, default: null },
+        phoneVerificationPendingAt: { type: Date, default: null },
         profile_photo: { type: String, trim: true },
+        emailVerifiedAt: { type: Date, default: null },
+        emailVerificationPendingAt: { type: Date, default: null },
         mustChangePassword: { type: Boolean, default: false },
         passwordResetRequired: { type: Boolean, default: false },
         passwordSetByAdminId: { type: Schema.Types.ObjectId, ref: 'User', default: null },
@@ -140,9 +164,33 @@ const UserSchema = new Schema<IUser>(
         credentialsLastResentAtUTC: { type: Date, default: null },
         loginAttempts: { type: Number, default: 0 },
         lockUntil: { type: Date },
+        lockReason: { type: String, trim: true, default: null },
+        lockedByUserId: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+        lastLockAt: { type: Date, default: null },
         twoFactorEnabled: { type: Boolean, default: false },
         twoFactorSecret: { type: String, select: false },
         two_factor_method: { type: String, enum: ['email', 'sms', 'authenticator', null], default: null },
+        twoFactorBackupCodes: {
+            type: [{
+                codeHash: { type: String, required: true },
+                usedAt: { type: Date, default: null },
+            }],
+            default: [],
+            select: false,
+        },
+        twoFactorRecoveryLastIssuedAt: { type: Date, default: null },
+        twoFactorLastVerifiedAt: { type: Date, default: null },
+        lastSecurityNoticeAt: { type: Date, default: null },
+        passwordHistory: {
+            type: [{
+                hash: { type: String, required: true },
+                createdAt: { type: Date, default: Date.now },
+                source: { type: String, enum: ['admin', 'user', 'reset'], default: 'user' },
+            }],
+            default: [],
+            select: false,
+        },
+        passwordExpiresAt: { type: Date, default: null },
         lastLogin: { type: Date },
         lastLoginAtUTC: { type: Date },
         ip_address: { type: String, trim: true },

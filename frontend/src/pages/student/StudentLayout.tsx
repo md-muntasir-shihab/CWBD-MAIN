@@ -10,6 +10,7 @@ import {
     UserRound,
     LogOut,
     NotebookText,
+    Shield,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import GlobalAlertGate from '../../components/student/GlobalAlertGate';
@@ -28,6 +29,7 @@ const NAV_ITEMS: NavItem[] = [
     { label: 'Payments', path: '/payments', icon: <CreditCard className="w-4 h-4" /> },
     { label: 'Notifications', path: '/notifications', icon: <Bell className="w-4 h-4" /> },
     { label: 'Profile', path: '/profile', icon: <UserRound className="w-4 h-4" />, mobile: true },
+    { label: 'Security', path: '/profile/security', icon: <Shield className="w-4 h-4" />, mobile: true },
     { label: 'Resources', path: '/student/resources', icon: <MenuSquare className="w-4 h-4" /> },
     { label: 'Support', path: '/support', icon: <LifeBuoy className="w-4 h-4" /> },
 ];
@@ -38,6 +40,9 @@ function isActivePath(currentPath: string, targetPath: string): boolean {
     }
     if (targetPath === '/profile') {
         return currentPath === '/profile' || currentPath === '/student/profile';
+    }
+    if (targetPath === '/profile/security') {
+        return currentPath === '/profile/security' || currentPath === '/student/security';
     }
     if (targetPath === '/results') {
         return currentPath === '/results' || currentPath.startsWith('/results/');

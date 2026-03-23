@@ -58,6 +58,12 @@ function deterministicPhone(seed, suffix = 0) {
 function toSlug(value) {
     return (0, slugify_1.default)(String(value || '').trim(), { lower: true, strict: true });
 }
+function buildReachableExampleUrl(slug, kind) {
+    const safeSlug = encodeURIComponent(slug);
+    return kind === 'admission'
+        ? `https://example.com/admission/${safeSlug}`
+        : `https://example.com/universities/${safeSlug}`;
+}
 function nowPlusDays(days) {
     return new Date(Date.now() + days * DAY_MS);
 }
@@ -212,23 +218,34 @@ async function seedContentPipeline(options = {}) {
     const secondaryStudentId = ensureObjectId(secondaryStudent._id);
     const categoryDocs = await Promise.all(universityCategories_1.UNIVERSITY_CATEGORY_ORDER.map(async (name, index) => {
         const slug = toSlug(name);
-        return UniversityCategory_1.default.findOneAndUpdate({ slug }, {
-            $set: {
-                name,
-                slug,
-                labelEn: name,
-                labelBn: '',
-                colorToken: '',
-                icon: '',
-                isActive: true,
-                homeHighlight: index < 4,
-                homeOrder: index + 1,
-                updatedBy: primaryAdminId,
-            },
-            $setOnInsert: { createdBy: primaryAdminId },
-        }, { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true });
+        try {
+            return await UniversityCategory_1.default.findOneAndUpdate({ name }, {
+                $set: {
+                    name,
+                    slug,
+                    labelEn: name,
+                    labelBn: '',
+                    colorToken: '',
+                    icon: '',
+                    isActive: true,
+                    homeHighlight: index < 4,
+                    homeOrder: index + 1,
+                    updatedBy: primaryAdminId,
+                },
+                $setOnInsert: { createdBy: primaryAdminId },
+            }, { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true });
+        }
+        catch (err) {
+            const e = err;
+            if (e.code === 11000) {
+                return UniversityCategory_1.default.findOne({ name });
+            }
+            throw err;
+        }
     }));
-    const categoryIdByName = new Map(categoryDocs.map((doc) => [doc.name, ensureObjectId(doc._id)]));
+    const categoryIdByName = new Map(categoryDocs
+        .filter((doc) => Boolean(doc))
+        .map((doc) => [doc.name, ensureObjectId(doc._id)]));
     const planSeeds = [
         {
             code: 'demo',
@@ -484,10 +501,10 @@ async function seedContentPipeline(options = {}) {
                 address: String(seed.address || 'Dhaka'),
                 contactNumber: '+8801711000000',
                 email: `${slug}@campusway.local`,
-                website: `https://${slug}.example.com`,
-                websiteUrl: `https://${slug}.example.com`,
-                admissionWebsite: `https://${slug}.example.com/admission`,
-                admissionUrl: `https://${slug}.example.com/admission`,
+                website: buildReachableExampleUrl(slug, 'website'),
+                websiteUrl: buildReachableExampleUrl(slug, 'website'),
+                admissionWebsite: buildReachableExampleUrl(slug, 'admission'),
+                admissionUrl: buildReachableExampleUrl(slug, 'admission'),
                 totalSeats: String(1200 + index * 100),
                 scienceSeats: String(500 + index * 50),
                 artsSeats: String(350 + index * 30),

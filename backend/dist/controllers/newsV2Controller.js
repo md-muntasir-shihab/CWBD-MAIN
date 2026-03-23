@@ -21,6 +21,9 @@ exports.adminNewsV2Schedule = adminNewsV2Schedule;
 exports.adminNewsV2ApprovePublish = adminNewsV2ApprovePublish;
 exports.adminNewsV2MoveToDraft = adminNewsV2MoveToDraft;
 exports.adminNewsV2PublishAnyway = adminNewsV2PublishAnyway;
+exports.adminNewsV2Archive = adminNewsV2Archive;
+exports.adminNewsV2ConvertToNotice = adminNewsV2ConvertToNotice;
+exports.adminNewsV2PublishSend = adminNewsV2PublishSend;
 exports.adminNewsV2MergeDuplicate = adminNewsV2MergeDuplicate;
 exports.adminNewsV2BulkApprove = adminNewsV2BulkApprove;
 exports.adminNewsV2BulkReject = adminNewsV2BulkReject;
@@ -46,6 +49,9 @@ exports.adminNewsV2ExportNews = adminNewsV2ExportNews;
 exports.adminNewsV2ExportSources = adminNewsV2ExportSources;
 exports.adminNewsV2ExportLogs = adminNewsV2ExportLogs;
 exports.adminNewsV2GetAuditLogs = adminNewsV2GetAuditLogs;
+exports.getPublicNewsV2DiagnosticFeed = getPublicNewsV2DiagnosticFeed;
+exports.getPublicNewsV2DiagnosticArticle = getPublicNewsV2DiagnosticArticle;
+exports.getPublicNewsV2DiagnosticDelivery = getPublicNewsV2DiagnosticDelivery;
 exports.getPublicNewsV2List = getPublicNewsV2List;
 exports.getPublicNewsV2BySlug = getPublicNewsV2BySlug;
 exports.getPublicNewsV2Appearance = getPublicNewsV2Appearance;
@@ -63,11 +69,16 @@ const jsdom_1 = require("jsdom");
 const News_1 = __importDefault(require("../models/News"));
 const NewsSource_1 = __importDefault(require("../models/NewsSource"));
 const NewsSystemSettings_1 = __importDefault(require("../models/NewsSystemSettings"));
+const AnnouncementNotice_1 = __importDefault(require("../models/AnnouncementNotice"));
 const NewsMedia_1 = __importDefault(require("../models/NewsMedia"));
 const NewsFetchJob_1 = __importDefault(require("../models/NewsFetchJob"));
 const NewsAuditEvent_1 = __importDefault(require("../models/NewsAuditEvent"));
+const Notification_1 = __importDefault(require("../models/Notification"));
+const StudentProfile_1 = __importDefault(require("../models/StudentProfile"));
 const questionBank_1 = require("../utils/questionBank");
 const homeStream_1 = require("../realtime/homeStream");
+const studentDashboardStream_1 = require("../realtime/studentDashboardStream");
+const notificationOrchestrationService_1 = require("../services/notificationOrchestrationService");
 const DEFAULT_NEWS_V2_SETTINGS = {
     pageTitle: 'Admission News & Updates',
     pageSubtitle: 'Latest verified admission updates, circulars, and deadlines.',
@@ -162,6 +173,27 @@ const DEFAULT_NEWS_V2_SETTINGS = {
         openOriginalWhenExtractionIncomplete: true,
         autoExpireDays: null,
     },
+    communication: {
+        allowPublishSend: true,
+        allowNoticeConversion: true,
+        defaultChannels: ['email'],
+        defaultAudienceType: 'all',
+        defaultRecipientMode: 'student',
+        defaultNoticeTarget: 'all',
+        exposeStudentFriendlyExplanation: true,
+        exposeKeyPoints: true,
+    },
+    cleanup: {
+        staleDraftDays: 45,
+        archiveAfterPublishDays: null,
+        removeUnusedMediaAfterDays: 60,
+        disableSourceAfterFailureCount: null,
+    },
+    help: {
+        enabled: true,
+        mode: 'drawer',
+        version: 'v2',
+    },
 };
 function deepMerge(base, override) {
     const out = { ...base };
@@ -200,7 +232,7 @@ async function writeNewsAuditEvent(req, payload) {
         });
     }
     catch (error) {
-        console.error('[news-v2][audit] failed:', error);
+        console.error('[news][audit] failed:', error);
     }
 }
 async function getOrCreateNewsSettings() {
@@ -212,11 +244,43 @@ async function getOrCreateNewsSettings() {
     const merged = deepMerge(DEFAULT_NEWS_V2_SETTINGS, (settings?.config || {}));
     return normalizeSettingsCompatibility(merged);
 }
+function preserveExistingAiSecrets(current, partial) {
+    const next = { ...partial };
+    const aiSettingsPatch = partial.aiSettings && typeof partial.aiSettings === 'object'
+        ? { ...partial.aiSettings }
+        : null;
+    if (aiSettingsPatch) {
+        const incomingApiKey = aiSettingsPatch.apiKey;
+        const clearRequested = aiSettingsPatch.clearApiKey === true;
+        if (!clearRequested && (incomingApiKey === undefined || String(incomingApiKey || '').trim() === '')) {
+            aiSettingsPatch.apiKey = String(current.aiSettings?.apiKey || '').trim();
+        }
+        delete aiSettingsPatch.clearApiKey;
+        next.aiSettings = aiSettingsPatch;
+    }
+    return next;
+}
+function sanitizeSettingsSecrets(settings) {
+    const sanitized = JSON.parse(JSON.stringify(settings || {}));
+    if (!sanitized.aiSettings || typeof sanitized.aiSettings !== 'object') {
+        sanitized.aiSettings = {};
+    }
+    const apiKey = String(sanitized.aiSettings.apiKey || '').trim();
+    sanitized.aiSettings.apiKeyConfigured = Boolean(apiKey);
+    sanitized.aiSettings.apiKeyMasked = apiKey ? `••••${apiKey.slice(-4)}` : '';
+    sanitized.aiSettings.apiKey = '';
+    return sanitized;
+}
 async function updateNewsSettingsConfig(req, partial) {
     const current = await getOrCreateNewsSettings();
-    const merged = normalizeSettingsCompatibility(deepMerge(current, partial));
+    const mergedPartial = preserveExistingAiSecrets(current, partial);
+    const merged = normalizeSettingsCompatibility(deepMerge(current, mergedPartial));
     await NewsSystemSettings_1.default.updateOne({ key: 'default' }, { $set: { config: merged, updatedBy: req.user?._id } }, { upsert: true });
-    await writeNewsAuditEvent(req, { action: 'settings.update', entityType: 'settings', after: merged });
+    await writeNewsAuditEvent(req, {
+        action: 'settings.update',
+        entityType: 'settings',
+        after: sanitizeSettingsSecrets(merged),
+    });
     return merged;
 }
 function normalizeSettingsCompatibility(settings) {
@@ -264,6 +328,55 @@ function normalizeSettingsCompatibility(settings) {
     normalized.workflow.allowScheduling = normalized.workflow.allowScheduling !== false;
     normalized.workflow.allowSchedulePublish = normalized.workflow.allowScheduling;
     normalized.workflow.openOriginalWhenExtractionIncomplete = normalized.workflow.openOriginalWhenExtractionIncomplete !== false;
+    normalized.communication = normalized.communication || {
+        allowPublishSend: true,
+        allowNoticeConversion: true,
+        defaultChannels: ['email'],
+        defaultAudienceType: 'all',
+        defaultRecipientMode: 'student',
+        defaultNoticeTarget: 'all',
+        exposeStudentFriendlyExplanation: true,
+        exposeKeyPoints: true,
+    };
+    if (!Array.isArray(normalized.communication.defaultChannels) || normalized.communication.defaultChannels.length === 0) {
+        normalized.communication.defaultChannels = ['email'];
+    }
+    normalized.communication.defaultChannels = normalized.communication.defaultChannels
+        .map((channel) => String(channel || '').trim().toLowerCase())
+        .filter((channel) => channel === 'sms' || channel === 'email');
+    if (normalized.communication.defaultChannels.length === 0) {
+        normalized.communication.defaultChannels = ['email'];
+    }
+    normalized.communication.defaultAudienceType =
+        normalized.communication.defaultAudienceType === 'group'
+            || normalized.communication.defaultAudienceType === 'filter'
+            || normalized.communication.defaultAudienceType === 'manual'
+            ? normalized.communication.defaultAudienceType
+            : 'all';
+    normalized.communication.defaultRecipientMode =
+        normalized.communication.defaultRecipientMode === 'guardian'
+            || normalized.communication.defaultRecipientMode === 'both'
+            ? normalized.communication.defaultRecipientMode
+            : 'student';
+    normalized.communication.defaultNoticeTarget =
+        normalized.communication.defaultNoticeTarget === 'groups'
+            || normalized.communication.defaultNoticeTarget === 'students'
+            ? normalized.communication.defaultNoticeTarget
+            : 'all';
+    normalized.communication.allowPublishSend = normalized.communication.allowPublishSend !== false;
+    normalized.communication.allowNoticeConversion = normalized.communication.allowNoticeConversion !== false;
+    normalized.communication.exposeStudentFriendlyExplanation = normalized.communication.exposeStudentFriendlyExplanation !== false;
+    normalized.communication.exposeKeyPoints = normalized.communication.exposeKeyPoints !== false;
+    normalized.cleanup = normalized.cleanup || {
+        staleDraftDays: 45,
+        archiveAfterPublishDays: null,
+        removeUnusedMediaAfterDays: 60,
+        disableSourceAfterFailureCount: null,
+    };
+    normalized.help = normalized.help || { enabled: true, mode: 'drawer', version: 'v2' };
+    normalized.help.enabled = normalized.help.enabled !== false;
+    normalized.help.mode = normalized.help.mode === 'popover' ? 'popover' : 'drawer';
+    normalized.help.version = String(normalized.help.version || 'v2').trim() || 'v2';
     normalized.aiSettings = normalized.aiSettings || {
         enabled: normalized.ai.enabled,
         language: String(normalized.ai.language || 'en').toLowerCase(),
@@ -388,7 +501,9 @@ function buildAdminAiSettingsResponse(config) {
         language: String(config.aiSettings?.language || config.ai.language || 'en').toLowerCase(),
         stylePreset: config.aiSettings?.stylePreset === 'very_short' ? 'short' : (config.aiSettings?.stylePreset || 'standard'),
         apiProviderUrl: String(config.aiSettings?.apiProviderUrl || provider?.baseUrl || ''),
-        apiKey: String(config.aiSettings?.apiKey || ''),
+        apiKey: '',
+        apiKeyConfigured: Boolean(String(config.aiSettings?.apiKey || '').trim() || resolveProviderApiKey(provider, config)),
+        apiKeyMasked: String(config.aiSettings?.apiKey || '').trim() ? `••••${String(config.aiSettings?.apiKey || '').trim().slice(-4)}` : '',
         apiKeyRef: String(config.aiSettings?.apiKeyRef || provider?.apiKeyRef || ''),
         providerType: config.aiSettings?.providerType || provider?.type || 'openai',
         providerModel: String(config.aiSettings?.providerModel || provider?.model || ''),
@@ -399,6 +514,37 @@ function buildAdminAiSettingsResponse(config) {
         duplicateSensitivity: String(config.aiSettings?.duplicateSensitivity || 'medium'),
         maxLength: Number(config.aiSettings?.maxLength || config.ai.maxTokens || 1200),
         temperature: Number(config.ai.temperature || 0.2),
+    };
+}
+function parseAiStringArray(value) {
+    if (!Array.isArray(value))
+        return [];
+    return value
+        .map((item) => String(item || '').trim())
+        .filter(Boolean)
+        .slice(0, 12);
+}
+function mapAiDraft(parsed, sourceUrl, provider) {
+    const citations = parseAiStringArray(parsed.citations);
+    return {
+        title: String(parsed.title || ''),
+        summary: String(parsed.summary || parsed.shortSummary || ''),
+        content: String(parsed.content || parsed.detailedExplanation || ''),
+        citations: citations.length > 0 ? citations : (sourceUrl ? [sourceUrl] : []),
+        confidence: Number(parsed.confidence || 0.75),
+        provider: provider.id,
+        model: provider.model,
+        detailedExplanation: String(parsed.detailedExplanation || parsed.content || ''),
+        studentFriendlyExplanation: String(parsed.studentFriendlyExplanation || parsed.studentVersion || ''),
+        keyPoints: parseAiStringArray(parsed.keyPoints),
+        suggestedCategory: String(parsed.suggestedCategory || ''),
+        suggestedTags: parseAiStringArray(parsed.suggestedTags),
+        importanceHint: String(parsed.importanceHint || ''),
+        suggestedAudience: String(parsed.suggestedAudience || ''),
+        smsText: String(parsed.smsText || ''),
+        emailSubject: String(parsed.emailSubject || ''),
+        emailBody: String(parsed.emailBody || ''),
+        importantDates: parseAiStringArray(parsed.importantDates),
     };
 }
 async function callAiProvider(sourceText, sourceUrl, settings) {
@@ -429,7 +575,7 @@ async function callAiProvider(sourceText, sourceUrl, settings) {
         strictMode ? 'Strictly avoid hallucination.' : '',
         settings.ai.requireSourceLink ? `Source must be cited: ${sourceUrl}` : '',
         renderedTemplate ? `Admin custom prompt:\n${renderedTemplate}` : '',
-        'Return JSON with keys: title,summary,content,citations,confidence',
+        'Return JSON with keys: title, summary, content, detailedExplanation, studentFriendlyExplanation, keyPoints, suggestedCategory, suggestedTags, importanceHint, suggestedAudience, smsText, emailSubject, emailBody, importantDates, citations, confidence.',
         `Source text: ${sourceExcerpt}`,
     ].filter(Boolean).join('\n');
     if (provider.type === 'openai') {
@@ -455,15 +601,7 @@ async function callAiProvider(sourceText, sourceUrl, settings) {
         const json = await response.json();
         const raw = String(json?.choices?.[0]?.message?.content || '{}');
         const parsed = JSON.parse(raw);
-        return {
-            title: String(parsed.title || ''),
-            summary: String(parsed.summary || ''),
-            content: String(parsed.content || ''),
-            citations: Array.isArray(parsed.citations) ? parsed.citations.map((item) => String(item)) : [sourceUrl],
-            confidence: Number(parsed.confidence || 0.75),
-            provider: provider.id,
-            model: provider.model,
-        };
+        return mapAiDraft(parsed, sourceUrl, provider);
     }
     const endpoint = provider.baseUrl;
     const headers = { 'Content-Type': 'application/json', ...(provider.headers || {}) };
@@ -486,15 +624,7 @@ async function callAiProvider(sourceText, sourceUrl, settings) {
     catch {
         parsed = { content: rawText };
     }
-    return {
-        title: String(parsed.title || ''),
-        summary: String(parsed.summary || ''),
-        content: String(parsed.content || ''),
-        citations: Array.isArray(parsed.citations) ? parsed.citations.map((item) => String(item)) : [sourceUrl],
-        confidence: Number(parsed.confidence || 0.7),
-        provider: provider.id,
-        model: provider.model,
-    };
+    return mapAiDraft(parsed, sourceUrl, provider);
 }
 function renderAiPromptTemplate(template, values) {
     if (!template)
@@ -749,6 +879,178 @@ function normalizeFetchIntervalMinutes(value) {
         return parsed;
     return 30;
 }
+function extractHttpStatusFromErrorMessage(message) {
+    const matched = String(message || '').match(/\b(4\d{2}|5\d{2})\b/);
+    if (!matched?.[1])
+        return undefined;
+    const parsed = Number(matched[1]);
+    return Number.isFinite(parsed) ? parsed : undefined;
+}
+const PLACEHOLDER_SOURCE_HOSTS = new Set([
+    'example.com',
+    'www.example.com',
+    'example.org',
+    'www.example.org',
+    'example.net',
+    'www.example.net',
+]);
+function parseHttpUrl(input) {
+    const raw = String(input || '').trim();
+    if (!raw)
+        return null;
+    try {
+        const parsed = new URL(raw);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+            return null;
+        }
+        return parsed;
+    }
+    catch {
+        return null;
+    }
+}
+function isPlaceholderSourceUrl(input) {
+    const parsed = parseHttpUrl(input);
+    if (!parsed)
+        return false;
+    return PLACEHOLDER_SOURCE_HOSTS.has(parsed.hostname.toLowerCase());
+}
+function validateNewsSourceUrls(feedUrlRaw, siteUrlRaw = '', options = {}) {
+    const feedUrl = String(feedUrlRaw || '').trim();
+    if (!feedUrl) {
+        return 'Feed URL is required';
+    }
+    if (!parseHttpUrl(feedUrl)) {
+        return 'Feed URL must be a valid http(s) URL';
+    }
+    if (!options.allowPlaceholder && isPlaceholderSourceUrl(feedUrl)) {
+        return 'Replace the example.com placeholder feed with a real RSS or Atom URL before enabling this source.';
+    }
+    const siteUrl = String(siteUrlRaw || '').trim();
+    if (siteUrl && !parseHttpUrl(siteUrl)) {
+        return 'Site URL must be a valid http(s) URL';
+    }
+    return null;
+}
+function buildSourceHealthState(source) {
+    if (isPlaceholderSourceUrl(String(source.feedUrl || source.rssUrl || ''))) {
+        return 'invalid_config';
+    }
+    const lastSuccessAt = source.lastSuccessAt ? new Date(source.lastSuccessAt).getTime() : 0;
+    const isInactive = Boolean(lastSuccessAt) && (Date.now() - lastSuccessAt > 7 * 24 * 60 * 60 * 1000);
+    if (String(source.lastFetchStatus || '') === 'failed')
+        return 'failed';
+    if (Number(source.consecutiveFailureCount || 0) > 0)
+        return 'warning';
+    if (isInactive)
+        return 'inactive';
+    return 'healthy';
+}
+function collectSourceWarnings(source) {
+    const warnings = [];
+    if (isPlaceholderSourceUrl(String(source.feedUrl || source.rssUrl || ''))) {
+        warnings.push('Placeholder feed URL detected. Replace example.com before using this source.');
+    }
+    if (String(source.lastFetchStatus || '') === 'failed' && String(source.lastError || source.lastParseError || '').trim()) {
+        warnings.push(String(source.lastError || source.lastParseError || '').trim());
+    }
+    if (Number(source.consecutiveFailureCount || 0) >= 2) {
+        warnings.push(`Repeated failures detected (${Number(source.consecutiveFailureCount)} recent errors).`);
+    }
+    if (source.lastFetchedAt && !source.lastSuccessAt && !warnings.includes('This source has never completed a successful fetch yet.')) {
+        warnings.push('This source has never completed a successful fetch yet.');
+    }
+    return warnings.slice(0, 4);
+}
+function toObjectId(value) {
+    const raw = String(value || '').trim();
+    if (!raw || !mongoose_1.default.Types.ObjectId.isValid(raw))
+        return undefined;
+    return new mongoose_1.default.Types.ObjectId(raw);
+}
+function toObjectIdArray(values) {
+    if (!Array.isArray(values))
+        return [];
+    const seen = new Set();
+    return values
+        .map((value) => toObjectId(value))
+        .filter((value) => Boolean(value))
+        .filter((value) => {
+        const key = String(value);
+        if (seen.has(key))
+            return false;
+        seen.add(key);
+        return true;
+    });
+}
+function toStringArray(values) {
+    if (!Array.isArray(values))
+        return [];
+    return Array.from(new Set(values.map((value) => String(value || '').trim()).filter(Boolean)));
+}
+function toStringOrEmpty(value) {
+    return String(value || '').trim();
+}
+function summarizeAudienceTarget(payload) {
+    const audienceType = String(payload.audienceType || 'all').trim();
+    if (audienceType === 'group') {
+        return payload.audienceGroupId ? 'Selected group audience' : 'Group audience';
+    }
+    if (audienceType === 'manual') {
+        const count = Array.isArray(payload.manualStudentIds) ? payload.manualStudentIds.length : 0;
+        return count > 0 ? `${count} selected students` : 'Selected students';
+    }
+    if (audienceType === 'filter') {
+        const filters = payload.audienceFilters && typeof payload.audienceFilters === 'object'
+            ? payload.audienceFilters
+            : {};
+        const segments = [];
+        if (Array.isArray(filters.planCodes) && filters.planCodes.length > 0)
+            segments.push(`${filters.planCodes.length} plan filters`);
+        if (Array.isArray(filters.groupIds) && filters.groupIds.length > 0)
+            segments.push(`${filters.groupIds.length} groups`);
+        if (Array.isArray(filters.institutionNames) && filters.institutionNames.length > 0)
+            segments.push(`${filters.institutionNames.length} institutions`);
+        return segments.length > 0 ? segments.join(' • ') : 'Filtered audience';
+    }
+    return 'All students';
+}
+function normalizeClassificationPayload(payload, fallbackCategory, fallbackTags) {
+    const classification = payload.classification && typeof payload.classification === 'object'
+        ? payload.classification
+        : {};
+    return {
+        primaryCategory: toStringOrEmpty(classification.primaryCategory || payload.category || fallbackCategory) || fallbackCategory,
+        tags: toStringArray(classification.tags || payload.tags || fallbackTags),
+        universityIds: toObjectIdArray(classification.universityIds || payload.universityIds),
+        clusterIds: toObjectIdArray(classification.clusterIds || payload.clusterIds),
+        groupIds: toObjectIdArray(classification.groupIds || payload.groupIds),
+    };
+}
+function normalizeAiEnrichmentPayload(payload, fallbackCategory, fallbackTags) {
+    const aiEnrichment = payload.aiEnrichment && typeof payload.aiEnrichment === 'object'
+        ? payload.aiEnrichment
+        : {};
+    return {
+        shortSummary: toStringOrEmpty(aiEnrichment.shortSummary || payload.shortSummary || payload.shortDescription),
+        detailedExplanation: toStringOrEmpty(aiEnrichment.detailedExplanation || payload.fullContent || payload.content),
+        studentFriendlyExplanation: toStringOrEmpty(aiEnrichment.studentFriendlyExplanation),
+        keyPoints: toStringArray(aiEnrichment.keyPoints),
+        suggestedCategory: toStringOrEmpty(aiEnrichment.suggestedCategory || payload.category || fallbackCategory) || fallbackCategory,
+        suggestedTags: toStringArray(aiEnrichment.suggestedTags || payload.tags || fallbackTags),
+        importanceHint: toStringOrEmpty(aiEnrichment.importanceHint),
+        suggestedAudience: toStringOrEmpty(aiEnrichment.suggestedAudience),
+        smsText: toStringOrEmpty(aiEnrichment.smsText),
+        emailSubject: toStringOrEmpty(aiEnrichment.emailSubject),
+        emailBody: toStringOrEmpty(aiEnrichment.emailBody),
+        importantDates: toStringArray(aiEnrichment.importantDates),
+        citations: toStringArray(aiEnrichment.citations),
+        confidence: Number(aiEnrichment.confidence || 0),
+        provider: toStringOrEmpty(aiEnrichment.provider),
+        model: toStringOrEmpty(aiEnrichment.model),
+        warning: toStringOrEmpty(aiEnrichment.warning),
+    };
+}
 function titleTokens(input) {
     const normalized = String(input || '')
         .toLowerCase()
@@ -928,13 +1230,18 @@ function extractReadableLikeContent(html, originalUrl) {
 async function resolveFullArticleContent(params) {
     const fallback = (0, questionBank_1.sanitizeRichHtml)(params.rssRawContent || params.rssRawDescription || '');
     if (!params.settings.fetchFullArticleEnabled) {
-        return { fullContent: fallback, fetchedFullText: false };
+        return { fullContent: fallback, fetchedFullText: false, extractionMode: 'excerpt' };
     }
     const mode = params.settings.fullArticleFetchMode || 'both';
     const rssContent = (0, questionBank_1.sanitizeRichHtml)(params.rssRawContent || '');
     if (mode === 'rss_content') {
         const hasContent = stripHtmlToText(rssContent).length >= 140;
-        return { fullContent: hasContent ? rssContent : fallback, fetchedFullText: hasContent, fetchedFullTextAt: hasContent ? new Date() : undefined };
+        return {
+            fullContent: hasContent ? rssContent : fallback,
+            fetchedFullText: hasContent,
+            fetchedFullTextAt: hasContent ? new Date() : undefined,
+            extractionMode: hasContent ? 'rss_content' : 'excerpt',
+        };
     }
     const scrapeHtml = await fetchUrlTextWithTimeout(params.originalArticleUrl, 8000);
     const readableRaw = extractReadableLikeContent(scrapeHtml, params.originalArticleUrl);
@@ -943,18 +1250,18 @@ async function resolveFullArticleContent(params) {
     const readableEnough = readableText.length >= 180;
     if (mode === 'readability_scrape') {
         if (readableEnough) {
-            return { fullContent: readableContent, fetchedFullText: true, fetchedFullTextAt: new Date() };
+            return { fullContent: readableContent, fetchedFullText: true, fetchedFullTextAt: new Date(), extractionMode: 'readability_scrape' };
         }
-        return { fullContent: fallback, fetchedFullText: false };
+        return { fullContent: fallback, fetchedFullText: false, extractionMode: 'excerpt' };
     }
     const rssEnough = stripHtmlToText(rssContent).length >= 140;
     if (rssEnough) {
-        return { fullContent: rssContent, fetchedFullText: true, fetchedFullTextAt: new Date() };
+        return { fullContent: rssContent, fetchedFullText: true, fetchedFullTextAt: new Date(), extractionMode: 'rss_content' };
     }
     if (readableEnough) {
-        return { fullContent: readableContent, fetchedFullText: true, fetchedFullTextAt: new Date() };
+        return { fullContent: readableContent, fetchedFullText: true, fetchedFullTextAt: new Date(), extractionMode: 'readability_scrape' };
     }
-    return { fullContent: fallback, fetchedFullText: false };
+    return { fullContent: fallback, fetchedFullText: false, extractionMode: 'excerpt' };
 }
 async function ingestFromSources(sourceIds, trigger, actorId) {
     const stats = { fetchedCount: 0, createdCount: 0, duplicateCount: 0, failedCount: 0, errors: [] };
@@ -979,6 +1286,9 @@ async function ingestFromSources(sourceIds, trigger, actorId) {
             const maxItems = Math.min(source.maxItemsPerFetch || settings.rss.maxItemsPerFetch, feedItems.length);
             const subset = feedItems.slice(0, maxItems);
             stats.fetchedCount += subset.length;
+            let sourceCreatedCount = 0;
+            let sourceDuplicateCount = 0;
+            let lastExtractionMode = 'excerpt';
             for (const item of subset) {
                 const title = String(item.title || '').trim();
                 const link = String(item.link || '').trim();
@@ -1003,11 +1313,14 @@ async function ingestFromSources(sourceIds, trigger, actorId) {
                     duplicateKeyHash,
                 });
                 if (alreadyIngested) {
+                    stats.duplicateCount += 1;
+                    sourceDuplicateCount += 1;
                     continue;
                 }
                 const isDuplicate = Boolean(duplicateProbe.duplicateOfNewsId);
                 if (isDuplicate) {
                     stats.duplicateCount += 1;
+                    sourceDuplicateCount += 1;
                 }
                 const baseSummary = String(item.contentSnippet || item.summary || item.content || '').trim();
                 const baseContentRaw = String(item['content:encoded'] || item['content:encodedSnippet'] || item.content || baseSummary || '').trim();
@@ -1017,6 +1330,7 @@ async function ingestFromSources(sourceIds, trigger, actorId) {
                     rssRawDescription: baseSummary,
                     originalArticleUrl: canonicalLink,
                 });
+                lastExtractionMode = fullContentResolution.extractionMode;
                 const baseContent = (0, questionBank_1.sanitizeRichHtml)(fullContentResolution.fullContent || baseContentRaw || baseSummary);
                 const category = source.categoryDefault || source.categoryTags?.[0] || 'General';
                 const initialStatus = isDuplicate ? 'duplicate_review' : 'pending_review';
@@ -1034,7 +1348,13 @@ async function ingestFromSources(sourceIds, trigger, actorId) {
                     coverImageSource: rssImage ? 'rss' : 'default',
                     thumbnailImage: rssImage || settings.defaultThumbUrl || settings.defaultBannerUrl || '',
                     category,
+                    displayType: 'news',
                     tags: source.tagsDefault || source.categoryTags || [],
+                    classification: {
+                        primaryCategory: category,
+                        tags: source.tagsDefault || source.categoryTags || [],
+                    },
+                    priority: 'normal',
                     isPublished: false,
                     status: initialStatus,
                     sourceType: 'rss',
@@ -1060,6 +1380,31 @@ async function ingestFromSources(sourceIds, trigger, actorId) {
                     aiLanguage: String(settings.aiSettings?.language || settings.ai.language || 'en'),
                     aiNotes: '',
                     aiMeta: { provider: '', model: '', promptVersion: '', confidence: 0, citations: [link], noHallucinationPassed: false, warning: '' },
+                    aiEnrichment: {
+                        shortSummary: baseSummary || '',
+                        detailedExplanation: stripHtmlToText(baseContent).slice(0, 2000),
+                        studentFriendlyExplanation: baseSummary || '',
+                        keyPoints: [],
+                        suggestedCategory: category,
+                        suggestedTags: source.tagsDefault || source.categoryTags || [],
+                        importanceHint: '',
+                        suggestedAudience: '',
+                        smsText: '',
+                        emailSubject: '',
+                        emailBody: '',
+                        importantDates: [],
+                        citations: [canonicalLink],
+                        confidence: 0,
+                        provider: '',
+                        model: '',
+                        warning: '',
+                    },
+                    publishOutcome: {
+                        type: 'news',
+                    },
+                    deliveryMeta: {
+                        lastAudienceSummary: '',
+                    },
                     dedupe: {
                         hash: duplicateKeyHash,
                         duplicateScore: Number(duplicateProbe.similarity || 0),
@@ -1114,6 +1459,29 @@ async function ingestFromSources(sourceIds, trigger, actorId) {
                             newsData.aiModel = aiDraft.model || '';
                             newsData.aiPromptVersion = 'v1';
                             newsData.aiGeneratedAt = new Date();
+                            newsData.aiEnrichment = {
+                                shortSummary: String(aiDraft.summary || newsData.shortSummary || ''),
+                                detailedExplanation: String(aiDraft.detailedExplanation || aiDraft.content || ''),
+                                studentFriendlyExplanation: String(aiDraft.studentFriendlyExplanation || aiDraft.summary || ''),
+                                keyPoints: aiDraft.keyPoints || [],
+                                suggestedCategory: String(aiDraft.suggestedCategory || category),
+                                suggestedTags: aiDraft.suggestedTags || (source.tagsDefault || source.categoryTags || []),
+                                importanceHint: String(aiDraft.importanceHint || ''),
+                                suggestedAudience: String(aiDraft.suggestedAudience || ''),
+                                smsText: String(aiDraft.smsText || ''),
+                                emailSubject: String(aiDraft.emailSubject || ''),
+                                emailBody: String(aiDraft.emailBody || ''),
+                                importantDates: aiDraft.importantDates || [],
+                                citations: aiDraft.citations || [canonicalLink],
+                                confidence: aiDraft.confidence || 0.7,
+                                provider: aiDraft.provider || '',
+                                model: aiDraft.model || '',
+                                warning: '',
+                            };
+                            newsData.classification = {
+                                primaryCategory: String(aiDraft.suggestedCategory || category),
+                                tags: aiDraft.suggestedTags || (source.tagsDefault || source.categoryTags || []),
+                            };
                             if (String(newsData.content || '').replace(/<[^>]*>/g, '').trim().length < 60) {
                                 newsData.aiNotes = 'insufficient content';
                             }
@@ -1136,6 +1504,10 @@ async function ingestFromSources(sourceIds, trigger, actorId) {
                             const minimal = ensureAiAttribution(String(newsData.shortDescription || ''), source.name, canonicalLink);
                             newsData.content = (0, questionBank_1.sanitizeRichHtml)(textToSafeHtml(minimal));
                             newsData.fullContent = newsData.content;
+                            newsData.aiEnrichment = {
+                                ...(newsData.aiEnrichment || {}),
+                                warning: String(aiDraft.warning || 'insufficient content'),
+                            };
                             newsData.aiMeta = {
                                 provider: '',
                                 model: '',
@@ -1150,14 +1522,39 @@ async function ingestFromSources(sourceIds, trigger, actorId) {
                 }
                 await News_1.default.create(newsData);
                 stats.createdCount += 1;
+                sourceCreatedCount += 1;
             }
-            await NewsSource_1.default.updateOne({ _id: source._id }, { $set: { lastSuccessAt: new Date(), lastError: '' } });
+            const duplicateRate = subset.length > 0 ? Number((sourceDuplicateCount / subset.length).toFixed(3)) : 0;
+            await NewsSource_1.default.updateOne({
+                _id: source._id,
+            }, {
+                $set: {
+                    lastSuccessAt: new Date(),
+                    lastError: '',
+                    lastParseError: '',
+                    lastFetchStatus: 'success',
+                    consecutiveFailureCount: 0,
+                    lastDuplicateRate: duplicateRate,
+                    lastCreatedCount: sourceCreatedCount,
+                    lastExtractionMode: lastExtractionMode,
+                },
+            });
         }
         catch (error) {
             const message = error instanceof Error ? error.message : 'Unknown RSS parse error';
             stats.failedCount += 1;
             stats.errors.push({ sourceId: String(source._id), message });
-            await NewsSource_1.default.updateOne({ _id: source._id }, { $set: { lastError: message, lastFetchedAt: new Date() } });
+            await NewsSource_1.default.updateOne({ _id: source._id }, {
+                $set: {
+                    lastError: message,
+                    lastParseError: message,
+                    lastFetchedAt: new Date(),
+                    lastFetchStatus: 'failed',
+                    lastHttpStatus: extractHttpStatusFromErrorMessage(message),
+                    lastCreatedCount: 0,
+                },
+                $inc: { consecutiveFailureCount: 1 },
+            });
         }
     }
     await NewsFetchJob_1.default.updateOne({ _id: fetchJob._id }, { $set: { status: stats.failedCount > 0 ? 'failed' : 'completed', endedAt: new Date(), fetchedCount: stats.fetchedCount, createdCount: stats.createdCount, duplicateCount: stats.duplicateCount, failedCount: stats.failedCount, jobErrors: stats.errors } });
@@ -1205,13 +1602,23 @@ async function runScheduledNewsPublish() {
 }
 async function adminNewsV2Dashboard(_req, res) {
     try {
-        const [pending, duplicate, published, scheduled, fetchFailed, activeSources, latestJobs, latestRssItems, settings] = await Promise.all([
+        const unhealthySourceFilter = {
+            $or: [
+                { lastFetchStatus: 'failed' },
+                { consecutiveFailureCount: { $gte: 2 } },
+                { lastError: { $exists: true, $ne: '' } },
+            ],
+        };
+        const recentFailureWindow = new Date(Date.now() - (24 * 60 * 60 * 1000));
+        const [pending, duplicate, published, scheduled, fetchFailedItems, activeSources, unhealthySources, recentFailedJobs, latestJobs, latestRssItems, settings] = await Promise.all([
             News_1.default.countDocuments({ status: 'pending_review' }),
             News_1.default.countDocuments({ status: 'duplicate_review' }),
             News_1.default.countDocuments({ status: 'published' }),
             News_1.default.countDocuments({ status: 'scheduled' }),
             News_1.default.countDocuments({ status: 'fetch_failed' }),
             NewsSource_1.default.countDocuments({ isActive: true }),
+            NewsSource_1.default.countDocuments(unhealthySourceFilter),
+            NewsFetchJob_1.default.countDocuments({ status: 'failed', createdAt: { $gte: recentFailureWindow } }),
             NewsFetchJob_1.default.find().sort({ createdAt: -1 }).limit(8).lean(),
             News_1.default.find({ sourceType: { $in: ['rss', 'ai_assisted'] } })
                 .sort({ createdAt: -1 })
@@ -1222,7 +1629,22 @@ async function adminNewsV2Dashboard(_req, res) {
         ]);
         const fallbackBanner = resolveDefaultNewsBanner(settings);
         res.json({
-            cards: { pending, duplicate, published, scheduled, fetchFailed, activeSources },
+            cards: {
+                pending,
+                duplicate,
+                published,
+                scheduled,
+                fetchFailed: recentFailedJobs,
+                activeSources,
+                unhealthySources,
+                fetchFailedItems,
+            },
+            health: {
+                activeSources,
+                unhealthySources,
+                recentFailedJobs,
+                lastFetchCompletedAt: latestJobs.find((job) => String(job.status || '') === 'completed')?.endedAt || null,
+            },
             latestJobs,
             latestRssItems: latestRssItems.map((item) => {
                 return buildNewsOutput(item, fallbackBanner);
@@ -1249,7 +1671,7 @@ async function adminNewsV2FetchNow(req, res) {
 async function adminNewsV2GetItems(req, res) {
     try {
         const page = Math.max(1, Number(req.query.page || 1));
-        const limit = Math.min(100, Math.max(1, Number(req.query.limit || 20)));
+        const limit = Math.min(250, Math.max(1, Number(req.query.limit || 20)));
         const filter = {};
         if (req.query.status && String(req.query.status).toLowerCase() !== 'all') {
             filter.status = ensureStatus(req.query.status, 'draft');
@@ -1264,8 +1686,17 @@ async function adminNewsV2GetItems(req, res) {
             filter.aiSelected = true;
         if (req.query.duplicateFlagged === 'true')
             filter['dedupe.duplicateFlag'] = true;
-        if (req.query.category)
-            filter.category = String(req.query.category);
+        if (req.query.category) {
+            filter.$and = [
+                ...(Array.isArray(filter.$and) ? filter.$and : []),
+                {
+                    $or: [
+                        { category: String(req.query.category) },
+                        { 'classification.primaryCategory': String(req.query.category) },
+                    ],
+                },
+            ];
+        }
         const [total, items, settings] = await Promise.all([
             News_1.default.countDocuments(filter),
             News_1.default.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).populate('createdBy', 'fullName email').populate('reviewMeta.reviewerId', 'fullName email').lean(),
@@ -1288,8 +1719,13 @@ async function adminNewsV2GetItems(req, res) {
 }
 async function adminNewsV2GetItemById(req, res) {
     try {
+        const itemId = String(req.params.id || '').trim();
+        if (!mongoose_1.default.isValidObjectId(itemId)) {
+            res.status(404).json({ message: 'News item not found' });
+            return;
+        }
         const [item, settings] = await Promise.all([
-            News_1.default.findById(req.params.id).populate('createdBy', 'fullName email').populate('reviewMeta.reviewerId', 'fullName email').lean(),
+            News_1.default.findById(itemId).populate('createdBy', 'fullName email').populate('reviewMeta.reviewerId', 'fullName email').lean(),
             getOrCreateNewsSettings(),
         ]);
         if (!item) {
@@ -1424,6 +1860,32 @@ async function adminNewsV2AiCheckItem(req, res) {
                 noHallucinationPassed: aiApplySucceeded ? noHallucinationPassed : Boolean(before.aiMeta?.noHallucinationPassed || false),
                 warning: aiApplySucceeded ? '' : String(aiDraft.warning || (warnings[0] || 'AI check warning')),
             },
+            aiEnrichment: {
+                shortSummary: preview.shortSummary,
+                detailedExplanation: String(aiDraft.detailedExplanation || aiDraft.content || preview.fullContent || ''),
+                studentFriendlyExplanation: String(aiDraft.studentFriendlyExplanation || aiDraft.summary || preview.shortSummary || ''),
+                keyPoints: aiDraft.keyPoints || [],
+                suggestedCategory: String(aiDraft.suggestedCategory || before.category || 'General'),
+                suggestedTags: aiDraft.suggestedTags || (before.tags || []),
+                importanceHint: String(aiDraft.importanceHint || ''),
+                suggestedAudience: String(aiDraft.suggestedAudience || ''),
+                smsText: String(aiDraft.smsText || ''),
+                emailSubject: String(aiDraft.emailSubject || ''),
+                emailBody: String(aiDraft.emailBody || ''),
+                importantDates: aiDraft.importantDates || [],
+                citations,
+                confidence: aiApplySucceeded ? Number(aiDraft.confidence || 0.72) : Number(before.aiEnrichment?.confidence || 0),
+                provider: aiApplySucceeded ? String(aiDraft.provider || '') : String(before.aiEnrichment?.provider || ''),
+                model: aiApplySucceeded ? String(aiDraft.model || '') : String(before.aiEnrichment?.model || ''),
+                warning: aiApplySucceeded ? '' : String(aiDraft.warning || (warnings[0] || 'AI check warning')),
+            },
+            classification: {
+                primaryCategory: String(aiDraft.suggestedCategory || before.classification?.primaryCategory || before.category || 'General'),
+                tags: aiDraft.suggestedTags || before.classification?.tags || before.tags || [],
+                universityIds: before.classification?.universityIds || [],
+                clusterIds: before.classification?.clusterIds || [],
+                groupIds: before.classification?.groupIds || [],
+            },
         };
         if (resolvedDuplicateOf) {
             updateSet.duplicateOfNewsId = resolvedDuplicateOf;
@@ -1489,6 +1951,10 @@ function normalizeNewsPayload(payload) {
     const content = (0, questionBank_1.sanitizeRichHtml)(payload.fullContent || payload.content || '');
     const status = ensureStatus(payload.status, 'draft');
     const tags = Array.isArray(payload.tags) ? payload.tags.map((item) => String(item).trim()).filter(Boolean) : [];
+    const classificationPayload = payload.classification && typeof payload.classification === 'object'
+        ? payload.classification
+        : {};
+    const category = String(payload.category || classificationPayload.primaryCategory || 'General');
     const sourceType = String(payload.sourceType || (payload.isManual ? 'manual' : 'rss'));
     const coverImageUrl = String(payload.coverImageUrl || payload.coverImage || payload.featuredImage || '').trim();
     const coverImageSource = String(payload.coverImageSource || '').trim() ||
@@ -1507,6 +1973,16 @@ function normalizeNewsPayload(payload) {
     const scheduledAt = scheduledAtRaw ? new Date(scheduledAtRaw) : undefined;
     const publishDateRaw = String(payload.publishedAt || payload.publishDate || '').trim();
     const publishDate = publishDateRaw ? new Date(publishDateRaw) : new Date();
+    const classification = normalizeClassificationPayload(payload, category, tags);
+    const aiEnrichment = normalizeAiEnrichmentPayload(payload, category, tags);
+    const publishOutcomePayload = payload.publishOutcome && typeof payload.publishOutcome === 'object'
+        ? payload.publishOutcome
+        : {};
+    const deliveryMetaPayload = payload.deliveryMeta && typeof payload.deliveryMeta === 'object'
+        ? payload.deliveryMeta
+        : {};
+    const priority = String(payload.priority || 'normal').trim().toLowerCase();
+    const displayType = String(payload.displayType || 'news').trim().toLowerCase() === 'update' ? 'update' : 'news';
     return {
         title,
         slug,
@@ -1514,8 +1990,12 @@ function normalizeNewsPayload(payload) {
         shortDescription: shortSummary,
         fullContent: content,
         content,
-        category: String(payload.category || 'General'),
+        category,
         tags,
+        displayType,
+        classification,
+        aiEnrichment,
+        priority: priority === 'breaking' || priority === 'priority' ? priority : 'normal',
         featuredImage: coverImageUrl,
         coverImage: coverImageUrl,
         coverImageUrl,
@@ -1552,6 +2032,23 @@ function normalizeNewsPayload(payload) {
         aiLanguage: String(payload.aiLanguage || ''),
         aiGeneratedAt: payload.aiGeneratedAt ? new Date(String(payload.aiGeneratedAt)) : undefined,
         aiNotes: String(payload.aiNotes || ''),
+        publishOutcome: {
+            type: String(publishOutcomePayload.type || displayType || 'news').trim() === 'update'
+                ? 'update'
+                : (String(publishOutcomePayload.type || '').trim() === 'notice' ? 'notice' : 'news'),
+            targetId: toObjectId(publishOutcomePayload.targetId),
+            publishedAt: publishOutcomePayload.publishedAt ? new Date(String(publishOutcomePayload.publishedAt)) : undefined,
+            publishedBy: toObjectId(publishOutcomePayload.publishedBy || payload.approvedByAdminId),
+        },
+        deliveryMeta: {
+            lastJobId: toObjectId(deliveryMetaPayload.lastJobId),
+            lastChannel: ['sms', 'email', 'both'].includes(String(deliveryMetaPayload.lastChannel || ''))
+                ? String(deliveryMetaPayload.lastChannel)
+                : undefined,
+            lastAudienceSummary: String(deliveryMetaPayload.lastAudienceSummary || '').trim(),
+            lastSentAt: deliveryMetaPayload.lastSentAt ? new Date(String(deliveryMetaPayload.lastSentAt)) : undefined,
+            lastStatus: String(deliveryMetaPayload.lastStatus || '').trim(),
+        },
         duplicateKeyHash,
         duplicateReasons,
         duplicateOfNewsId: payload.duplicateOfNewsId || dedupePayload.duplicateOfNewsId || undefined,
@@ -1620,14 +2117,69 @@ function applyContractAliases(item) {
 }
 function buildNewsOutput(item, fallbackBanner) {
     const resolved = resolveCoverAndThumbForOutput(item, fallbackBanner);
+    const classification = item.classification && typeof item.classification === 'object'
+        ? item.classification
+        : {};
+    const aiEnrichment = item.aiEnrichment && typeof item.aiEnrichment === 'object'
+        ? item.aiEnrichment
+        : {};
     return applyContractAliases({
         ...item,
+        displayType: String(item.displayType || 'news') === 'update' ? 'update' : 'news',
+        priority: ['priority', 'breaking'].includes(String(item.priority || '')) ? String(item.priority) : 'normal',
+        classification: {
+            primaryCategory: String(classification.primaryCategory || item.category || 'General'),
+            tags: Array.isArray(classification.tags) && classification.tags.length > 0 ? classification.tags : (item.tags || []),
+            universityIds: Array.isArray(classification.universityIds) ? classification.universityIds : [],
+            clusterIds: Array.isArray(classification.clusterIds) ? classification.clusterIds : [],
+            groupIds: Array.isArray(classification.groupIds) ? classification.groupIds : [],
+        },
+        aiEnrichment: {
+            shortSummary: String(aiEnrichment.shortSummary || item.shortSummary || item.shortDescription || ''),
+            detailedExplanation: String(aiEnrichment.detailedExplanation || item.fullContent || item.content || ''),
+            studentFriendlyExplanation: String(aiEnrichment.studentFriendlyExplanation || ''),
+            keyPoints: Array.isArray(aiEnrichment.keyPoints) ? aiEnrichment.keyPoints : [],
+            suggestedCategory: String(aiEnrichment.suggestedCategory || item.category || 'General'),
+            suggestedTags: Array.isArray(aiEnrichment.suggestedTags) ? aiEnrichment.suggestedTags : (item.tags || []),
+            importanceHint: String(aiEnrichment.importanceHint || ''),
+            suggestedAudience: String(aiEnrichment.suggestedAudience || ''),
+            smsText: String(aiEnrichment.smsText || ''),
+            emailSubject: String(aiEnrichment.emailSubject || ''),
+            emailBody: String(aiEnrichment.emailBody || ''),
+            importantDates: Array.isArray(aiEnrichment.importantDates) ? aiEnrichment.importantDates : [],
+            citations: Array.isArray(aiEnrichment.citations) ? aiEnrichment.citations : [],
+            confidence: Number(aiEnrichment.confidence || 0),
+            provider: String(aiEnrichment.provider || ''),
+            model: String(aiEnrichment.model || ''),
+            warning: String(aiEnrichment.warning || ''),
+        },
         coverImageUrl: resolved.coverImageUrl,
         coverImage: resolved.coverImageUrl,
         thumbnailImage: resolved.thumbnailImage,
         coverImageSource: resolved.coverImageSource,
         fallbackBanner: String(item.fallbackBanner || '').trim() || fallbackBanner,
     });
+}
+function buildPublicNewsOutput(item, host, settings) {
+    const fallbackBanner = resolveDefaultNewsBanner(settings);
+    const output = {
+        ...buildNewsOutput(item, fallbackBanner),
+        ...buildSharePayload(item, host, settings),
+    };
+    if (!settings.communication.exposeStudentFriendlyExplanation && output.aiEnrichment) {
+        output.aiEnrichment = {
+            ...output.aiEnrichment,
+            studentFriendlyExplanation: '',
+        };
+    }
+    if (!settings.communication.exposeKeyPoints && output.aiEnrichment) {
+        output.aiEnrichment = {
+            ...output.aiEnrichment,
+            keyPoints: [],
+            importantDates: [],
+        };
+    }
+    return output;
 }
 async function adminNewsV2CreateItem(req, res) {
     try {
@@ -1706,18 +2258,151 @@ async function adminNewsV2DeleteItem(req, res) {
         res.status(500).json({ message: 'Server error' });
     }
 }
+async function resolveNoticeTargetUserIds(target, targetIds) {
+    if (target === 'all')
+        return [];
+    if (target === 'students') {
+        return toObjectIdArray(targetIds);
+    }
+    const groupIds = toObjectIdArray(targetIds);
+    if (groupIds.length === 0)
+        return [];
+    const profiles = await StudentProfile_1.default.find({ groupIds: { $in: groupIds } }).select('user_id').lean();
+    return toObjectIdArray(profiles.map((profile) => String(profile.user_id || '')));
+}
+function resolveNoticePriority(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (normalized === 'breaking' || normalized === 'priority')
+        return normalized;
+    return 'normal';
+}
+async function syncNoticeNotification(params) {
+    const reminderKey = `notice:${params.noticeId}`;
+    const targetUserIds = await resolveNoticeTargetUserIds(params.target, params.targetIds);
+    await Notification_1.default.updateOne({ reminderKey }, {
+        $set: {
+            title: params.title,
+            message: params.message,
+            messagePreview: params.message.slice(0, 220),
+            category: 'update',
+            publishAt: params.startAt,
+            expireAt: params.endAt || null,
+            isActive: params.isActive,
+            linkUrl: '/news',
+            sourceType: 'notice',
+            sourceId: params.noticeId,
+            targetRoute: '/support',
+            targetEntityId: params.noticeId,
+            priority: params.priority === 'breaking' ? 'urgent' : (params.priority === 'priority' ? 'high' : 'normal'),
+            targetRole: 'student',
+            targetUserIds,
+            createdBy: params.createdBy,
+            updatedBy: params.createdBy,
+        },
+        $setOnInsert: { reminderKey },
+    }, { upsert: true });
+}
+async function upsertNoticeFromNews(req, newsItem, payload) {
+    const actorId = toObjectId(req.user?._id);
+    if (!actorId) {
+        throw new Error('Invalid actor id');
+    }
+    const classification = normalizeClassificationPayload(payload, String(newsItem.classification?.primaryCategory || newsItem.category || 'General'), Array.isArray(newsItem.classification?.tags) ? newsItem.classification.tags : (newsItem.tags || []));
+    const target = String(payload.target || '').trim() === 'groups'
+        ? 'groups'
+        : String(payload.target || '').trim() === 'students'
+            ? 'students'
+            : 'all';
+    const targetIds = toStringArray(payload.targetIds || classification.groupIds);
+    const startAtRaw = toStringOrEmpty(payload.startAt || newsItem.publishDate || new Date().toISOString());
+    const endAtRaw = toStringOrEmpty(payload.endAt);
+    const startAt = startAtRaw ? new Date(startAtRaw) : new Date();
+    const endAt = endAtRaw ? new Date(endAtRaw) : null;
+    const title = toStringOrEmpty(payload.title || newsItem.title) || String(newsItem.title || 'News Notice');
+    const message = toStringOrEmpty(payload.message
+        || newsItem.aiEnrichment?.studentFriendlyExplanation
+        || newsItem.shortSummary
+        || newsItem.shortDescription
+        || stripHtmlToText(String(newsItem.fullContent || newsItem.content || '')).slice(0, 900));
+    const noticePayload = {
+        title,
+        message,
+        target,
+        targetIds,
+        sourceNewsId: newsItem._id,
+        priority: resolveNoticePriority(payload.priority || newsItem.priority),
+        classification,
+        templateRef: toStringOrEmpty(payload.templateRef),
+        triggerRef: toStringOrEmpty(payload.triggerRef),
+        startAt,
+        endAt,
+        isActive: payload.isActive !== undefined ? Boolean(payload.isActive) : true,
+    };
+    const existingNoticeId = toObjectId(payload.noticeId) || toObjectId(newsItem.publishOutcome?.targetId);
+    let notice = null;
+    if (existingNoticeId) {
+        notice = await AnnouncementNotice_1.default.findByIdAndUpdate(existingNoticeId, { $set: noticePayload }, { new: true, runValidators: true }).lean();
+    }
+    if (!notice) {
+        notice = await AnnouncementNotice_1.default.findOneAndUpdate({ sourceNewsId: newsItem._id }, { $set: noticePayload, $setOnInsert: { createdBy: actorId } }, { upsert: true, new: true, runValidators: true }).lean();
+    }
+    if (!notice) {
+        throw new Error('Failed to create notice');
+    }
+    await syncNoticeNotification({
+        noticeId: String(notice._id || ''),
+        title: String(notice.title || title),
+        message: String(notice.message || message),
+        startAt: notice.startAt ? new Date(String(notice.startAt)) : startAt,
+        endAt: notice.endAt ? new Date(String(notice.endAt)) : endAt,
+        isActive: Boolean(notice.isActive),
+        createdBy: actorId,
+        target: notice.target,
+        targetIds: Array.isArray(notice.targetIds) ? notice.targetIds.map((entry) => String(entry || '')) : targetIds,
+        priority: resolveNoticePriority(notice.priority),
+    });
+    (0, studentDashboardStream_1.broadcastStudentDashboardEvent)({
+        type: 'notification_updated',
+        meta: { action: 'upsert', source: 'notice', noticeId: String(notice._id || '') },
+    });
+    return notice;
+}
+function buildPublishTransitionPatch(req, before, status, extra) {
+    const patch = { status, ...extra };
+    if (status === 'published') {
+        patch.publishOutcome = {
+            type: String(before.publishOutcome?.type || before.displayType || 'news') === 'update' ? 'update' : (String(before.publishOutcome?.type || '') === 'notice' ? 'notice' : 'news'),
+            targetId: before.publishOutcome?.targetId || undefined,
+            publishedAt: new Date(),
+            publishedBy: req.user?._id,
+        };
+    }
+    else if (status === 'scheduled') {
+        patch.publishOutcome = {
+            type: String(before.publishOutcome?.type || before.displayType || 'news') === 'update' ? 'update' : (String(before.publishOutcome?.type || '') === 'notice' ? 'notice' : 'news'),
+            targetId: before.publishOutcome?.targetId || undefined,
+            publishedAt: before.publishOutcome?.publishedAt || undefined,
+            publishedBy: before.publishOutcome?.publishedBy || req.user?._id,
+        };
+    }
+    else if (status === 'archived' || status === 'draft' || status === 'rejected') {
+        patch.isPublished = false;
+    }
+    return patch;
+}
 async function workflowUpdate(req, res, status, extra, auditAction, message = 'Workflow updated', warnings = []) {
     const before = await News_1.default.findById(req.params.id).lean();
     if (!before) {
         res.status(404).json({ message: 'News item not found' });
         return;
     }
-    const updated = await News_1.default.findByIdAndUpdate(req.params.id, { $set: { status, ...extra } }, { new: true }).lean();
+    const patch = buildPublishTransitionPatch(req, before, status, extra);
+    const updated = await News_1.default.findByIdAndUpdate(req.params.id, { $set: patch }, { new: true }).lean();
     const settings = await getOrCreateNewsSettings();
     const fallbackBanner = resolveDefaultNewsBanner(settings);
     const updatedPayload = updated ? buildNewsOutput(updated, fallbackBanner) : null;
     const entityId = String(req.params.id || '');
-    await writeNewsAuditEvent(req, { action: auditAction, entityType: 'workflow', entityId, before: { status: before.status }, after: { status: updated?.status || status }, meta: extra });
+    await writeNewsAuditEvent(req, { action: auditAction, entityType: 'workflow', entityId, before: { status: before.status }, after: { status: updated?.status || status }, meta: patch });
     (0, homeStream_1.broadcastHomeStreamEvent)({ type: 'news-updated', meta: { action: auditAction, newsId: entityId } });
     res.json({ item: updatedPayload, message, warning: warnings[0] || '', warnings });
 }
@@ -1789,6 +2474,174 @@ async function adminNewsV2PublishAnyway(req, res) {
         approvedByAdminId: req.user?._id,
         'dedupe.duplicateFlag': true,
     }, 'news.publish_anyway');
+}
+async function adminNewsV2Archive(req, res) {
+    await workflowUpdate(req, res, 'archived', {
+        isPublished: false,
+        scheduleAt: null,
+        scheduledAt: null,
+    }, 'news.archive', 'Archived');
+}
+async function adminNewsV2ConvertToNotice(req, res) {
+    try {
+        const settings = await getOrCreateNewsSettings();
+        if (!settings.communication.allowNoticeConversion) {
+            res.status(403).json({ message: 'Notice conversion is disabled in settings' });
+            return;
+        }
+        const newsItem = await News_1.default.findById(req.params.id).lean();
+        if (!newsItem) {
+            res.status(404).json({ message: 'News item not found' });
+            return;
+        }
+        const notice = await upsertNoticeFromNews(req, newsItem, (req.body || {}));
+        const updated = await News_1.default.findByIdAndUpdate(req.params.id, {
+            $set: {
+                publishOutcome: {
+                    type: 'notice',
+                    targetId: notice._id,
+                    publishedAt: newsItem.publishOutcome?.publishedAt || newsItem.publishedAt || new Date(),
+                    publishedBy: req.user?._id,
+                },
+            },
+        }, { new: true }).lean();
+        const fallbackBanner = resolveDefaultNewsBanner(settings);
+        await writeNewsAuditEvent(req, {
+            action: 'news.convert_to_notice',
+            entityType: 'workflow',
+            entityId: String(req.params.id || ''),
+            meta: { noticeId: String(notice._id || '') },
+        });
+        res.json({
+            item: updated ? buildNewsOutput(updated, fallbackBanner) : null,
+            notice,
+            message: 'Converted to notice',
+        });
+    }
+    catch (error) {
+        console.error('adminNewsV2ConvertToNotice error:', error);
+        res.status(500).json({ message: error instanceof Error ? error.message : 'Server error' });
+    }
+}
+async function adminNewsV2PublishSend(req, res) {
+    try {
+        const settings = await getOrCreateNewsSettings();
+        if (!settings.communication.allowPublishSend) {
+            res.status(403).json({ message: 'Publish + send is disabled in settings' });
+            return;
+        }
+        const itemId = String(req.params.id || '').trim();
+        const before = await News_1.default.findById(itemId).lean();
+        if (!before) {
+            res.status(404).json({ message: 'News item not found' });
+            return;
+        }
+        const warnings = await collectPublishWarnings(itemId);
+        const payload = (req.body || {});
+        const channels = Array.isArray(payload.channels)
+            ? payload.channels.map((channel) => String(channel || '').trim().toLowerCase()).filter((channel) => channel === 'sms' || channel === 'email')
+            : settings.communication.defaultChannels;
+        const audienceType = String(payload.audienceType || settings.communication.defaultAudienceType || 'all').trim();
+        const audienceFilters = payload.audienceFilters && typeof payload.audienceFilters === 'object'
+            ? payload.audienceFilters
+            : undefined;
+        const result = await (0, notificationOrchestrationService_1.executeCampaign)({
+            campaignName: String(payload.campaignName || before.title || 'News Update').trim() || 'News Update',
+            channels: channels.length > 0 ? channels : ['email'],
+            templateKey: toStringOrEmpty(payload.templateKey),
+            customBody: toStringOrEmpty(payload.customBody || before.aiEnrichment?.emailBody || before.shortSummary || before.shortDescription),
+            customSubject: toStringOrEmpty(payload.customSubject || before.aiEnrichment?.emailSubject || before.title),
+            vars: {
+                news_title: String(before.title || ''),
+                news_summary: String(before.shortSummary || before.shortDescription || ''),
+                news_url: '',
+            },
+            audienceType: audienceType === 'group' || audienceType === 'filter' || audienceType === 'manual' ? audienceType : 'all',
+            audienceGroupId: toStringOrEmpty(payload.audienceGroupId),
+            audienceFilters,
+            manualStudentIds: toStringArray(payload.manualStudentIds),
+            guardianTargeted: Boolean(payload.guardianTargeted),
+            recipientMode: String(payload.recipientMode || settings.communication.defaultRecipientMode || 'student') === 'guardian'
+                ? 'guardian'
+                : (String(payload.recipientMode || settings.communication.defaultRecipientMode || 'student') === 'both' ? 'both' : 'student'),
+            scheduledAtUTC: payload.scheduledAtUTC ? new Date(String(payload.scheduledAtUTC)) : undefined,
+            adminId: String(req.user?._id || ''),
+            originModule: 'news',
+            originEntityId: itemId,
+            originAction: 'publish_send',
+        });
+        let notice = null;
+        if (payload.convertToNotice === true || payload.publishAsNotice === true) {
+            notice = await upsertNoticeFromNews(req, before, payload);
+        }
+        const now = new Date();
+        const updated = await News_1.default.findByIdAndUpdate(itemId, {
+            $set: {
+                status: 'published',
+                isPublished: true,
+                publishedAt: now,
+                publishDate: now,
+                scheduleAt: null,
+                scheduledAt: null,
+                approvedByAdminId: req.user?._id,
+                publishOutcome: {
+                    type: notice ? 'notice' : (String(before.displayType || 'news') === 'update' ? 'update' : 'news'),
+                    targetId: notice ? notice._id : before.publishOutcome?.targetId || undefined,
+                    publishedAt: now,
+                    publishedBy: req.user?._id,
+                },
+                deliveryMeta: {
+                    lastJobId: toObjectId(result.jobId),
+                    lastChannel: channels.length > 1 ? 'both' : channels[0],
+                    lastAudienceSummary: summarizeAudienceTarget(payload),
+                    lastSentAt: now,
+                    lastStatus: result.failed > 0 ? (result.sent > 0 ? 'partial' : 'failed') : 'sent',
+                },
+            },
+        }, { new: true }).lean();
+        if (notice?._id) {
+            await AnnouncementNotice_1.default.updateOne({ _id: notice._id }, {
+                $set: {
+                    deliveryMeta: {
+                        lastJobId: toObjectId(result.jobId),
+                        lastChannel: channels.length > 1 ? 'both' : channels[0],
+                        lastAudienceSummary: summarizeAudienceTarget(payload),
+                        lastSentAt: now,
+                    },
+                },
+            });
+        }
+        const fallbackBanner = resolveDefaultNewsBanner(settings);
+        await writeNewsAuditEvent(req, {
+            action: 'news.publish_send',
+            entityType: 'workflow',
+            entityId: itemId,
+            before: { status: before.status },
+            after: { status: 'published' },
+            meta: {
+                warnings,
+                jobId: result.jobId,
+                sent: result.sent,
+                failed: result.failed,
+                skipped: result.skipped,
+                audienceSummary: summarizeAudienceTarget(payload),
+                noticeId: notice?._id ? String(notice._id) : '',
+            },
+        });
+        (0, homeStream_1.broadcastHomeStreamEvent)({ type: 'news-updated', meta: { action: 'publish_send', newsId: itemId } });
+        res.json({
+            item: updated ? buildNewsOutput(updated, fallbackBanner) : null,
+            notice,
+            delivery: result,
+            message: warnings.length > 0 ? 'Published and sent with warnings' : 'Published and sent',
+            warnings,
+            warning: warnings[0] || '',
+        });
+    }
+    catch (error) {
+        console.error('adminNewsV2PublishSend error:', error);
+        res.status(500).json({ message: error instanceof Error ? error.message : 'Server error' });
+    }
 }
 async function adminNewsV2MergeDuplicate(req, res) {
     try {
@@ -1887,6 +2740,11 @@ async function adminNewsV2BulkApprove(req, res) {
                 scheduledAt: null,
                 approvedByAdminId: req.user?._id,
                 reviewMeta: { reviewerId: req.user?._id, reviewedAt: now, rejectReason: '' },
+                publishOutcome: {
+                    type: 'news',
+                    publishedAt: now,
+                    publishedBy: req.user?._id,
+                },
             },
         });
         await writeNewsAuditEvent(req, { action: 'news.bulk_approve_publish', entityType: 'workflow', meta: { ids, modifiedCount: result.modifiedCount } });
@@ -1918,8 +2776,39 @@ async function adminNewsV2BulkReject(req, res) {
 }
 async function adminNewsV2GetSources(_req, res) {
     try {
-        const items = await NewsSource_1.default.find().sort({ priority: 1, order: 1, createdAt: -1 }).lean();
-        res.json({ items });
+        const [items, latestJobs] = await Promise.all([
+            NewsSource_1.default.find().sort({ priority: 1, order: 1, createdAt: -1 }).lean(),
+            NewsFetchJob_1.default.find().sort({ createdAt: -1 }).limit(40).select('sourceIds status startedAt endedAt createdCount duplicateCount failedCount jobErrors').lean(),
+        ]);
+        const jobsBySource = new Map();
+        latestJobs.forEach((job) => {
+            const sourceIds = Array.isArray(job.sourceIds) ? job.sourceIds : [];
+            sourceIds.forEach((sourceId) => {
+                const key = String(sourceId || '');
+                if (!key)
+                    return;
+                const current = jobsBySource.get(key) || [];
+                if (current.length < 3) {
+                    current.push(job);
+                    jobsBySource.set(key, current);
+                }
+            });
+        });
+        res.json({
+            items: items.map((item) => {
+                const sourceId = String(item._id || '');
+                const recentJobs = jobsBySource.get(sourceId) || [];
+                const healthState = buildSourceHealthState(item);
+                return {
+                    ...item,
+                    healthState,
+                    inactiveSource: healthState === 'inactive',
+                    placeholderSource: healthState === 'invalid_config',
+                    sourceWarnings: collectSourceWarnings(item),
+                    recentJobs,
+                };
+            }),
+        });
     }
     catch (error) {
         console.error('adminNewsV2GetSources error:', error);
@@ -1929,11 +2818,12 @@ async function adminNewsV2GetSources(_req, res) {
 async function adminNewsV2CreateSource(req, res) {
     try {
         const rssUrl = String(req.body?.rssUrl || req.body?.feedUrl || '').trim();
+        const siteUrl = String(req.body?.siteUrl || '').trim();
         const payload = {
             name: String(req.body?.name || '').trim(),
             rssUrl,
             feedUrl: rssUrl,
-            siteUrl: String(req.body?.siteUrl || '').trim(),
+            siteUrl,
             iconType: String(req.body?.iconType || 'url'),
             iconUrl: String(req.body?.iconUrl || '').trim(),
             enabled: req.body?.enabled !== undefined ? Boolean(req.body.enabled) : (req.body?.isActive !== false),
@@ -1951,6 +2841,13 @@ async function adminNewsV2CreateSource(req, res) {
         };
         if (!payload.name || !payload.feedUrl) {
             res.status(400).json({ message: 'name and rssUrl/feedUrl are required' });
+            return;
+        }
+        const sourceUrlError = validateNewsSourceUrls(payload.feedUrl, payload.siteUrl, {
+            allowPlaceholder: !(payload.enabled && payload.isActive),
+        });
+        if (sourceUrlError) {
+            res.status(400).json({ message: sourceUrlError });
             return;
         }
         const created = await NewsSource_1.default.create(payload);
@@ -1997,6 +2894,13 @@ async function adminNewsV2UpdateSource(req, res) {
             categoryDefault: req.body?.categoryDefault !== undefined ? String(req.body.categoryDefault || '') : before.categoryDefault,
             maxItemsPerFetch: req.body?.maxItemsPerFetch !== undefined ? Number(req.body.maxItemsPerFetch || 20) : before.maxItemsPerFetch,
         };
+        const sourceUrlError = validateNewsSourceUrls(payload.feedUrl, String(payload.siteUrl || ''), {
+            allowPlaceholder: !(payload.enabled && payload.isActive),
+        });
+        if (sourceUrlError) {
+            res.status(400).json({ message: sourceUrlError });
+            return;
+        }
         const updated = await NewsSource_1.default.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true }).lean();
         await writeNewsAuditEvent(req, { action: 'source.update', entityType: 'source', entityId: String(req.params.id || ''), before: before, after: updated });
         res.json({ item: updated, message: 'Source updated' });
@@ -2028,14 +2932,40 @@ async function adminNewsV2TestSource(req, res) {
             res.status(404).json({ message: 'Source not found' });
             return;
         }
+        const sourceUrlError = validateNewsSourceUrls(String(source.feedUrl || source.rssUrl || ''), String(source.siteUrl || ''));
+        if (sourceUrlError) {
+            res.status(400).json({ ok: false, message: sourceUrlError });
+            return;
+        }
         const parser = new rss_parser_1.default();
         const feed = await parser.parseURL(source.feedUrl);
         const preview = Array.isArray(feed.items) ? feed.items.slice(0, 5).map((item) => ({ title: item.title || '', link: item.link || '', pubDate: item.pubDate || '' })) : [];
+        await NewsSource_1.default.updateOne({ _id: req.params.id }, {
+            $set: {
+                lastFetchStatus: 'success',
+                lastFetchedAt: new Date(),
+                lastSuccessAt: new Date(),
+                lastError: '',
+                lastParseError: '',
+                consecutiveFailureCount: 0,
+                lastCreatedCount: preview.length,
+                lastDuplicateRate: 0,
+            },
+        });
         await writeNewsAuditEvent(req, { action: 'source.test', entityType: 'source', entityId: String(req.params.id || ''), meta: { itemCount: preview.length } });
         res.json({ ok: true, title: feed.title || source.name, preview });
     }
     catch (error) {
         console.error('adminNewsV2TestSource error:', error);
+        await NewsSource_1.default.updateOne({ _id: req.params.id }, {
+            $set: {
+                lastFetchStatus: 'failed',
+                lastError: error instanceof Error ? error.message : 'Feed parse failed',
+                lastParseError: error instanceof Error ? error.message : 'Feed parse failed',
+                lastHttpStatus: extractHttpStatusFromErrorMessage(error instanceof Error ? error.message : ''),
+            },
+            $inc: { consecutiveFailureCount: 1 },
+        }).catch(() => undefined);
         res.status(400).json({ ok: false, message: error instanceof Error ? error.message : 'Feed parse failed' });
     }
 }
@@ -2270,7 +3200,7 @@ async function adminNewsV2UpdateShareSettings(req, res) {
 async function adminNewsV2GetAllSettings(_req, res) {
     try {
         const settings = await getOrCreateNewsSettings();
-        res.json({ settings });
+        res.json({ settings: sanitizeSettingsSecrets(settings) });
     }
     catch (error) {
         console.error('adminNewsV2GetAllSettings error:', error);
@@ -2281,7 +3211,7 @@ async function adminNewsV2UpdateAllSettings(req, res) {
     try {
         const next = await updateNewsSettingsConfig(req, req.body || {});
         (0, homeStream_1.broadcastHomeStreamEvent)({ type: 'news-updated', meta: { action: 'settings_update' } });
-        res.json({ settings: next, message: 'News settings updated' });
+        res.json({ settings: sanitizeSettingsSecrets(next), message: 'News settings updated' });
     }
     catch (error) {
         console.error('adminNewsV2UpdateAllSettings error:', error);
@@ -2510,6 +3440,13 @@ async function adminNewsV2ExportSources(req, res) {
             maxItemsPerFetch: item.maxItemsPerFetch,
             lastFetchedAt: item.lastFetchedAt || '',
             lastSuccessAt: item.lastSuccessAt || '',
+            lastFetchStatus: item.lastFetchStatus || '',
+            consecutiveFailureCount: item.consecutiveFailureCount || 0,
+            lastHttpStatus: item.lastHttpStatus || '',
+            lastParseError: item.lastParseError || '',
+            lastDuplicateRate: item.lastDuplicateRate || 0,
+            lastCreatedCount: item.lastCreatedCount || 0,
+            lastExtractionMode: item.lastExtractionMode || '',
             lastError: item.lastError || '',
         }));
         await writeNewsAuditEvent(req, { action: 'export.sources', entityType: 'export', meta: { count: rows.length, format } });
@@ -2596,13 +3533,171 @@ function buildPublicPublishedFilter() {
     return {
         $or: [
             { status: 'published' },
-            { isPublished: true },
+            {
+                isPublished: true,
+                status: {
+                    $nin: ['draft', 'archived', 'pending_review', 'duplicate_review', 'approved', 'rejected', 'scheduled', 'fetch_failed'],
+                },
+            },
         ],
     };
 }
 function isAllNewsCategoryToken(value) {
     const normalized = String(value || '').trim().toLowerCase();
     return normalized === 'all' || normalized === 'all news';
+}
+function escapeXml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+function getNewsDiagnosticArticles(host) {
+    return [
+        {
+            key: 'full-campus-policy',
+            title: 'CampusWay diagnostic feed: verified admission policy checklist',
+            category: 'Admission',
+            description: 'Diagnostic item with complete content inside RSS for parser-first extraction checks.',
+            link: `${host}/api/news/diagnostics/article/full-campus-policy`,
+            guid: 'campusway-diagnostic-full-campus-policy',
+            pubDate: new Date('2026-03-22T09:00:00.000Z'),
+            html: `
+                <article>
+                    <h1>CampusWay diagnostic feed: verified admission policy checklist</h1>
+                    <p>This diagnostic article exists only to verify the RSS ingestion chain.</p>
+                    <p>Students should confirm application windows, payment deadlines, admit card dates, and campus-specific circulars before sharing any update.</p>
+                    <p>Editors should keep the source link, summary, and student-friendly explanation aligned so the review queue stays trustworthy.</p>
+                    <ul>
+                        <li>Confirm the official circular date.</li>
+                        <li>Highlight the next deadline.</li>
+                        <li>Call out who is affected.</li>
+                        <li>Keep the original source linked.</li>
+                    </ul>
+                </article>
+            `,
+            rssContent: `
+                <p>This diagnostic RSS item carries full content directly in the feed.</p>
+                <p>It verifies that CampusWay can ingest rich RSS content without opening the source article manually.</p>
+                <p>Editors should see a usable explanation, a student-friendly summary, and stable dedupe metadata after fetch.</p>
+                <ul>
+                    <li>Feed contains the full article body.</li>
+                    <li>No manual link opening should be required.</li>
+                    <li>Review queue should remain readable after fetch.</li>
+                </ul>
+            `,
+        },
+        {
+            key: 'excerpt-scholarship-fallback',
+            title: 'CampusWay diagnostic feed: excerpt-only scholarship update',
+            category: 'Scholarship',
+            description: 'Excerpt-only diagnostic item that forces article fetch and readability extraction.',
+            link: `${host}/api/news/diagnostics/article/excerpt-scholarship-fallback`,
+            guid: 'campusway-diagnostic-excerpt-scholarship-fallback',
+            pubDate: new Date('2026-03-22T09:30:00.000Z'),
+            html: `
+                <article>
+                    <h1>CampusWay diagnostic feed: excerpt-only scholarship update</h1>
+                    <p>This article is designed to test the fallback path where the feed only contains a short teaser.</p>
+                    <p>The source page contains the full explanation so the backend must fetch the linked article and extract readable content automatically.</p>
+                    <p>Students should be told what the scholarship covers, who can apply, what documents are required, and the submission deadline.</p>
+                    <section>
+                        <h2>Checklist</h2>
+                        <ul>
+                            <li>Collect income proof and academic transcripts.</li>
+                            <li>Verify whether the scholarship is limited to first-year applicants.</li>
+                            <li>Double-check the final submission time before publish + send.</li>
+                        </ul>
+                    </section>
+                </article>
+            `,
+        },
+    ];
+}
+async function getPublicNewsV2DiagnosticFeed(req, res) {
+    try {
+        const host = `${req.protocol}://${req.get('host') || 'localhost'}`;
+        const articles = getNewsDiagnosticArticles(host);
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>CampusWay RSS Diagnostic Feed</title>
+    <link>${escapeXml(`${host}/news`)}</link>
+    <description>Deterministic local RSS feed for verifying CampusWay news ingestion.</description>
+    ${articles.map((article) => `
+      <item>
+        <title>${escapeXml(article.title)}</title>
+        <link>${escapeXml(article.link)}</link>
+        <guid isPermaLink="false">${escapeXml(article.guid)}</guid>
+        <pubDate>${article.pubDate.toUTCString()}</pubDate>
+        <category>${escapeXml(article.category)}</category>
+        <description><![CDATA[${article.description}]]></description>
+        ${article.rssContent ? `<content:encoded><![CDATA[${article.rssContent}]]></content:encoded>` : ''}
+      </item>
+    `).join('\n')}
+  </channel>
+</rss>`;
+        res.type('application/rss+xml').send(xml);
+    }
+    catch (error) {
+        console.error('getPublicNewsV2DiagnosticFeed error:', error);
+        res.status(500).send('Server error');
+    }
+}
+async function getPublicNewsV2DiagnosticArticle(req, res) {
+    try {
+        const slug = String(req.params.slug || '').trim();
+        const host = `${req.protocol}://${req.get('host') || 'localhost'}`;
+        const article = getNewsDiagnosticArticles(host).find((item) => item.key === slug);
+        if (!article) {
+            res.status(404).send('Diagnostic article not found');
+            return;
+        }
+        res.type('html').send(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeXml(article.title)}</title>
+  </head>
+  <body>
+    <main>
+      ${article.html}
+    </main>
+  </body>
+</html>`);
+    }
+    catch (error) {
+        console.error('getPublicNewsV2DiagnosticArticle error:', error);
+        res.status(500).send('Server error');
+    }
+}
+async function getPublicNewsV2DiagnosticDelivery(req, res) {
+    try {
+        const channel = String(req.params.channel || '').trim().toLowerCase();
+        if (channel !== 'sms' && channel !== 'email') {
+            res.status(404).json({ message: 'Diagnostic delivery channel not found' });
+            return;
+        }
+        const payload = req.body && typeof req.body === 'object'
+            ? req.body
+            : {};
+        res.json({
+            ok: true,
+            channel,
+            receivedAt: new Date().toISOString(),
+            accepted: {
+                to: String(payload.to || ''),
+                subject: String(payload.subject || ''),
+            },
+        });
+    }
+    catch (error) {
+        console.error('getPublicNewsV2DiagnosticDelivery error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
 }
 async function getPublicNewsV2List(req, res) {
     try {
@@ -2614,8 +3709,14 @@ async function getPublicNewsV2List(req, res) {
         const source = String(req.query.source || req.query.sourceId || '').trim();
         const tag = String(req.query.tag || '').trim();
         const q = String(req.query.q || req.query.search || '').trim();
-        if (category && !isAllNewsCategoryToken(category))
-            andFilters.push({ category });
+        if (category && !isAllNewsCategoryToken(category)) {
+            andFilters.push({
+                $or: [
+                    { category },
+                    { 'classification.primaryCategory': category },
+                ],
+            });
+        }
         if (source) {
             andFilters.push({
                 $or: [
@@ -2643,13 +3744,9 @@ async function getPublicNewsV2List(req, res) {
             .select('-content -fullContent -rssRawContent')
             .lean();
         const host = `${req.protocol}://${req.get('host') || 'localhost'}`;
-        const fallbackBanner = resolveDefaultNewsBanner(settings);
         res.json({
             items: items.map((item) => {
-                return {
-                    ...buildNewsOutput(item, fallbackBanner),
-                    ...buildSharePayload(item, host, settings),
-                };
+                return buildPublicNewsOutput(item, host, settings);
             }),
             total,
             page,
@@ -2705,18 +3802,11 @@ async function getPublicNewsV2BySlug(req, res) {
             .select('-content -fullContent -rssRawContent')
             .lean();
         const host = `${req.protocol}://${req.get('host') || 'localhost'}`;
-        const fallbackBanner = resolveDefaultNewsBanner(settings);
-        const withFallback = {
-            ...buildNewsOutput(item, fallbackBanner),
-            ...buildSharePayload(item, host, settings),
-        };
+        const withFallback = buildPublicNewsOutput(item, host, settings);
         res.json({
             item: withFallback,
             related: related.map((entry) => {
-                return {
-                    ...buildNewsOutput(entry, fallbackBanner),
-                    ...buildSharePayload(entry, host, settings),
-                };
+                return buildPublicNewsOutput(entry, host, settings);
             }),
         });
     }
@@ -2842,6 +3932,11 @@ async function getPublicNewsV2Settings(_req, res) {
                 allowScheduling: settings.workflow.allowScheduling,
                 openOriginalWhenExtractionIncomplete: settings.workflow.openOriginalWhenExtractionIncomplete !== false,
             },
+            communication: {
+                exposeStudentFriendlyExplanation: settings.communication.exposeStudentFriendlyExplanation,
+                exposeKeyPoints: settings.communication.exposeKeyPoints,
+            },
+            help: settings.help,
         });
     }
     catch (error) {

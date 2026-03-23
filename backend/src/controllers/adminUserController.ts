@@ -20,15 +20,16 @@ import ManualPayment from '../models/ManualPayment';
 import StudentDueLedger from '../models/StudentDueLedger';
 import { AuthRequest } from '../middlewares/auth';
 import { getClientIp } from '../utils/requestMeta';
+import { sendCampusMail } from '../utils/mailer';
 import { resolvePermissions } from '../utils/permissions';
 import { addUserStreamClient, broadcastUserEvent } from '../realtime/userStream';
 import { broadcastStudentDashboardEvent } from '../realtime/studentDashboardStream';
 import { broadcastHomeStreamEvent } from '../realtime/homeStream';
 import { getRuntimeSettingsSnapshot } from '../services/runtimeSettingsService';
 import { computeStudentProfileScore } from '../services/studentProfileScoreService';
-import { revealCredentialMirror, upsertCredentialMirror } from '../services/credentialVaultService';
 import { createStudentNotification } from '../services/adminAlertService';
 import * as groupMembershipService from '../services/groupMembershipService';
+import { issueSecurityToken } from '../services/securityTokenService';
 
 function normalizeRole(value: unknown, fallback: UserRole = 'student'): UserRole {
     const role = String(value || '').trim().toLowerCase();
@@ -60,6 +61,28 @@ function computeProfileCompletion(profile: Record<string, unknown>): number {
 
 function newRandomPassword(length = 12): string {
     return crypto.randomBytes(length).toString('base64url').slice(0, length);
+}
+
+const APP_DOMAIN = process.env.APP_DOMAIN || 'http://localhost:5173';
+
+async function issueSetPasswordInvite(user: { _id: mongoose.Types.ObjectId; email: string; full_name: string; username: string }) {
+    if (!user.email) return false;
+    const { rawToken } = await issueSecurityToken({
+        userId: user._id,
+        purpose: 'set_password',
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        channel: 'email',
+        meta: { email: user.email },
+        replaceExisting: true,
+    });
+    const setPasswordUrl = `${APP_DOMAIN}/student/reset-password?token=${rawToken}`;
+    await sendCampusMail({
+        to: user.email,
+        subject: 'CampusWay: Set your password',
+        text: `Set your CampusWay password: ${setPasswordUrl}`,
+        html: `<p>Hello ${user.full_name || user.username},</p><p>Your account is ready. Set your CampusWay password here:</p><p><a href="${setPasswordUrl}">${setPasswordUrl}</a></p><p>This link expires in 24 hours and can be used once.</p>`,
+    });
+    return true;
 }
 
 function toBoolean(value: unknown): boolean {
@@ -777,7 +800,7 @@ export async function adminCreateUser(req: AuthRequest, res: Response): Promise<
         }
 
         const providedPassword = String(body.password || '').trim();
-        const generatedPassword = providedPassword || newRandomPassword();
+        const generatedPassword = providedPassword || newRandomPassword(24);
         const hashedPassword = await bcrypt.hash(generatedPassword, 12);
         const permissionsInput = (body.permissions || {}) as Partial<IUserPermissions>;
         const permissions = buildPermissions(role, permissionsInput);
@@ -805,9 +828,10 @@ export async function adminCreateUser(req: AuthRequest, res: Response): Promise<
             profile_photo: typeof body.profile_photo === 'string' ? body.profile_photo : undefined,
             phone_number: typeof body.phone_number === 'string' ? body.phone_number : undefined,
             mustChangePassword: toBoolean(body.mustChangePassword) || !providedPassword,
+            forcePasswordResetRequired: toBoolean(body.mustChangePassword) || !providedPassword,
             subscription: defaultSubscription,
         });
-        await upsertCredentialMirror(user._id, generatedPassword, req.user?._id || null);
+        const inviteSent = !providedPassword ? await issueSetPasswordInvite(user) : false;
 
 
         if (role === 'student') {
@@ -853,7 +877,7 @@ export async function adminCreateUser(req: AuthRequest, res: Response): Promise<
         res.status(201).json({
             message: 'User created successfully',
             user: mapUserForClient(user.toObject() as unknown as Record<string, unknown>),
-            generatedPassword: providedPassword ? undefined : generatedPassword,
+            inviteSent,
         });
     } catch (error) {
         console.error('adminCreateUser error:', error);
@@ -1392,7 +1416,7 @@ export async function adminBulkImportStudents(req: AuthRequest, res: Response): 
         let imported = 0;
         let skipped = 0;
         const errors: string[] = [];
-        const generatedCredentials: Array<{ email: string; username: string; password: string }> = [];
+        let inviteSentCount = 0;
 
         for (let index = 0; index < rows.length; index += 1) {
             const row = rows[index];
@@ -1421,8 +1445,8 @@ export async function adminBulkImportStudents(req: AuthRequest, res: Response): 
                 continue;
             }
 
-            const plainPassword = providedPassword || newRandomPassword(10);
-            const hashedPassword = await bcrypt.hash(plainPassword, 12);
+                const plainPassword = providedPassword || newRandomPassword(24);
+                const hashedPassword = await bcrypt.hash(plainPassword, 12);
 
             try {
                 // Determine subscription
@@ -1456,9 +1480,12 @@ export async function adminBulkImportStudents(req: AuthRequest, res: Response): 
                     permissions: buildPermissions('student'),
                     phone_number: row.phone_number || row.phone || undefined,
                     mustChangePassword: true,
+                    forcePasswordResetRequired: true,
                     subscription,
                 });
-                await upsertCredentialMirror(user._id, plainPassword, req.user?._id || null);
+                if (!providedPassword && await issueSetPasswordInvite(user)) {
+                    inviteSentCount += 1;
+                }
 
                 const profile = await StudentProfile.create({
                     user_id: user._id,
@@ -1489,9 +1516,6 @@ export async function adminBulkImportStudents(req: AuthRequest, res: Response): 
                 await profile.save();
 
                 imported += 1;
-                if (!providedPassword) {
-                    generatedCredentials.push({ email, username, password: plainPassword });
-                }
             } catch (error) {
                 skipped += 1;
                 errors.push(`Row ${index + 1}: ${(error as Error).message}`);
@@ -1516,7 +1540,7 @@ export async function adminBulkImportStudents(req: AuthRequest, res: Response): 
             imported,
             skipped,
             errors,
-            generatedCredentials,
+            inviteSentCount,
         });
     } catch (error) {
         console.error('adminBulkImportStudents error:', error);
@@ -1537,15 +1561,15 @@ export async function adminResetUserPassword(req: AuthRequest, res: Response): P
             return;
         }
 
-        const body = req.body as Record<string, unknown>;
-        const newPassword = String(body.newPassword || '').trim() || newRandomPassword(12);
-        user.password = await bcrypt.hash(newPassword, 12);
+        const replacementPassword = newRandomPassword(24);
+        user.password = await bcrypt.hash(replacementPassword, 12);
         user.mustChangePassword = true;
+        user.forcePasswordResetRequired = true;
         user.loginAttempts = 0;
         user.lockUntil = undefined;
         user.password_updated_at = new Date();
         await user.save();
-        await upsertCredentialMirror(user._id, newPassword, req.user?._id || null);
+        const inviteSent = await issueSetPasswordInvite(user);
 
         await createAuditLog(req, 'user_password_reset', String(user._id), 'user');
         broadcastUserEvent({
@@ -1554,62 +1578,14 @@ export async function adminResetUserPassword(req: AuthRequest, res: Response): P
             actorId: req.user?._id,
             meta: { passwordReset: true },
         });
-        res.json({ message: 'Password reset successfully', temporaryPassword: newPassword });
+        res.json({
+            message: inviteSent
+                ? 'Password reset link sent successfully.'
+                : 'Password reset enforced. No email address is available to send the reset link.',
+            inviteSent,
+        });
     } catch (error) {
         console.error('adminResetUserPassword error:', error);
-        res.status(500).json({ message: 'Server error' });
-    }
-}
-
-export async function adminRevealStudentPassword(req: AuthRequest, res: Response): Promise<void> {
-    try {
-        if (!req.user || !['superadmin', 'admin'].includes(req.user.role)) {
-            res.status(403).json({ message: 'Only admin can reveal student passwords' });
-            return;
-        }
-
-        const body = req.body as Record<string, unknown>;
-        const mfaToken = String(body.mfaToken || '').trim();
-        const reason = String(body.reason || '').trim();
-        if (!mfaToken || !reason) {
-            res.status(400).json({ message: 'mfaToken and reason are required' });
-            return;
-        }
-
-        if (!validateMfaTokenForUser(String(req.user?._id || ''), mfaToken)) {
-            res.status(401).json({ message: 'MFA token expired or invalid' });
-            return;
-        }
-
-        const student = await User.findById(req.params.id).select('_id username email role').lean();
-        if (!student || student.role !== 'student') {
-            res.status(404).json({ message: 'Student not found' });
-            return;
-        }
-
-        const revealedPassword = await revealCredentialMirror(String(student._id));
-        if (!revealedPassword) {
-            res.status(404).json({ message: 'No mirrored password found. Reset password once, then try reveal again.' });
-            return;
-        }
-
-        await createAuditLog(req, 'student_password_revealed', String(student._id), 'student', {
-            reason,
-            via: 'credential_mirror',
-        });
-
-        res.json({
-            message: 'Password revealed successfully',
-            user: {
-                _id: String(student._id),
-                username: String(student.username || ''),
-                email: String(student.email || ''),
-                role: student.role,
-            },
-            password: revealedPassword,
-        });
-    } catch (error) {
-        console.error('adminRevealStudentPassword error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 }
@@ -2153,6 +2129,7 @@ export async function adminCreateStudent(req: AuthRequest, res: Response): Promi
             profile_photo: typeof body.profile_photo === 'string' ? body.profile_photo : '',
             permissions: buildPermissions('student'),
             mustChangePassword: toBoolean(body.mustChangePassword) || !providedPassword,
+            forcePasswordResetRequired: toBoolean(body.mustChangePassword) || !providedPassword,
             subscription: {
                 plan: normalizedSubscription.planCode,
                 planCode: normalizedSubscription.planCode,
@@ -2164,7 +2141,7 @@ export async function adminCreateStudent(req: AuthRequest, res: Response): Promi
                 assignedAt: new Date(),
             },
         });
-        await upsertCredentialMirror(user._id, plainPassword, req.user?._id || null);
+        const inviteSent = !providedPassword ? await issueSetPasswordInvite(user) : false;
 
         const profile = await StudentProfile.create({
             user_id: user._id,
@@ -2266,7 +2243,7 @@ export async function adminCreateStudent(req: AuthRequest, res: Response): Promi
                 userUniqueId: profile.user_unique_id,
                 subscription: getSubscriptionResponse(user.subscription as unknown as Record<string, unknown>),
             },
-            generatedPassword: providedPassword ? undefined : plainPassword,
+            inviteSent,
             paymentSyncWarning,
         });
     } catch (error) {

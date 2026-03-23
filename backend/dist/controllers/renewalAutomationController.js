@@ -12,9 +12,11 @@ exports.adminToggleAutoRenew = adminToggleAutoRenew;
 exports.adminGetAutomationLogs = adminGetAutomationLogs;
 exports.adminGetStudentSubscriptionHistory = adminGetStudentSubscriptionHistory;
 const mongoose_1 = __importDefault(require("mongoose"));
+const SubscriptionPlan_1 = __importDefault(require("../models/SubscriptionPlan"));
 const UserSubscription_1 = __importDefault(require("../models/UserSubscription"));
 const SubscriptionAutomationLog_1 = __importDefault(require("../models/SubscriptionAutomationLog"));
 const AuditLog_1 = __importDefault(require("../models/AuditLog"));
+const subscriptionLifecycleService_1 = require("../services/subscriptionLifecycleService");
 const requestMeta_1 = require("../utils/requestMeta");
 /* ── helpers ── */
 function asObjectId(value) {
@@ -33,6 +35,16 @@ async function createAudit(req, action, details) {
         target_type: 'subscription',
         ip_address: (0, requestMeta_1.getClientIp)(req),
         details: details || {},
+    });
+}
+async function syncCacheFromSubscription(sub) {
+    const plan = await SubscriptionPlan_1.default.findById(sub.planId).lean();
+    await (0, subscriptionLifecycleService_1.syncUserSubscriptionCache)({
+        userId: String(sub.userId),
+        plan: plan || null,
+        status: String(sub.status || 'expired'),
+        startAtUTC: sub.startAtUTC || null,
+        expiresAtUTC: sub.expiresAtUTC || null,
     });
 }
 /* ═══════════════════════════════════════════════════════════
@@ -107,6 +119,7 @@ async function adminExtendSubscription(req, res) {
     if (sub.status === 'expired')
         sub.status = 'active';
     await sub.save();
+    await syncCacheFromSubscription(sub);
     await SubscriptionAutomationLog_1.default.create({
         studentId: sub.userId,
         planId: sub.planId,
@@ -136,6 +149,7 @@ async function adminExpireSubscription(req, res) {
     sub.status = 'expired';
     sub.expiresAtUTC = new Date();
     await sub.save();
+    await syncCacheFromSubscription(sub);
     await SubscriptionAutomationLog_1.default.create({
         studentId: sub.userId,
         planId: sub.planId,
@@ -170,6 +184,7 @@ async function adminReactivateSubscription(req, res) {
     sub.status = 'active';
     sub.expiresAtUTC = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
     await sub.save();
+    await syncCacheFromSubscription(sub);
     await SubscriptionAutomationLog_1.default.create({
         studentId: sub.userId,
         planId: sub.planId,

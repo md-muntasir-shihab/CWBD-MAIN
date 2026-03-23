@@ -19,6 +19,7 @@ exports.PERMISSION_MODULES = [
     'finance_center',
     'resources',
     'support_center',
+    'notifications',
     'reports_analytics',
     'security_logs',
     'team_access_control',
@@ -67,6 +68,7 @@ const ADMIN_MODULES = [
     'payments',
     'finance_center',
     'support_center',
+    'notifications',
     'reports_analytics',
     'security_logs',
     'team_access_control',
@@ -85,6 +87,7 @@ const roleMatrixBase = {
         allowMany(map, ['news', 'question_bank', 'exams'], ['approve', 'bulk']);
         allow(map, 'students_groups', ['view', 'edit', 'bulk']);
         allow(map, 'support_center', ['view', 'edit']);
+        allow(map, 'notifications', ['view', 'create', 'edit', 'publish', 'export']);
         allow(map, 'reports_analytics', ['view', 'export']);
         return map;
     })(),
@@ -94,6 +97,7 @@ const roleMatrixBase = {
         allow(map, 'home_control', ['view', 'edit']);
         allow(map, 'universities', ['view']);
         allow(map, 'exams', ['view']);
+        allow(map, 'notifications', ['view', 'create', 'edit']);
         return map;
     })(),
     viewer: (() => {

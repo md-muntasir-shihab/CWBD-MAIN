@@ -15,6 +15,13 @@ export interface INewsSource extends Document {
     categoryTags?: string[];
     lastFetchedAt?: Date;
     lastSuccessAt?: Date;
+    lastFetchStatus?: 'idle' | 'success' | 'failed';
+    consecutiveFailureCount?: number;
+    lastHttpStatus?: number;
+    lastParseError?: string;
+    lastDuplicateRate?: number;
+    lastCreatedCount?: number;
+    lastExtractionMode?: 'rss_content' | 'readability_scrape' | 'both';
     lastError?: string;
     language?: string;
     tagsDefault: string[];

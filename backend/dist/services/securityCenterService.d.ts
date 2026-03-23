@@ -1,4 +1,4 @@
-import { AdminAccessSettings, ExamProtectionSettings, LoggingSettings, LoginProtectionSettings, PanicSettings, PasswordPolicy, RateLimitSettings, RetentionSettings, RiskyActionKey, SessionSecuritySettings, SiteAccessSettings, TwoPersonApprovalSettings } from '../models/SecuritySettings';
+import { AccessControlSecuritySettings, AdminAccessSettings, AlertingSecuritySettings, AuthenticationSecuritySettings, BackupRestoreSecuritySettings, ExamProtectionSettings, ExportSecuritySettings, LoggingSettings, LoginProtectionSettings, PanicSettings, PasswordPoliciesSettings, PasswordPolicy, RateLimitSettings, RetentionSettings, RiskyActionKey, RoleScopedPasswordPolicy, RuntimeGuardSettings, SessionSecuritySettings, SessionsSecurityCenterSettings, SiteAccessSettings, TwoFactorSecuritySettings, TwoPersonApprovalSettings, UploadSecuritySettings, VerificationRecoverySettings } from '../models/SecuritySettings';
 export type SecuritySettingsSnapshot = {
     passwordPolicy: PasswordPolicy;
     loginProtection: LoginProtectionSettings;
@@ -11,8 +11,26 @@ export type SecuritySettingsSnapshot = {
     twoPersonApproval: TwoPersonApprovalSettings;
     retention: RetentionSettings;
     panic: PanicSettings;
+    authentication: AuthenticationSecuritySettings;
+    passwordPolicies: PasswordPoliciesSettings;
+    twoFactor: TwoFactorSecuritySettings;
+    sessions: SessionsSecurityCenterSettings;
+    accessControl: AccessControlSecuritySettings;
+    verificationRecovery: VerificationRecoverySettings;
+    uploadSecurity: UploadSecuritySettings;
+    alerting: AlertingSecuritySettings;
+    exportSecurity: ExportSecuritySettings;
+    backupRestore: BackupRestoreSecuritySettings;
+    runtimeGuards: RuntimeGuardSettings;
     updatedBy?: string | null;
     updatedAt?: Date | null;
+};
+type PartialRoleScopedPasswordPolicy = Partial<RoleScopedPasswordPolicy>;
+type PartialPasswordPoliciesSettings = Partial<Omit<PasswordPoliciesSettings, 'default' | 'admin' | 'staff' | 'student'>> & {
+    default?: PartialRoleScopedPasswordPolicy;
+    admin?: PartialRoleScopedPasswordPolicy;
+    staff?: PartialRoleScopedPasswordPolicy;
+    student?: PartialRoleScopedPasswordPolicy;
 };
 export type SecuritySettingsUpdateInput = Partial<{
     passwordPolicy: Partial<PasswordPolicy>;
@@ -26,6 +44,17 @@ export type SecuritySettingsUpdateInput = Partial<{
     twoPersonApproval: Partial<TwoPersonApprovalSettings>;
     retention: Partial<RetentionSettings>;
     panic: Partial<PanicSettings>;
+    authentication: Partial<AuthenticationSecuritySettings>;
+    passwordPolicies: PartialPasswordPoliciesSettings;
+    twoFactor: Partial<TwoFactorSecuritySettings>;
+    sessions: Partial<SessionsSecurityCenterSettings>;
+    accessControl: Partial<AccessControlSecuritySettings>;
+    verificationRecovery: Partial<VerificationRecoverySettings>;
+    uploadSecurity: Partial<UploadSecuritySettings>;
+    alerting: Partial<AlertingSecuritySettings>;
+    exportSecurity: Partial<ExportSecuritySettings>;
+    backupRestore: Partial<BackupRestoreSecuritySettings>;
+    runtimeGuards: Partial<RuntimeGuardSettings>;
 }>;
 export type PublicSecurityConfig = {
     maintenanceMode: boolean;
@@ -42,9 +71,17 @@ export declare function getPanicSettings(forceRefresh?: boolean): Promise<PanicS
 export declare function getRetentionSettings(forceRefresh?: boolean): Promise<RetentionSettings>;
 export declare function isTwoPersonApprovalRequired(action: RiskyActionKey, forceRefresh?: boolean): Promise<boolean>;
 export declare function getDefaultSecuritySettings(): SecuritySettingsSnapshot;
-export declare function isPasswordCompliant(password: string, policy: PasswordPolicy): {
+export declare function getPasswordPolicyForRole(role: string | undefined | null, security?: SecuritySettingsSnapshot): RoleScopedPasswordPolicy;
+export declare function isPasswordCompliant(password: string, policy: PasswordPolicy | RoleScopedPasswordPolicy, options?: {
+    passwordHistory?: string[];
+}): {
     ok: boolean;
     message?: string;
 };
+export declare function shouldExpirePassword(policy: RoleScopedPasswordPolicy): boolean;
+export declare function calculatePasswordExpiryDate(policy: RoleScopedPasswordPolicy, fromDate?: Date): Date | null;
 export declare function isIpAllowed(ipAddress: string, allowlist: string[]): boolean;
+export declare function isProtectedUploadExtensionAllowed(extension: string, settings: SecuritySettingsSnapshot): boolean;
+export declare function isPublicUploadExtensionAllowed(extension: string, settings: SecuritySettingsSnapshot): boolean;
+export {};
 //# sourceMappingURL=securityCenterService.d.ts.map

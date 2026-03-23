@@ -18,6 +18,9 @@ export declare function adminNewsV2Schedule(req: AuthRequest, res: Response): Pr
 export declare function adminNewsV2ApprovePublish(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminNewsV2MoveToDraft(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminNewsV2PublishAnyway(req: AuthRequest, res: Response): Promise<void>;
+export declare function adminNewsV2Archive(req: AuthRequest, res: Response): Promise<void>;
+export declare function adminNewsV2ConvertToNotice(req: AuthRequest, res: Response): Promise<void>;
+export declare function adminNewsV2PublishSend(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminNewsV2MergeDuplicate(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminNewsV2BulkApprove(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminNewsV2BulkReject(req: AuthRequest, res: Response): Promise<void>;
@@ -43,6 +46,9 @@ export declare function adminNewsV2ExportNews(req: AuthRequest, res: Response): 
 export declare function adminNewsV2ExportSources(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminNewsV2ExportLogs(req: AuthRequest, res: Response): Promise<void>;
 export declare function adminNewsV2GetAuditLogs(req: AuthRequest, res: Response): Promise<void>;
+export declare function getPublicNewsV2DiagnosticFeed(req: Request, res: Response): Promise<void>;
+export declare function getPublicNewsV2DiagnosticArticle(req: Request, res: Response): Promise<void>;
+export declare function getPublicNewsV2DiagnosticDelivery(req: Request, res: Response): Promise<void>;
 export declare function getPublicNewsV2List(req: Request, res: Response): Promise<void>;
 export declare function getPublicNewsV2BySlug(req: Request, res: Response): Promise<void>;
 export declare function getPublicNewsV2Appearance(_req: Request, res: Response): Promise<void>;

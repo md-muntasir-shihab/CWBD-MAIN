@@ -13,6 +13,7 @@ import {
     KeyRound,
     Zap,
     HelpCircle,
+    CheckCircle,
 } from 'lucide-react';
 
 export type AdminMenuIcon = ComponentType<{ className?: string }>;
@@ -104,7 +105,7 @@ export const ADMIN_PATHS = {
     systemLogs: adminUi('settings/system-logs'),
     adminProfile: adminUi('settings/admin-profile'),
     settingsCenter: adminUi('settings'),
-    newsSettings: adminUi('settings/news-settings'),
+    newsSettings: adminUi('settings/news'),
     // Notification Test Send
     notificationTestSend: adminUi('notifications/test-send'),
     // Notification Triggers
@@ -128,6 +129,7 @@ export const ADMIN_PATHS = {
     teamActivity: adminUi('team/activity'),
     teamSecurity: adminUi('team/security'),
     teamInvites: adminUi('team/invites'),
+    approvals: adminUi('approvals'),
 } as const;
 
 export type AdminMenuItem = {
@@ -186,21 +188,21 @@ export const ADMIN_MENU_ITEMS: AdminMenuItem[] = [
     {
         key: 'news',
         label: 'News Management',
-        path: adminUi('news/dashboard'),
+        path: adminUi('news/pending'),
         icon: Newspaper,
         module: 'news',
-        matchPrefixes: [adminUi('news'), adminUi('settings/news-settings')],
+        matchPrefixes: [adminUi('news'), adminUi('settings/news')],
         children: [
-            { key: 'news-dash', label: 'Dashboard', path: adminUi('news/dashboard'), icon: LayoutDashboard },
-            { key: 'news-pending', label: 'Pending Review', path: adminUi('news/pending'), icon: AlertCircle },
-            { key: 'news-duplicates', label: 'Duplicate Queue', path: adminUi('news/duplicates'), icon: Copy },
-            { key: 'news-drafts', label: 'Drafts', path: adminUi('news/drafts'), icon: FolderOpen },
-            { key: 'news-published', label: 'Published', path: adminUi('news/published'), icon: ScrollText },
+            { key: 'news-dash', label: 'Overview', path: adminUi('news/dashboard'), icon: LayoutDashboard },
+            { key: 'news-pending', label: 'Items to Review', path: adminUi('news/pending'), icon: AlertCircle },
+            { key: 'news-duplicates', label: 'Possible Duplicates', path: adminUi('news/duplicates'), icon: Copy },
+            { key: 'news-drafts', label: 'Saved Drafts', path: adminUi('news/drafts'), icon: FolderOpen },
+            { key: 'news-published', label: 'Live News', path: adminUi('news/published'), icon: ScrollText },
             { key: 'news-scheduled', label: 'Scheduled', path: adminUi('news/scheduled'), icon: ScrollText },
             { key: 'news-rejected', label: 'Rejected', path: adminUi('news/rejected'), icon: ScrollText },
-            { key: 'news-ai', label: 'AI Selected', path: adminUi('news/ai-selected'), icon: Sparkles },
+            { key: 'news-ai', label: 'AI Review', path: adminUi('news/ai-selected'), icon: Sparkles },
             { key: 'news-rss', label: 'RSS Sources', path: adminUi('news/sources'), icon: Rss },
-            { key: 'news-settings', label: 'News Settings', path: ADMIN_PATHS.newsSettings, icon: Settings },
+            { key: 'news-config', label: 'News Settings', path: ADMIN_PATHS.newsSettings, icon: Settings },
         ],
     },
 
@@ -323,7 +325,7 @@ export const ADMIN_MENU_ITEMS: AdminMenuItem[] = [
     // 10b. Campaign Platform
     {
         key: 'campaigns',
-        label: 'Campaign Platform',
+        label: 'Campaigns Hub',
         path: ADMIN_PATHS.campaignsDashboard,
         icon: Send,
         module: 'notifications',
@@ -408,6 +410,7 @@ export const ADMIN_MENU_ITEMS: AdminMenuItem[] = [
         matchPrefixes: [adminUi('settings/security-center'), adminUi('settings/system-logs'), adminUi('reports')],
         children: [
             { key: 'sec-center', label: 'Security Center', path: ADMIN_PATHS.securityCenter, icon: Shield },
+            { key: 'sec-approvals', label: 'Approval Center', path: ADMIN_PATHS.approvals, icon: CheckCircle },
             { key: 'sec-logs', label: 'System Logs', path: ADMIN_PATHS.systemLogs, icon: ScrollText },
             { key: 'sec-reports', label: 'Reports', path: ADMIN_PATHS.reports, icon: BarChart3 },
         ],
@@ -445,7 +448,7 @@ export function routeFromDashboardActionTab(tabId: string): string {
         case 'home-control':
             return ADMIN_PATHS.homeControl;
         case 'news':
-            return adminUi('news/dashboard');
+            return adminUi('news/pending');
         case 'exams':
             return ADMIN_PATHS.exams;
         case 'question-bank':

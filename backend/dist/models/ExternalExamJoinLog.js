@@ -39,7 +39,7 @@ const ExternalExamJoinLogSchema = new mongoose_1.Schema({
     studentId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     joinedAt: { type: Date, default: Date.now, index: true },
     attemptNo: { type: Number, default: 1 },
-    attemptRef: { type: String, default: '', trim: true, index: true },
+    attemptRef: { type: String, default: '', trim: true },
     status: { type: String, enum: ['awaiting_result', 'imported'], default: 'awaiting_result' },
     sourcePanel: { type: String, default: 'exam_start' },
     registration_id_snapshot: { type: String, default: '' },

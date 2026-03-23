@@ -23,7 +23,11 @@ export interface IUser extends Document {
     permissions: IUserPermissions;
     permissionsV2?: IUserPermissionsV2;
     phone_number?: string;
+    phoneVerifiedAt?: Date | null;
+    phoneVerificationPendingAt?: Date | null;
     profile_photo?: string;
+    emailVerifiedAt?: Date | null;
+    emailVerificationPendingAt?: Date | null;
     mustChangePassword: boolean;
     passwordResetRequired: boolean;
     passwordSetByAdminId?: mongoose.Types.ObjectId;
@@ -37,9 +41,25 @@ export interface IUser extends Document {
     credentialsLastResentAtUTC?: Date;
     loginAttempts: number;
     lockUntil?: Date;
+    lockReason?: string | null;
+    lockedByUserId?: mongoose.Types.ObjectId | null;
+    lastLockAt?: Date | null;
     twoFactorEnabled: boolean;
     twoFactorSecret?: string;
     two_factor_method?: 'email' | 'sms' | 'authenticator' | null;
+    twoFactorBackupCodes?: Array<{
+        codeHash: string;
+        usedAt?: Date | null;
+    }>;
+    twoFactorRecoveryLastIssuedAt?: Date | null;
+    twoFactorLastVerifiedAt?: Date | null;
+    lastSecurityNoticeAt?: Date | null;
+    passwordHistory?: Array<{
+        hash: string;
+        createdAt: Date;
+        source?: 'admin' | 'user' | 'reset';
+    }>;
+    passwordExpiresAt?: Date | null;
     lastLogin?: Date;
     lastLoginAtUTC?: Date;
     ip_address?: string;
@@ -48,10 +68,15 @@ export interface IUser extends Document {
     subscription?: {
         plan?: string;
         planCode?: string;
+        planId?: mongoose.Types.ObjectId;
+        planSlug?: string;
         planName?: string;
         isActive?: boolean;
         startDate?: Date;
         expiryDate?: Date;
+        ctaLabel?: string;
+        ctaUrl?: string;
+        ctaMode?: 'contact' | 'request_payment' | 'internal' | 'external';
         assignedBy?: mongoose.Types.ObjectId;
         assignedAt?: Date;
     };

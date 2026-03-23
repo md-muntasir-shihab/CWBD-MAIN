@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from './hooks/useTheme';
@@ -96,6 +97,7 @@ import DataHubPage from './pages/admin/datahub/DataHubPage';
 import TeamAccessConsolePage from './pages/admin/team/TeamAccessConsolePage';
 import MemberDetailPage from './pages/admin/team/MemberDetailPage';
 import RoleDetailPage from './pages/admin/team/RoleDetailPage';
+import ActionApprovalsPage from './pages/admin/approvals/ActionApprovalsPage';
 import NotFoundPage from './pages/NotFound';
 import ForceLogoutModal from './components/auth/ForceLogoutModal';
 import ChairmanLoginPage from './pages/chairman/ChairmanLogin';
@@ -119,6 +121,7 @@ import StudentForgotPassword from './pages/student/StudentForgotPassword';
 import StudentResetPassword from './pages/student/StudentResetPassword';
 import StudentDashboard from './pages/student/StudentDashboard';
 import StudentProfile from './pages/student/StudentProfile';
+import StudentSecurity from './pages/student/StudentSecurity';
 import StudentApplications from './pages/student/StudentApplications';
 import StudentExamsHub from './pages/student/StudentExamsHub';
 import StudentExamDetail from './pages/student/StudentExamDetail';
@@ -141,7 +144,6 @@ const FULL_SCREEN_PREFIXES = ['/exam/take/', '/campusway-secure-admin', '/admin-
 const STUDENT_APP_PREFIXES = ['/student/', '/dashboard', '/profile', '/results', '/payments', '/notifications', '/support'];
 const STUDENT_STANDALONE_ROUTES = new Set<string>([]);
 
-import { useEffect } from 'react';
 import { useWebsiteSettings } from './hooks/useWebsiteSettings';
 import useHomeLiveUpdates from './hooks/useHomeLiveUpdates';
 
@@ -205,7 +207,7 @@ function resolveRouteTitle(pathname: string, siteName: string, defaultTitle: str
     if (pathname.startsWith('/campusway-secure-admin')) return withSite('Admin Dashboard');
     if (pathname === CHAIRMAN_DASHBOARD) return withSite('Chairman Dashboard');
     if (pathname.startsWith('/dashboard')) return withSite('Student Dashboard');
-    if (pathname === '/profile/security') return withSite('Student Profile');
+    if (pathname === '/profile/security') return withSite('Security Center');
 
     // Page-level title handlers manage these dynamic pages.
     if (pathname.startsWith('/news/')) return null;
@@ -218,6 +220,34 @@ function resolveRouteTitle(pathname: string, siteName: string, defaultTitle: str
     if (/^\/exam\/[^/]+\/solutions$/.test(pathname)) return withSite('Exam Solutions');
 
     return defaultTitle;
+}
+
+function RouteScrollReset() {
+    const location = useLocation();
+    const previousRouteRef = useRef({ pathname: location.pathname, search: location.search });
+
+    useEffect(() => {
+        const previousRoute = previousRouteRef.current;
+        const routeChanged = previousRoute.pathname !== location.pathname || previousRoute.search !== location.search;
+        previousRouteRef.current = { pathname: location.pathname, search: location.search };
+
+        if (!routeChanged) return;
+
+        if (location.hash) {
+            const anchorId = decodeURIComponent(location.hash.replace(/^#/, ''));
+            if (anchorId) {
+                const target = document.getElementById(anchorId);
+                if (target) {
+                    target.scrollIntoView({ block: 'start' });
+                    return;
+                }
+            }
+        }
+
+        window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    }, [location.hash, location.pathname, location.search]);
+
+    return null;
 }
 
 function AppLayout({ children }: { children: React.ReactNode }) {
@@ -253,6 +283,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
     
     return (
         <div className="min-h-screen flex flex-col bg-transparent transition-colors duration-300">
+            <RouteScrollReset />
             <Navbar />
             <main className="flex-1">{children}</main>
             {!isStudentAppRoute && <Footer />}
@@ -352,20 +383,9 @@ export default function App() {
                                 <Route path={adminUi('universities/import')} element={<AdminUniversitiesPage />} />
                                 <Route path={adminUi('universities/export')} element={<AdminUniversitiesPage />} />
                                 <Route path={adminUi('universities/:id/edit')} element={<AdminUniversitiesPage />} />
-                                <Route path={ADMIN_PATHS.news} element={<Navigate to={adminUi('news/dashboard')} replace />} />
+                                <Route path={ADMIN_PATHS.news} element={<Navigate to={adminUi('news/pending')} replace />} />
                                 <Route path={adminUi('news/*')} element={<AdminNewsConsole />} />
-                                <Route
-                                    path={ADMIN_PATHS.exams}
-                                    element={
-                                        <AdminGuardShell
-                                            title="Exams"
-                                            description="Create and manage exams, questions, results, and payments."
-                                            allowedRoles={['superadmin', 'admin', 'moderator', 'editor']}
-                                        >
-                                            <AdminExamsPage />
-                                        </AdminGuardShell>
-                                    }
-                                />
+                                <Route path={ADMIN_PATHS.exams} element={<AdminExamsPage />} />
                                 <Route path={ADMIN_PATHS.questionBank} element={<AdminQuestionBankPage />} />
                                 <Route path={adminUi('question-bank/*')} element={<AdminQuestionBankPage />} />
                                 <Route path={ADMIN_PATHS.students} element={<Navigate to={adminUi('student-management/list')} replace />} />
@@ -411,7 +431,7 @@ export default function App() {
                                 <Route path={adminUi('settings/reports')} element={<AdminSettingsReportsPage />} />
                                 <Route path={adminUi('settings/notifications')} element={<AdminSettingsNotificationsPage />} />
                                 <Route path={adminUi('settings/analytics')} element={<AdminSettingsAnalyticsPage />} />
-                                <Route path={adminUi('settings/news-settings')} element={<AdminSettingsNewsPage />} />
+                                <Route path={adminUi('settings/news')} element={<AdminSettingsNewsPage />} />
                                 <Route path={adminUi('settings/resource-settings')} element={<AdminSettingsResourcesPage />} />
                                 <Route path={adminUi('settings/admin-profile')} element={<AdminSettingsProfilePage />} />
                                 <Route path={adminUi('settings/home')} element={<Navigate to={adminUi('settings/home-control')} replace />} />
@@ -463,6 +483,7 @@ export default function App() {
                                 <Route path={ADMIN_PATHS.teamActivity} element={<TeamAccessConsolePage />} />
                                 <Route path={ADMIN_PATHS.teamSecurity} element={<TeamAccessConsolePage />} />
                                 <Route path={ADMIN_PATHS.teamInvites} element={<TeamAccessConsolePage />} />
+                                <Route path={ADMIN_PATHS.approvals} element={<ActionApprovalsPage />} />
                                 <Route path={adminUi('settings/student-settings')} element={<AdminStudentSettingsPage />} />
                                 {Object.entries(LEGACY_ADMIN_PATH_REDIRECTS).map(([legacyPath, targetPath]) => (
                                     <Route key={legacyPath} path={legacyPath} element={<Navigate to={targetPath} replace />} />
@@ -488,7 +509,7 @@ export default function App() {
                                 <Route element={<StudentLayout />}>
                                     <Route path="/dashboard" element={<StudentDashboard />} />
                                     <Route path="/profile" element={<StudentProfile />} />
-                                    <Route path="/profile/security" element={<StudentProfile />} />
+                                    <Route path="/profile/security" element={<StudentSecurity />} />
                                     <Route path="/student/exams-hub" element={<StudentExamsHub />} />
                                     <Route path="/exams/:examId" element={<StudentExamDetail />} />
                                     <Route path="/results" element={<StudentResults />} />
@@ -500,6 +521,7 @@ export default function App() {
                                     <Route path="/support/:ticketId" element={<StudentSupportThread />} />
                                     <Route path="/student/dashboard" element={<StudentDashboard />} />
                                     <Route path="/student/profile" element={<StudentProfile />} />
+                                    <Route path="/student/security" element={<StudentSecurity />} />
                                     <Route path="/student/applications" element={<StudentApplications />} />
                                 </Route>
 

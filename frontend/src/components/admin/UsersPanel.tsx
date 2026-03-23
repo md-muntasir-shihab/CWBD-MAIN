@@ -20,6 +20,7 @@ import {
     getAdminUsersStreamUrl,
 } from '../../services/api';
 import { downloadFile } from '../../utils/download';
+import { promptForSensitiveActionProof } from '../../utils/sensitiveAction';
 
 type Scope = 'all' | 'students' | 'admins';
 type PermissionState = {
@@ -219,11 +220,36 @@ export default function UsersPanel() {
 
     const updateUserRole = async (id: string, nextRole: string) => {
         try {
-            await adminUpdateUserRole(id, nextRole);
+            const proof = await promptForSensitiveActionProof({
+                actionLabel: `change user role to ${nextRole}`,
+                defaultReason: `Update user role to ${nextRole}`,
+                requireOtpHint: true,
+            });
+            if (!proof) return;
+            await adminUpdateUserRole(id, nextRole, proof);
             toast.success('Role updated');
             await fetchUsers();
         } catch (error: any) {
             toast.error(error.response?.data?.message || 'Role update failed');
+        }
+    };
+
+    const resetUserPassword = async (user: ApiUser) => {
+        try {
+            const proof = await promptForSensitiveActionProof({
+                actionLabel: `reset password for ${user.email || user.username || 'user'}`,
+                defaultReason: `Reset password for ${user.email || user.username || user._id}`,
+                requireOtpHint: true,
+            });
+            if (!proof) return;
+            const response = await adminResetUserPassword(user._id, proof);
+            toast.success(
+                response.data?.message ||
+                (response.data?.inviteSent ? 'Password reset link sent' : 'Password reset prepared'),
+            );
+            await fetchUsers();
+        } catch (error: any) {
+            toast.error(error.response?.data?.message || 'Password reset failed');
         }
     };
 
@@ -321,7 +347,7 @@ export default function UsersPanel() {
                                 <td className="p-2"><select value={u.role} onChange={(e) => void updateUserRole(u._id, e.target.value)} className="bg-transparent border border-indigo-500/20 rounded px-2 py-1 text-xs"><option value="moderator">moderator</option><option value="admin">admin</option><option value="editor">editor</option><option value="viewer">viewer</option><option value="superadmin">superadmin</option></select></td>
                                 <td className="p-2"><select value={u.status || 'active'} onChange={(e) => void updateUserStatus(u._id, e.target.value)} className="bg-transparent border border-indigo-500/20 rounded px-2 py-1 text-xs"><option value="active">active</option><option value="suspended">suspended</option><option value="blocked">blocked</option><option value="pending">pending</option></select></td>
                                 <td className="p-2 text-xs">{u.institution_name || '-'}<br />{u.roll_number || u.registration_id || '-'}</td>
-                                <td className="p-2"><div className="flex justify-end gap-1"><button onClick={async () => { const r = await adminGetUserById(u._id); setDetails(r.data); setDetailsOpen(true); }} className="p-1.5 hover:bg-white/10 rounded"><Eye className="w-4 h-4 text-cyan-300" /></button><button onClick={() => openEdit(u)} className="p-1.5 hover:bg-white/10 rounded"><Plus className="w-4 h-4 text-indigo-300" /></button><button onClick={async () => { const pass = window.prompt('New password (blank = auto)') || undefined; const r = await adminResetUserPassword(u._id, pass); if (r.data?.temporaryPassword) window.alert(`Temporary password: ${r.data.temporaryPassword}`); toast.success('Password reset'); }} className="p-1.5 hover:bg-white/10 rounded"><KeyRound className="w-4 h-4 text-amber-300" /></button><button onClick={async () => { if (!window.confirm('Delete user?')) return; await adminDeleteUser(u._id); await fetchUsers(); }} className="p-1.5 hover:bg-red-500/20 rounded"><Trash2 className="w-4 h-4 text-red-300" /></button></div></td>
+                                <td className="p-2"><div className="flex justify-end gap-1"><button onClick={async () => { const r = await adminGetUserById(u._id); setDetails(r.data); setDetailsOpen(true); }} className="p-1.5 hover:bg-white/10 rounded"><Eye className="w-4 h-4 text-cyan-300" /></button><button onClick={() => openEdit(u)} className="p-1.5 hover:bg-white/10 rounded"><Plus className="w-4 h-4 text-indigo-300" /></button><button onClick={() => void resetUserPassword(u)} className="p-1.5 hover:bg-white/10 rounded" title="Send password reset link"><KeyRound className="w-4 h-4 text-amber-300" /></button><button onClick={async () => { if (!window.confirm('Delete user?')) return; await adminDeleteUser(u._id); await fetchUsers(); }} className="p-1.5 hover:bg-red-500/20 rounded"><Trash2 className="w-4 h-4 text-red-300" /></button></div></td>
                             </tr>
                         ))}</tbody>
                     </table>

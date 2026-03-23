@@ -18,25 +18,25 @@ function withLegacyExamId(req, examId) {
     };
     return proxiedReq;
 }
-exports.studentExamRoutes.post("/exams/:examId/sessions/start", auth_1.requireAuth, examRateLimit_1.examSessionStartLimit, async (req, res) => {
+exports.studentExamRoutes.post("/exams/:examId/sessions/start", auth_1.requireAuth, auth_1.requireAuthStudent, examRateLimit_1.examSessionStartLimit, async (req, res) => {
     await (0, examController_1.startExam)(withLegacyExamId(req, String(req.params.examId || "")), res);
 });
-exports.studentExamRoutes.get("/exams/:examId/sessions/:sessionId/questions", auth_1.requireAuth, async (req, res) => {
+exports.studentExamRoutes.get("/exams/:examId/sessions/:sessionId/questions", auth_1.requireAuth, auth_1.requireAuthStudent, async (req, res) => {
     await (0, examController_1.getExamAttemptState)(withLegacyExamId(req, String(req.params.examId || "")), res);
 });
-exports.studentExamRoutes.post("/exams/:examId/sessions/:sessionId/answers", auth_1.requireAuth, examRateLimit_1.examAutoSaveLimit, async (req, res) => {
+exports.studentExamRoutes.post("/exams/:examId/sessions/:sessionId/answers", auth_1.requireAuth, auth_1.requireAuthStudent, examRateLimit_1.examAutoSaveLimit, async (req, res) => {
     await (0, examController_1.saveExamAttemptAnswer)(withLegacyExamId(req, String(req.params.examId || "")), res);
 });
-exports.studentExamRoutes.post("/exams/:examId/sessions/:sessionId/submit", auth_1.requireAuth, examRateLimit_1.examSubmitLimit, async (req, res) => {
+exports.studentExamRoutes.post("/exams/:examId/sessions/:sessionId/submit", auth_1.requireAuth, auth_1.requireAuthStudent, examRateLimit_1.examSubmitLimit, async (req, res) => {
     await (0, examController_1.submitExamAttempt)(withLegacyExamId(req, String(req.params.examId || "")), res);
 });
-exports.studentExamRoutes.get("/exams/:examId/sessions/:sessionId/result", auth_1.requireAuth, async (req, res) => {
+exports.studentExamRoutes.get("/exams/:examId/sessions/:sessionId/result", auth_1.requireAuth, auth_1.requireAuthStudent, async (req, res) => {
     await (0, examController_1.getExamAttemptResult)(withLegacyExamId(req, String(req.params.examId || "")), res);
 });
-exports.studentExamRoutes.get("/exams/:examId/sessions/:sessionId/solutions", auth_1.requireAuth, async (req, res) => {
+exports.studentExamRoutes.get("/exams/:examId/sessions/:sessionId/solutions", auth_1.requireAuth, auth_1.requireAuthStudent, async (req, res) => {
     await (0, examController_1.getExamAttemptSolutions)(withLegacyExamId(req, String(req.params.examId || "")), res);
 });
-exports.studentExamRoutes.get("/exams/:examId/pdf/questions", examPdfController_1.generateQuestionsPdf);
-exports.studentExamRoutes.get("/exams/:examId/pdf/solutions", examPdfController_1.generateSolutionsPdf);
-exports.studentExamRoutes.get("/exams/:examId/sessions/:sessionId/pdf/answers", auth_1.requireAuth, examPdfController_1.generateAnswersPdf);
+exports.studentExamRoutes.get("/exams/:examId/pdf/questions", auth_1.requireAuth, auth_1.requireAuthStudent, examPdfController_1.generateQuestionsPdf);
+exports.studentExamRoutes.get("/exams/:examId/pdf/solutions", auth_1.requireAuth, auth_1.requireAuthStudent, examPdfController_1.generateSolutionsPdf);
+exports.studentExamRoutes.get("/exams/:examId/sessions/:sessionId/pdf/answers", auth_1.requireAuth, auth_1.requireAuthStudent, examPdfController_1.generateAnswersPdf);
 //# sourceMappingURL=studentExamRoutes.js.map

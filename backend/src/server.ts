@@ -23,11 +23,14 @@ import { startStudentDashboardCronJobs } from './cron/dashboardJobs';
 import { startFinanceRecurringCronJobs } from './cron/financeRecurringJobs';
 import { seedDefaultChartOfAccounts } from './services/financeSeedService';
 import { startNewsV2CronJobs } from './cron/newsJobs';
+import { startNotificationJobCron } from './cron/notificationJobs';
 import { startRetentionCronJobs } from './cron/retentionJobs';
 import { startSubscriptionExpiryCron } from './cron/subscriptionExpiryCron';
 import adminStudentMgmtRoutes from './routes/adminStudentMgmtRoutes';
+import adminProviderRoutes from './routes/adminProviderRoutes';
 import adminNotificationRoutes from './routes/adminNotificationRoutes';
 import adminStudentSecurityRoutes from './routes/adminStudentSecurityRoutes';
+import { serveSecureUpload } from './controllers/secureUploadController';
 import {
     enforceAdminPanelPolicy,
     enforceAdminReadOnlyMode,
@@ -245,6 +248,7 @@ app.use(sanitizeRequestPayload);
 app.use(enforceSiteAccess);
 
 // Serve uploaded media files
+app.get('/uploads/:storedName', serveSecureUpload);
 app.use('/uploads', express.static(path.join(__dirname, '../public/uploads'), {
     maxAge: IS_PRODUCTION ? '7d' : 0,
     etag: true,
@@ -306,6 +310,7 @@ app.use(`/api/${ADMIN_SECRET_PATH}`, adminRoutes);
 app.use('/api/admin', adminRateLimiter);
 app.use('/api/admin', standaloneAdminApiHardening, adminStudentMgmtRoutes);
 app.use('/api/admin', standaloneAdminApiHardening, adminNotificationRoutes);
+app.use('/api/admin', standaloneAdminApiHardening, adminProviderRoutes);
 app.use('/api/admin', standaloneAdminApiHardening, adminStudentSecurityRoutes);
 app.use('/api/admin', adminRoutes);
 
@@ -384,9 +389,10 @@ async function start() {
     // Start background cron jobs (e.g. auto-submitting expired exams)
     startExamCronJobs();
     startModernExamCronJobs();
-    startStudentDashboardCronJobs();
-    startNewsV2CronJobs();
-    startRetentionCronJobs();
+        startStudentDashboardCronJobs();
+        startNewsV2CronJobs();
+        startNotificationJobCron();
+        startRetentionCronJobs();
     startSubscriptionExpiryCron();
     startFinanceRecurringCronJobs();
 

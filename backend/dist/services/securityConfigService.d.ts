@@ -12,6 +12,10 @@ export interface SecurityConfig {
     allowLegacyTokens: boolean;
     strictExamTabLock: boolean;
     strictTokenHashValidation: boolean;
+    testingAccessMode: boolean;
+    requiredTwoFactorRoles: string[];
+    allowedTwoFactorMethods: TwoFactorMethod[];
+    stepUpSensitiveActions: boolean;
     allowTestOtp: boolean;
     testOtpCode: string;
     passwordPolicy: {
@@ -19,6 +23,77 @@ export interface SecurityConfig {
         requireNumber: boolean;
         requireUppercase: boolean;
         requireSpecial: boolean;
+    };
+    passwordPolicies: {
+        default: {
+            minLength: number;
+            requireUppercase: boolean;
+            requireLowercase: boolean;
+            requireNumber: boolean;
+            requireSpecial: boolean;
+            denyCommonPasswords: boolean;
+            preventReuseCount: number;
+            expiryDays: number;
+            forceResetOnFirstLogin: boolean;
+        };
+        admin: {
+            minLength: number;
+            requireUppercase: boolean;
+            requireLowercase: boolean;
+            requireNumber: boolean;
+            requireSpecial: boolean;
+            denyCommonPasswords: boolean;
+            preventReuseCount: number;
+            expiryDays: number;
+            forceResetOnFirstLogin: boolean;
+        };
+        staff: {
+            minLength: number;
+            requireUppercase: boolean;
+            requireLowercase: boolean;
+            requireNumber: boolean;
+            requireSpecial: boolean;
+            denyCommonPasswords: boolean;
+            preventReuseCount: number;
+            expiryDays: number;
+            forceResetOnFirstLogin: boolean;
+        };
+        student: {
+            minLength: number;
+            requireUppercase: boolean;
+            requireLowercase: boolean;
+            requireNumber: boolean;
+            requireSpecial: boolean;
+            denyCommonPasswords: boolean;
+            preventReuseCount: number;
+            expiryDays: number;
+            forceResetOnFirstLogin: boolean;
+        };
+        strengthMeterEnabled: boolean;
+    };
+    authentication: {
+        loginAttemptsLimit: number;
+        lockDurationMinutes: number;
+        genericErrorMessages: boolean;
+        verificationRequired: boolean;
+        allowedLoginMethods: Array<'username' | 'email' | 'phone'>;
+        accountLockEnabled: boolean;
+        newDeviceAlerts: boolean;
+        suspiciousLoginAlerts: boolean;
+        adminLoginAlerts: boolean;
+        throttleWindowMinutes: number;
+        otpResendLimit: number;
+        otpVerifyLimit: number;
+        recaptchaEnabled: boolean;
+    };
+    verificationRecovery: {
+        requireVerifiedEmailForStudents: boolean;
+        requireVerifiedEmailForAdmins: boolean;
+        phoneVerificationEnabled: boolean;
+        emailVerificationExpiryHours: number;
+        passwordResetExpiryMinutes: number;
+        resendCooldownMinutes: number;
+        allowAdminRecovery: boolean;
     };
     loginProtection: {
         maxAttempts: number;

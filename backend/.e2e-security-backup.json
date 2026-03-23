@@ -1,6 +1,21 @@
 {
-  "capturedAt": "2026-03-15T10:30:58.889Z",
-  "security": null,
+  "capturedAt": "2026-03-23T16:20:53.529Z",
+  "security": {
+    "singleBrowserLogin": true,
+    "forceLogoutOnNewLogin": true,
+    "enable2faAdmin": false,
+    "enable2faStudent": false,
+    "force2faSuperAdmin": false,
+    "default2faMethod": "email",
+    "otpExpiryMinutes": 15,
+    "maxOtpAttempts": 5,
+    "ipChangeAlert": true,
+    "allowLegacyTokens": false,
+    "strictExamTabLock": true,
+    "strictTokenHashValidation": false,
+    "allowTestOtp": true,
+    "testOtpCode": "123456"
+  },
   "securitySettings": {
     "passwordPolicy": {
       "minLength": 10,

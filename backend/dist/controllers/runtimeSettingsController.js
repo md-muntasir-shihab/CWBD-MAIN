@@ -5,7 +5,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getRuntimeSettings = getRuntimeSettings;
 exports.updateRuntimeSettingsController = updateRuntimeSettingsController;
+exports.getAdminUiLayoutSettings = getAdminUiLayoutSettings;
+exports.updateAdminUiLayoutSettings = updateAdminUiLayoutSettings;
 const AuditLog_1 = __importDefault(require("../models/AuditLog"));
+const Settings_1 = __importDefault(require("../models/Settings"));
 const runtimeSettingsService_1 = require("../services/runtimeSettingsService");
 const requestMeta_1 = require("../utils/requestMeta");
 const SECURITY_BOOLEAN_KEYS = [
@@ -18,8 +21,36 @@ const SECURITY_BOOLEAN_KEYS = [
     'allowLegacyTokens',
     'strictExamTabLock',
     'strictTokenHashValidation',
+    'testingAccessMode',
 ];
 const FEATURE_FLAG_KEYS = Object.keys((0, runtimeSettingsService_1.getDefaultRuntimeFeatureFlags)());
+const ADMIN_UI_LAYOUT_KEYS = ['sidebarOrder', 'settingsCardOrder'];
+function sanitizeLayoutKeys(value) {
+    if (!Array.isArray(value))
+        return [];
+    const seen = new Set();
+    const normalized = [];
+    for (const raw of value) {
+        const key = String(raw || '').trim();
+        if (!key || key.length > 80)
+            continue;
+        if (!/^[a-zA-Z0-9_-]+$/.test(key))
+            continue;
+        if (seen.has(key))
+            continue;
+        seen.add(key);
+        normalized.push(key);
+        if (normalized.length >= 120)
+            break;
+    }
+    return normalized;
+}
+function normalizeAdminUiLayout(raw) {
+    return {
+        sidebarOrder: sanitizeLayoutKeys(raw?.sidebarOrder),
+        settingsCardOrder: sanitizeLayoutKeys(raw?.settingsCardOrder),
+    };
+}
 function validateRuntimeSettingsPayload(payload) {
     const rootKeys = Object.keys(payload || {});
     const allowedRootKeys = ['security', 'featureFlags'];
@@ -150,6 +181,77 @@ async function updateRuntimeSettingsController(req, res) {
     }
     catch (error) {
         console.error('updateRuntimeSettings error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+}
+async function getAdminUiLayoutSettings(_req, res) {
+    try {
+        const settings = await Settings_1.default.findOne()
+            .select('adminUiLayout updatedAt updatedBy')
+            .lean();
+        const layout = normalizeAdminUiLayout(settings?.adminUiLayout);
+        res.json({
+            layout,
+            updatedAt: settings?.updatedAt || null,
+            updatedBy: settings?.updatedBy ? String(settings.updatedBy) : null,
+        });
+    }
+    catch (error) {
+        console.error('getAdminUiLayoutSettings error:', error);
+        res.status(500).json({ message: 'Server error' });
+    }
+}
+async function updateAdminUiLayoutSettings(req, res) {
+    try {
+        const payload = (req.body || {});
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+            res.status(400).json({ message: 'Body must be an object' });
+            return;
+        }
+        const unknownKeys = Object.keys(payload).filter((key) => !ADMIN_UI_LAYOUT_KEYS.includes(key));
+        if (unknownKeys.length > 0) {
+            res.status(400).json({ message: `Unknown keys: ${unknownKeys.join(', ')}` });
+            return;
+        }
+        const hasSidebarOrder = Object.prototype.hasOwnProperty.call(payload, 'sidebarOrder');
+        const hasSettingsCardOrder = Object.prototype.hasOwnProperty.call(payload, 'settingsCardOrder');
+        if (!hasSidebarOrder && !hasSettingsCardOrder) {
+            res.status(400).json({ message: 'At least one of sidebarOrder or settingsCardOrder is required' });
+            return;
+        }
+        const beforeDoc = await Settings_1.default.findOne().select('adminUiLayout').lean();
+        const beforeLayout = normalizeAdminUiLayout(beforeDoc?.adminUiLayout);
+        const updateSet = {};
+        if (hasSidebarOrder) {
+            updateSet['adminUiLayout.sidebarOrder'] = sanitizeLayoutKeys(payload.sidebarOrder);
+        }
+        if (hasSettingsCardOrder) {
+            updateSet['adminUiLayout.settingsCardOrder'] = sanitizeLayoutKeys(payload.settingsCardOrder);
+        }
+        if (req.user?._id) {
+            updateSet.updatedBy = req.user._id;
+        }
+        const updated = await Settings_1.default.findOneAndUpdate({}, { $set: updateSet }, { new: true, upsert: true, setDefaultsOnInsert: true }).lean();
+        const afterLayout = normalizeAdminUiLayout(updated?.adminUiLayout);
+        await AuditLog_1.default.create({
+            actor_id: req.user?._id,
+            actor_role: req.user?.role,
+            action: 'update_admin_ui_layout',
+            target_type: 'settings',
+            ip_address: (0, requestMeta_1.getClientIp)(req),
+            details: {
+                before: beforeLayout,
+                after: afterLayout,
+            },
+        });
+        res.json({
+            layout: afterLayout,
+            updatedAt: updated?.updatedAt || null,
+            updatedBy: updated?.updatedBy ? String(updated.updatedBy) : null,
+        });
+    }
+    catch (error) {
+        console.error('updateAdminUiLayoutSettings error:', error);
         res.status(500).json({ message: 'Server error' });
     }
 }

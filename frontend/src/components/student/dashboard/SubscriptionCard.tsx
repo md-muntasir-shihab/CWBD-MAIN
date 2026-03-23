@@ -5,6 +5,11 @@ import DashboardSection from './DashboardSection';
 import type { StudentDashboardFullResponse } from '../../../services/api';
 import { useSubscriptionPlanById } from '../../../hooks/useSubscriptionPlans';
 import PlanDetailsDrawer from '../../subscription/PlanDetailsDrawer';
+import {
+    resolveSubscriptionPlanTarget,
+    shouldOpenSubscriptionPlanTargetInNewTab,
+} from '../../subscription/subscriptionAction';
+import { isExternalUrl } from '../../../utils/url';
 
 interface Props {
     subscription: StudentDashboardFullResponse['subscription'];
@@ -30,7 +35,23 @@ export default function SubscriptionCard({ subscription, renewalCtaText, renewal
         return `Expires ${expiryDate.toLocaleDateString()}`;
     }, [subscription.daysLeft, subscription.expiryDate]);
 
-    const actionUrl = renewalCtaUrl || `/subscription-plans${subscription.planSlug ? `/checkout/${subscription.planSlug}` : ''}`;
+    const actionUrl = renewalCtaUrl || (plan ? resolveSubscriptionPlanTarget(plan) : '/contact');
+    const handlePlanAction = () => {
+        if (!plan) {
+            if (isExternalUrl(actionUrl)) {
+                window.open(actionUrl, '_blank', 'noopener,noreferrer');
+                return;
+            }
+            navigate(actionUrl);
+            return;
+        }
+        const target = resolveSubscriptionPlanTarget(plan);
+        if (shouldOpenSubscriptionPlanTargetInNewTab(plan)) {
+            window.open(target, '_blank', 'noopener,noreferrer');
+            return;
+        }
+        navigate(target);
+    };
 
     return (
         <DashboardSection delay={0.12}>
@@ -82,7 +103,7 @@ export default function SubscriptionCard({ subscription, renewalCtaText, renewal
                         </button>
                         <button
                             type="button"
-                            onClick={() => navigate(actionUrl)}
+                            onClick={handlePlanAction}
                             className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100"
                         >
                             {renewalCtaText || (subscription.isActive ? 'Upgrade / Renew' : 'Choose a Plan')}
@@ -96,9 +117,15 @@ export default function SubscriptionCard({ subscription, renewalCtaText, renewal
                 open={open && Boolean(plan)}
                 plan={plan || null}
                 onClose={() => setOpen(false)}
+                onDismissToContact={() => navigate('/contact')}
                 onPrimaryAction={(item) => {
                     setOpen(false);
-                    navigate(`/subscription-plans/checkout/${item.slug || item.code || item._id}`);
+                    const target = resolveSubscriptionPlanTarget(item);
+                    if (shouldOpenSubscriptionPlanTargetInNewTab(item)) {
+                        window.open(target, '_blank', 'noopener,noreferrer');
+                        return;
+                    }
+                    navigate(target);
                 }}
             />
         </DashboardSection>

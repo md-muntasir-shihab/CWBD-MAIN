@@ -58,8 +58,15 @@ export declare function getStudentDashboardHeader(studentId: string): Promise<{
     welcomeMessage: string;
     subscription: {
         isActive: boolean;
+        planId: string;
+        planSlug: string;
+        planCode: string;
         planName: string;
         expiryDate: string | null;
+        daysLeft: number | null;
+        ctaLabel: string;
+        ctaUrl: string;
+        ctaMode: string;
     };
     guardian_phone_verification_status: "pending" | "unverified" | "verified";
     guardian_phone_verified_at: string | Date | null;
@@ -166,8 +173,15 @@ export declare function getStudentDashboardAggregate(studentId: string): Promise
         welcomeMessage: string;
         subscription: {
             isActive: boolean;
+            planId: string;
+            planSlug: string;
+            planCode: string;
             planName: string;
             expiryDate: string | null;
+            daysLeft: number | null;
+            ctaLabel: string;
+            ctaUrl: string;
+            ctaMode: string;
         };
         guardian_phone_verification_status: "pending" | "unverified" | "verified";
         guardian_phone_verified_at: string | Date | null;

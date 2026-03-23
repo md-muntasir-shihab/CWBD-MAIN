@@ -58,7 +58,7 @@ const FinanceTransactionSchema = new mongoose_1.Schema({
     },
     method: {
         type: String,
-        enum: ['cash', 'bkash', 'nagad', 'bank', 'card', 'manual', 'gateway', 'upay', 'rocket'],
+        enum: ['cash', 'bkash', 'nagad', 'bank', 'card', 'manual', 'gateway', 'upay', 'rocket', 'auto'],
         default: 'manual',
     },
     tags: [{ type: String, trim: true }],
@@ -69,8 +69,10 @@ const FinanceTransactionSchema = new mongoose_1.Schema({
         type: String,
         enum: [
             'subscription_payment', 'exam_payment', 'service_sale', 'manual_income',
-            'expense', 'refund', 'sms_cost', 'email_cost', 'hosting_cost',
-            'staff_payout', 'sms_test_send_cost', 'email_test_send_cost', 'other',
+            'expense', 'refund', 'sms_cost', 'email_cost',
+            'sms_campaign_cost', 'email_campaign_cost', 'onboarding_message_cost',
+            'result_notification_cost', 'guardian_notification_cost', 'auto_notification_cost',
+            'hosting_cost', 'staff_payout', 'sms_test_send_cost', 'email_test_send_cost', 'other',
         ],
         required: true,
         index: true,

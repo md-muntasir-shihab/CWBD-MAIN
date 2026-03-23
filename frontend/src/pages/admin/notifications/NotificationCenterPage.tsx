@@ -1,16 +1,19 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import AdminGuardShell from '../../../components/admin/AdminGuardShell';
+import AdminGuideButton, { type AdminGuideButtonProps } from '../../../components/admin/AdminGuideButton';
 import {
   getTemplates, createTemplate, updateTemplate, deleteTemplate,
   getProviders, createProvider, updateProvider, deleteProvider, testProvider,
   getNotificationLogs, sendNotification,
   getStudentGroups,
 } from '../../../api/adminStudentApi';
+import { promptForSensitiveActionProof } from '../../../utils/sensitiveAction';
 
 type Toast = { show: boolean; message: string; type: 'success' | 'error' };
 type CenterTab = 'send' | 'templates' | 'providers' | 'logs';
 type WizardStep = 1 | 2 | 3;
+type InlineGuide = Omit<AdminGuideButtonProps, 'variant' | 'tone'>;
 
 interface ProviderForm {
   name: string; type: 'sms' | 'email'; provider: string;
@@ -59,6 +62,29 @@ const STATUS_BADGE: Record<string, string> = {
   failed: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
   pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
   queued: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
+};
+
+const CENTER_GUIDES: Record<CenterTab, InlineGuide> = {
+  send: {
+    title: 'Send Notifications',
+    content: 'Build and send a manual notification to the selected student target, group, or filter.',
+    affected: 'Notification recipients and delivery logs.',
+  },
+  templates: {
+    title: 'Notification Templates',
+    content: 'Manage reusable notification templates for future sends.',
+    affected: 'Notification composition and consistency.',
+  },
+  providers: {
+    title: 'Notification Providers',
+    content: 'Manage the provider connections used to send SMS or email notifications.',
+    affected: 'Delivery routing and provider operations.',
+  },
+  logs: {
+    title: 'Notification Logs',
+    content: 'Inspect sent, queued, or failed notification deliveries.',
+    affected: 'Notification debugging, support, and audits.',
+  },
 };
 
 function inp(extra = '') {
@@ -187,8 +213,14 @@ export default function NotificationCenterPage({ noShell }: { noShell?: boolean 
       rateLimit: { perMin: parseInt(pvForm.rateLimitPerMin), perDay: parseInt(pvForm.rateLimitPerDay) },
     };
     try {
-      if (pvModal.editId) await updateProvider(pvModal.editId, payload as Record<string, unknown>);
-      else await createProvider(payload as Record<string, unknown>);
+      const proof = await promptForSensitiveActionProof({
+        actionLabel: pvModal.editId ? 'update notification provider' : 'create notification provider',
+        defaultReason: pvModal.editId ? `Update provider ${pvModal.editId}` : 'Create notification provider',
+        requireOtpHint: true,
+      });
+      if (!proof) return;
+      if (pvModal.editId) await updateProvider(pvModal.editId, payload as Record<string, unknown>, proof);
+      else await createProvider(payload as Record<string, unknown>, proof);
       qc.invalidateQueries({ queryKey: ['admin-providers'] });
       setPvModal({ open: false });
       showToast(pvModal.editId ? 'Provider updated' : 'Provider created');
@@ -196,7 +228,17 @@ export default function NotificationCenterPage({ noShell }: { noShell?: boolean 
   };
   const handlePvDelete = async (id: string) => {
     if (!confirm('Delete this provider?')) return;
-    try { await deleteProvider(id); qc.invalidateQueries({ queryKey: ['admin-providers'] }); showToast('Provider deleted'); }
+    try {
+      const proof = await promptForSensitiveActionProof({
+        actionLabel: 'delete notification provider',
+        defaultReason: `Delete provider ${id}`,
+        requireOtpHint: true,
+      });
+      if (!proof) return;
+      await deleteProvider(id, proof);
+      qc.invalidateQueries({ queryKey: ['admin-providers'] });
+      showToast('Provider deleted');
+    }
     catch { showToast('Failed', 'error'); }
   };
   const handlePvTest = async () => {
@@ -242,10 +284,13 @@ export default function NotificationCenterPage({ noShell }: { noShell?: boolean 
       <div className="border-b border-gray-200 dark:border-gray-700 px-6">
         <div className="flex gap-1">
           {TABS.map(t => (
-            <button key={t.key} onClick={() => setActiveTab(t.key)}
-              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === t.key ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
-              {t.label}
-            </button>
+            <div key={t.key} className="flex items-center gap-1">
+              <button onClick={() => setActiveTab(t.key)}
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === t.key ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+                {t.label}
+              </button>
+              <AdminGuideButton {...CENTER_GUIDES[t.key]} tone="indigo" />
+            </div>
           ))}
         </div>
       </div>

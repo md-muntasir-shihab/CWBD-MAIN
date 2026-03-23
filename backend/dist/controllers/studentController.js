@@ -11,8 +11,10 @@ const studentDashboardService_1 = require("../services/studentDashboardService")
 const studentDashboardStream_1 = require("../realtime/studentDashboardStream");
 const StudentDashboardConfig_1 = __importDefault(require("../models/StudentDashboardConfig"));
 const ExamResult_1 = __importDefault(require("../models/ExamResult"));
+const ExamProfileSyncLog_1 = __importDefault(require("../models/ExamProfileSyncLog"));
 const adminAlertService_1 = require("../services/adminAlertService");
 const studentProfileScoreService_1 = require("../services/studentProfileScoreService");
+const secureUploadService_1 = require("../services/secureUploadService");
 // Ensure the profile exists, if not create a default one
 const ensureProfile = async (userId) => {
     let profile = await StudentProfile_1.default.findOne({ user_id: userId });
@@ -155,6 +157,14 @@ const getStudentProfile = async (req, res) => {
         const dashboardHeader = await (0, studentDashboardService_1.getStudentDashboardHeader)(req.user._id);
         const celebration = await resolveCelebration(req.user._id);
         const pendingRequest = await ProfileUpdateRequest_1.default.exists({ student_id: req.user._id, status: 'pending' });
+        const recentSyncLogs = await ExamProfileSyncLog_1.default.find({ studentId: req.user._id })
+            .sort({ createdAt: -1 })
+            .limit(8)
+            .populate('examId', 'title deliveryMode')
+            .lean();
+        const examHistory = Array.isArray(profile.examHistory)
+            ? profile.examHistory
+            : [];
         res.json({
             ...profile.toObject(),
             date_of_birth: profile.dob,
@@ -175,6 +185,26 @@ const getStudentProfile = async (req, res) => {
             profile_eligible_for_exam: dashboardHeader.isProfileEligible,
             pendingRequest: Boolean(pendingRequest),
             celebration,
+            exam_data: {
+                identity: profile.examIdentity || {},
+                latestResultSummary: profile.latestExamResultSummary || '',
+                lastSyncAt: profile.examDataLastSyncAt || null,
+                lastSyncSource: profile.examDataLastSyncSource || '',
+                history: examHistory.slice(0, 12),
+                syncLogs: recentSyncLogs.map((item) => {
+                    const examDoc = item.examId;
+                    return {
+                        _id: String(item._id),
+                        examId: examDoc?._id ? String(examDoc._id) : String(item.examId || ''),
+                        examTitle: String(examDoc?.title || ''),
+                        source: item.source,
+                        status: item.status,
+                        syncMode: item.syncMode,
+                        changedFields: item.changedFields || [],
+                        createdAt: item.createdAt,
+                    };
+                }),
+            },
         });
     }
     catch (err) {
@@ -322,10 +352,20 @@ const updateStudentProfile = async (req, res) => {
             await (0, adminAlertService_1.createAdminAlert)({
                 title: 'Profile approval required',
                 message: `A student submitted ${Object.keys(requestedUpdates).length} profile change${Object.keys(requestedUpdates).length > 1 ? 's' : ''} for review.`,
+                type: 'profile_update_request',
+                messagePreview: Object.keys(requestedUpdates).join(', '),
                 linkUrl: `/__cw_admin__/student-management/profile-requests?requestId=${String(request._id)}`,
                 category: 'update',
+                sourceType: 'profile_update_request',
+                sourceId: String(request._id),
+                targetRoute: '/__cw_admin__/student-management/profile-requests',
+                targetEntityId: String(request._id),
+                priority: 'normal',
+                actorUserId: req.user._id,
+                actorNameSnapshot: String(req.user.fullName || req.user.username || req.user.email || 'Student').trim(),
                 targetRole: 'admin',
                 createdBy: req.user._id,
+                dedupeKey: `profile_update_request:${String(request._id)}`,
             });
             requestMsg = ' Some changes require admin approval and have been sent for review.';
         }
@@ -424,9 +464,21 @@ const uploadStudentDocument = async (req, res) => {
         if (!document_type)
             return res.status(400).json({ message: 'Document type is required' });
         const profile = await ensureProfile(req.user._id);
-        const docUrl = `/uploads/${req.file.filename}`;
+        const isProfilePhoto = String(document_type).trim().toLowerCase() === 'profile_photo';
+        const secureUpload = await (0, secureUploadService_1.registerSecureUpload)({
+            file: req.file,
+            category: isProfilePhoto ? 'profile_photo' : 'student_document',
+            visibility: isProfilePhoto ? 'public' : 'protected',
+            ownerUserId: req.user._id,
+            ownerRole: req.user.role,
+            uploadedBy: req.user._id,
+            accessRoles: isProfilePhoto
+                ? ['student', 'superadmin', 'admin', 'moderator', 'editor', 'viewer', 'support_agent', 'finance_agent']
+                : ['student', 'superadmin', 'admin', 'moderator', 'support_agent', 'finance_agent'],
+        });
+        const docUrl = (0, secureUploadService_1.buildSecureUploadUrl)(secureUpload.storedName);
         // Persist profile photo immediately so the student sees it without a second save action.
-        if (document_type === 'profile_photo') {
+        if (isProfilePhoto) {
             profile.profile_photo_url = docUrl;
             await profile.save();
             (0, studentDashboardStream_1.broadcastStudentDashboardEvent)({ type: 'profile_updated', meta: { studentId: req.user._id } });
@@ -434,7 +486,8 @@ const uploadStudentDocument = async (req, res) => {
         res.json({
             message: 'Document uploaded successfully',
             url: docUrl,
-            document_type
+            document_type,
+            visibility: secureUpload.visibility,
         });
     }
     catch (err) {

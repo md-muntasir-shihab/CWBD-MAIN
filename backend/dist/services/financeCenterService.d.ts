@@ -25,9 +25,14 @@ export declare function getFinanceSummary(month?: string): Promise<{
     subscriptionRevenue: number;
     examRevenue: number;
     manualRevenue: number;
+    manualServiceRevenue: number;
     refundTotal: number;
     prevMonthIncome: any;
     prevMonthExpense: any;
+    monthOverMonthChange: {
+        incomeChange: number;
+        expenseChange: number;
+    };
     receivablesTotal: any;
     receivablesCount: any;
     payablesTotal: any;

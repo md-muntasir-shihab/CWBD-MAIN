@@ -23,7 +23,7 @@ const NotificationTemplate_1 = __importDefault(require("../models/NotificationTe
 const NotificationSettings_1 = __importDefault(require("../models/NotificationSettings"));
 const dataHubService_1 = require("../services/dataHubService");
 const router = (0, express_1.Router)();
-const adminAuth = [auth_1.authenticate, (0, auth_1.authorize)('superadmin', 'admin', 'moderator')];
+const adminAuth = [auth_1.authenticate, (0, auth_1.authorize)('superadmin', 'admin', 'moderator', 'editor', 'viewer', 'support_agent', 'finance_agent')];
 /* ────────────────────────────────────────────────────────────────
    Campaign management
    ──────────────────────────────────────────────────────────────── */
@@ -34,11 +34,17 @@ router.get('/notifications/campaigns', ...adminAuth, async (req, res) => {
         const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? '20'), 10)));
         const status = req.query.status;
         const type = req.query.type;
+        const originModule = req.query.originModule;
+        const originEntityId = req.query.originEntityId;
         const query = {};
         if (status)
             query.status = status;
         if (type)
             query.type = type;
+        if (originModule)
+            query.originModule = originModule;
+        if (originEntityId)
+            query.originEntityId = originEntityId;
         const [jobs, total] = await Promise.all([
             NotificationJob_1.default.find(query)
                 .sort({ createdAt: -1 })
@@ -150,6 +156,10 @@ router.get('/notifications/delivery-logs', ...adminAuth, async (req, res) => {
             query.status = req.query.status;
         if (req.query.channel)
             query.channel = req.query.channel;
+        if (req.query.originModule)
+            query.originModule = String(req.query.originModule);
+        if (req.query.originEntityId)
+            query.originEntityId = String(req.query.originEntityId);
         const [logs, total] = await Promise.all([
             NotificationDeliveryLog_1.default.find(query)
                 .sort({ createdAt: -1 })

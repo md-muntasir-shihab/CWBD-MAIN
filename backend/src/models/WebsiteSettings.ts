@@ -1,5 +1,8 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+const DEFAULT_CANONICAL_LOGO = '/uploads/logo-1773555868748-118876447.webp';
+const DEFAULT_CANONICAL_FAVICON = '/uploads/favicon-1773555868749-501330119.webp';
+
 export interface IWebsiteSettings extends Document {
     websiteName: string;
     logo: string;
@@ -46,8 +49,8 @@ export interface IWebsiteSettings extends Document {
 
 const WebsiteSettingsSchema = new Schema<IWebsiteSettings>({
     websiteName: { type: String, default: 'CampusWay' },
-    logo: { type: String, default: '/logo.png' },
-    favicon: { type: String, default: '/favicon.ico' },
+    logo: { type: String, default: DEFAULT_CANONICAL_LOGO },
+    favicon: { type: String, default: DEFAULT_CANONICAL_FAVICON },
     motto: { type: String, default: 'Your Admission Gateway' },
     metaTitle: { type: String, default: 'CampusWay - Admission Gateway' },
     metaDescription: { type: String, default: 'Prepare for university admissions with CampusWay.' },

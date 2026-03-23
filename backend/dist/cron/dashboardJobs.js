@@ -3,7 +3,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.normalizeObjectIdString = normalizeObjectIdString;
+exports.normalizeObjectId = normalizeObjectId;
 exports.startStudentDashboardCronJobs = startStudentDashboardCronJobs;
+const mongoose_1 = __importDefault(require("mongoose"));
 const node_cron_1 = __importDefault(require("node-cron"));
 const Notification_1 = __importDefault(require("../models/Notification"));
 const Exam_1 = __importDefault(require("../models/Exam"));
@@ -88,6 +91,10 @@ function normalizeObjectIdString(value, visited = new Set()) {
             || normalizeObjectIdString(rec._id, visited));
     }
     return null;
+}
+function normalizeObjectId(value) {
+    const normalized = normalizeObjectIdString(value);
+    return normalized ? new mongoose_1.default.Types.ObjectId(normalized) : null;
 }
 async function createExamReminderNotifications() {
     const settings = await (0, notificationAutomationController_1.readNotificationAutomationSettings)();
@@ -177,9 +184,10 @@ async function createPaymentPendingNotifications() {
     const todayKey = new Date().toISOString().slice(0, 10);
     const rows = await StudentDueLedger_1.default.find({ netDue: { $gt: 0 } }).select('studentId netDue').limit(1000).lean();
     for (const row of rows) {
-        const studentId = normalizeObjectIdString(row.studentId);
-        if (!studentId)
+        const studentObjectId = normalizeObjectId(row.studentId);
+        if (!studentObjectId)
             continue;
+        const studentId = String(studentObjectId);
         for (const hoursBefore of settings.paymentPendingReminder.hoursBefore) {
             const hour = Math.max(0, Number(hoursBefore || 0));
             const reminderKey = `payment:${studentId}:${todayKey}:${hour}`;
@@ -194,7 +202,7 @@ async function createPaymentPendingNotifications() {
                     message,
                     category: 'update',
                     targetRole: 'student',
-                    targetUserIds: [studentId],
+                    targetUserIds: [studentObjectId],
                     publishAt: new Date(),
                     expireAt: new Date(Date.now() + 36 * 60 * 60 * 1000),
                     isActive: true,
@@ -265,11 +273,14 @@ async function createProfileScoreGateNotifications() {
     }).select('user_id profile_completion_percentage').limit(3000).lean();
     const startAt = new Date(upcomingExam.startDate);
     for (const profile of profiles) {
+        const profileUserId = normalizeObjectId(profile.user_id);
+        if (!profileUserId)
+            continue;
         for (const hoursBefore of settings.profileScoreGate.hoursBefore) {
             const hour = Math.max(0, Number(hoursBefore || 0));
             if (!activeWindow(now, startAt, hour === 0 ? 1 : hour))
                 continue;
-            const reminderKey = `profile-gate:${String(profile.user_id)}:${String(upcomingExam._id)}:${hour}:${startAt.toISOString()}`;
+            const reminderKey = `profile-gate:${String(profileUserId)}:${String(upcomingExam._id)}:${hour}:${startAt.toISOString()}`;
             const message = applyTemplate(settings.templates.profileScoreGate, {
                 examTitle: upcomingExam.title,
                 score: Number(profile.profile_completion_percentage || 0),
@@ -283,7 +294,7 @@ async function createProfileScoreGateNotifications() {
                     message,
                     category: 'exam',
                     targetRole: 'student',
-                    targetUserIds: [profile.user_id],
+                    targetUserIds: [profileUserId],
                     publishAt: now,
                     expireAt: new Date(startAt.getTime() + 3600000),
                     isActive: true,

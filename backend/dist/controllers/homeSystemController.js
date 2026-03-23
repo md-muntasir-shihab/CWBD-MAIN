@@ -4,6 +4,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.updateStats = exports.getStats = exports.updateAnnouncement = exports.updatePromotionalBanner = exports.updateHero = exports.updateHome = exports.updateSettings = exports.getSettings = exports.getHomeStream = exports.getAggregatedHomeData = void 0;
+const fs_1 = require("fs");
+const path_1 = __importDefault(require("path"));
 const WebsiteSettings_1 = __importDefault(require("../models/WebsiteSettings"));
 const HomePage_1 = __importDefault(require("../models/HomePage"));
 const User_1 = __importDefault(require("../models/User"));
@@ -45,11 +47,65 @@ const DEFAULT_PRICING_UI = {
     displayMode: 'symbol',
     thousandSeparator: true,
 };
+const CANONICAL_BRAND_ASSETS = {
+    logo: '/uploads/logo-1773555868748-118876447.webp',
+    favicon: '/uploads/favicon-1773555868749-501330119.webp',
+};
+const LEGACY_BRAND_PATHS = new Set(['', '/logo.png', '/favicon.ico']);
+const BRAND_UPLOAD_PATTERN = /^(logo|favicon|icon)[-_].+/i;
+function getCanonicalBrandValue(currentValue, fallbackValue) {
+    const normalized = String(currentValue || '').trim();
+    return LEGACY_BRAND_PATHS.has(normalized) ? fallbackValue : normalized;
+}
+function getLocalUploadAsset(value) {
+    const normalized = String(value || '').trim();
+    return normalized.startsWith('/uploads/') ? normalized : null;
+}
+async function cleanupBrandLikeUploads(activeAssets) {
+    const uploadDir = path_1.default.resolve(__dirname, '../../public/uploads');
+    const activeFileNames = new Set(activeAssets
+        .map((asset) => getLocalUploadAsset(asset))
+        .filter((asset) => Boolean(asset))
+        .map((asset) => path_1.default.basename(asset)));
+    try {
+        const files = await fs_1.promises.readdir(uploadDir);
+        const deletions = files
+            .filter((fileName) => BRAND_UPLOAD_PATTERN.test(fileName) && !activeFileNames.has(fileName))
+            .map(async (fileName) => {
+            try {
+                await fs_1.promises.unlink(path_1.default.join(uploadDir, fileName));
+            }
+            catch {
+                // Ignore individual cleanup failures so settings save does not fail.
+            }
+        });
+        await Promise.all(deletions);
+    }
+    catch {
+        // Ignore cleanup failures; settings persistence remains the primary concern.
+    }
+}
 // Helper to ensure configs exist
 const ensureConfigs = async () => {
     let settings = await WebsiteSettings_1.default.findOne();
     if (!settings)
-        settings = await WebsiteSettings_1.default.create({});
+        settings = await WebsiteSettings_1.default.create({
+            logo: CANONICAL_BRAND_ASSETS.logo,
+            favicon: CANONICAL_BRAND_ASSETS.favicon,
+        });
+    let settingsUpdated = false;
+    const nextLogo = getCanonicalBrandValue(settings.logo, CANONICAL_BRAND_ASSETS.logo);
+    const nextFavicon = getCanonicalBrandValue(settings.favicon, CANONICAL_BRAND_ASSETS.favicon);
+    if (settings.logo !== nextLogo) {
+        settings.logo = nextLogo;
+        settingsUpdated = true;
+    }
+    if (settings.favicon !== nextFavicon) {
+        settings.favicon = nextFavicon;
+        settingsUpdated = true;
+    }
+    if (settingsUpdated)
+        await settings.save();
     let home = await HomePage_1.default.findOne();
     if (!home)
         home = await HomePage_1.default.create({});
@@ -148,6 +204,12 @@ const updateSettings = async (req, res) => {
         if (files?.favicon?.[0])
             payload.favicon = `/uploads/${files.favicon[0].filename}`;
         const current = await WebsiteSettings_1.default.findOne();
+        if (!files?.logo?.[0] && LEGACY_BRAND_PATHS.has(String(current?.logo || '').trim())) {
+            payload.logo = CANONICAL_BRAND_ASSETS.logo;
+        }
+        if (!files?.favicon?.[0] && LEGACY_BRAND_PATHS.has(String(current?.favicon || '').trim())) {
+            payload.favicon = CANONICAL_BRAND_ASSETS.favicon;
+        }
         // Handle JSON-like payload fields coming through multipart/form-data.
         const parseIfStringifiedObject = (rawValue) => {
             if (typeof rawValue !== 'string')
@@ -191,6 +253,16 @@ const updateSettings = async (req, res) => {
         }
         // Use findOneAndUpdate to ensure we update the single settings document
         const settings = await WebsiteSettings_1.default.findOneAndUpdate({}, { $set: payload }, { new: true, upsert: true, runValidators: true });
+        if (settings) {
+            const nextLogo = getCanonicalBrandValue(settings.logo, CANONICAL_BRAND_ASSETS.logo);
+            const nextFavicon = getCanonicalBrandValue(settings.favicon, CANONICAL_BRAND_ASSETS.favicon);
+            if (settings.logo !== nextLogo || settings.favicon !== nextFavicon) {
+                settings.logo = nextLogo;
+                settings.favicon = nextFavicon;
+                await settings.save();
+            }
+            await cleanupBrandLikeUploads([settings.logo, settings.favicon]);
+        }
         console.log('Settings updated in DB:', settings);
         (0, homeStream_1.broadcastHomeStreamEvent)({ type: 'home-updated', meta: { section: 'website-settings' } });
         res.json({ message: 'Settings updated successfully', settings });

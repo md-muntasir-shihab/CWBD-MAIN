@@ -79,8 +79,22 @@ function normalizeClusterDates(payload) {
         scienceExamDate: String(source.scienceExamDate || '').trim(),
         commerceExamDate: String(source.commerceExamDate || source.businessExamDate || '').trim(),
         artsExamDate: String(source.artsExamDate || '').trim(),
+        admissionWebsite: String(source.admissionWebsite || source.admissionUrl || '').trim(),
         examCenters: (0, universitySyncService_1.normalizeExamCenters)(source.examCenters),
     };
+}
+function toIso(value) {
+    if (!value)
+        return '';
+    const parsed = new Date(String(value));
+    return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString();
+}
+function findNearestUpcomingDate(values, now) {
+    return values
+        .map((value) => (value ? new Date(String(value)) : null))
+        .filter((item) => Boolean(item) && !Number.isNaN(item.getTime()) && item.getTime() >= now.getTime())
+        .sort((a, b) => a.getTime() - b.getTime())[0]
+        ?.toISOString() || '';
 }
 async function adminGetUniversityClusters(req, res) {
     try {
@@ -326,6 +340,7 @@ async function getFeaturedUniversityClusters(req, res) {
         await (0, universitySyncService_1.backfillUniversityTaxonomyIfNeeded)();
         const limit = Math.min(20, Math.max(1, Number(req.query.limit || 8)));
         const clusters = await UniversityCluster_1.default.find({ isActive: true, homeVisible: true })
+            .select('name slug description homeOrder dates')
             .sort({ homeOrder: 1, name: 1 })
             .limit(limit)
             .lean();
@@ -362,7 +377,7 @@ async function getPublicUniversityClusterMembers(req, res) {
         const filter = { clusterId: cluster._id, isArchived: { $ne: true }, isActive: true };
         const total = await University_1.default.countDocuments(filter);
         const allMembers = await University_1.default.find(filter)
-            .select('category applicationEndDate scienceExamDate artsExamDate businessExamDate examCenters')
+            .select('category applicationStart applicationStartDate applicationEnd applicationEndDate scienceExamDate examDateScience artsExamDate examDateArts businessExamDate examDateBusiness admissionWebsite admissionUrl examCenters')
             .lean();
         const universities = await University_1.default.find(filter)
             .sort({ featured: -1, featuredOrder: 1, name: 1 })
@@ -371,15 +386,23 @@ async function getPublicUniversityClusterMembers(req, res) {
             .lean();
         const categories = Array.from(new Set(allMembers.map((item) => String(item.category || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
         const now = new Date();
-        const nearestDeadline = allMembers
-            .map((item) => item.applicationEndDate ? new Date(String(item.applicationEndDate)) : null)
-            .filter((item) => Boolean(item) && !Number.isNaN(item.getTime()) && item.getTime() >= now.getTime())
-            .sort((a, b) => a.getTime() - b.getTime())[0];
-        const nearestExam = allMembers
-            .flatMap((item) => [item.scienceExamDate, item.artsExamDate, item.businessExamDate])
-            .map((value) => value ? new Date(String(value)) : null)
-            .filter((item) => Boolean(item) && !Number.isNaN(item.getTime()) && item.getTime() >= now.getTime())
-            .sort((a, b) => a.getTime() - b.getTime())[0];
+        const memberStartDates = allMembers.map((item) => (item.applicationStartDate
+            || item.applicationStart));
+        const memberEndDates = allMembers.map((item) => (item.applicationEndDate
+            || item.applicationEnd));
+        const memberScienceDates = allMembers.map((item) => (item.scienceExamDate
+            || item.examDateScience));
+        const memberArtsDates = allMembers.map((item) => (item.artsExamDate
+            || item.examDateArts));
+        const memberBusinessDates = allMembers.map((item) => (item.businessExamDate
+            || item.examDateBusiness));
+        const memberAdmissionWebsite = allMembers.find((item) => {
+            const row = item;
+            return row.admissionWebsite || row.admissionUrl;
+        });
+        const nearestDeadline = findNearestUpcomingDate(memberEndDates, now);
+        const nearestExam = findNearestUpcomingDate([...memberScienceDates, ...memberArtsDates, ...memberBusinessDates], now);
+        const clusterDates = cluster.dates || {};
         const examCentersPreview = Array.from(new Set(allMembers.flatMap((item) => Array.isArray(item.examCenters) ? item.examCenters.map((center) => String(center?.city || '').trim()) : [])
             .filter(Boolean))).slice(0, 6);
         res.json({
@@ -387,8 +410,14 @@ async function getPublicUniversityClusterMembers(req, res) {
             summary: {
                 memberCount: total,
                 categories,
-                nearestDeadline: nearestDeadline ? nearestDeadline.toISOString() : '',
-                nearestExam: nearestExam ? nearestExam.toISOString() : '',
+                nearestDeadline,
+                nearestExam,
+                applicationStartDate: toIso(clusterDates.applicationStartDate) || findNearestUpcomingDate(memberStartDates, new Date(0)),
+                applicationEndDate: toIso(clusterDates.applicationEndDate) || findNearestUpcomingDate(memberEndDates, new Date(0)) || nearestDeadline,
+                scienceExamDate: toIso(clusterDates.scienceExamDate) || findNearestUpcomingDate(memberScienceDates, now),
+                artsExamDate: toIso(clusterDates.artsExamDate) || findNearestUpcomingDate(memberArtsDates, now),
+                businessExamDate: toIso(clusterDates.commerceExamDate || clusterDates.businessExamDate) || findNearestUpcomingDate(memberBusinessDates, now),
+                admissionWebsite: String(clusterDates.admissionWebsite || memberAdmissionWebsite?.admissionWebsite || memberAdmissionWebsite?.admissionUrl || '').trim(),
                 examCentersPreview,
             },
             universities,

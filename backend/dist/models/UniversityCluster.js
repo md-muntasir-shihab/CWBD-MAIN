@@ -44,6 +44,7 @@ const UniversityClusterDateConfigSchema = new mongoose_1.Schema({
     scienceExamDate: { type: String, default: '' },
     commerceExamDate: { type: String, default: '' },
     artsExamDate: { type: String, default: '' },
+    admissionWebsite: { type: String, default: '' },
     examCenters: { type: [ExamCenterSchema], default: [] },
 }, { _id: false });
 const UniversityClusterSchema = new mongoose_1.Schema({

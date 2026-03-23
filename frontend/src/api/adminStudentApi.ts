@@ -1,4 +1,4 @@
-import api from '../services/api';
+import api, { buildSensitiveActionHeaders, type SensitiveActionProof } from '../services/api';
 import type { AdminStudentUnifiedPayload } from '../types/studentManagement';
 
 // ─── Unified Student Detail (Student Management OS) ──────────────────────
@@ -137,14 +137,14 @@ export const toggleAutoRenew = (studentId: string) =>
 export const getProviders = () =>
   api.get('/admin/notification-providers').then(r => r.data);
 
-export const createProvider = (data: Record<string, unknown>) =>
-  api.post('/admin/notification-providers', data).then(r => r.data);
+export const createProvider = (data: Record<string, unknown>, proof?: SensitiveActionProof) =>
+  api.post('/admin/notification-providers', data, { headers: buildSensitiveActionHeaders(proof) }).then(r => r.data);
 
-export const updateProvider = (id: string, data: Record<string, unknown>) =>
-  api.put(`/admin/notification-providers/${id}`, data).then(r => r.data);
+export const updateProvider = (id: string, data: Record<string, unknown>, proof?: SensitiveActionProof) =>
+  api.put(`/admin/notification-providers/${id}`, data, { headers: buildSensitiveActionHeaders(proof) }).then(r => r.data);
 
-export const deleteProvider = (id: string) =>
-  api.delete(`/admin/notification-providers/${id}`).then(r => r.data);
+export const deleteProvider = (id: string, proof?: SensitiveActionProof) =>
+  api.delete(`/admin/notification-providers/${id}`, { headers: buildSensitiveActionHeaders(proof) }).then(r => r.data);
 
 export const testProvider = (id: string, studentId: string) =>
   api.post(`/admin/notification-providers/${id}/test-send`, { studentId }).then(r => r.data);

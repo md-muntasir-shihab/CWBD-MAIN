@@ -1,4 +1,4 @@
-﻿/** @type {import('tailwindcss').Config} */
+/** @type {import('tailwindcss').Config} */
 export default {
     content: [
         './index.html',
@@ -71,6 +71,10 @@ export default {
                 'slide-up': 'slideUp 0.5s ease-out',
                 'pulse-slow': 'pulse 3s ease-in-out infinite',
                 marquee: 'marquee 24s linear infinite',
+                shimmer: 'shimmer 1.8s infinite',
+                'float-slow': 'floatSlow 6s ease-in-out infinite',
+                'float-slow-reverse': 'floatSlowReverse 8s ease-in-out infinite',
+                'gradient-shift': 'gradientShift 8s ease-in-out infinite',
             },
             keyframes: {
                 fadeIn: {
@@ -84,6 +88,21 @@ export default {
                 marquee: {
                     '0%': { transform: 'translateX(0%)' },
                     '100%': { transform: 'translateX(-50%)' },
+                },
+                shimmer: {
+                    '100%': { transform: 'translateX(100%)' },
+                },
+                floatSlow: {
+                    '0%, 100%': { transform: 'translateY(0) rotate(0deg)' },
+                    '50%': { transform: 'translateY(-20px) rotate(3deg)' },
+                },
+                floatSlowReverse: {
+                    '0%, 100%': { transform: 'translateY(0) rotate(0deg)' },
+                    '50%': { transform: 'translateY(15px) rotate(-2deg)' },
+                },
+                gradientShift: {
+                    '0%, 100%': { backgroundPosition: '0% 50%' },
+                    '50%': { backgroundPosition: '100% 50%' },
                 },
             },
         },

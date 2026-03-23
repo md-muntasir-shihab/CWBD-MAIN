@@ -2,6 +2,7 @@ import mongoose, { Document } from 'mongoose';
 export interface INews extends Document {
     title: string;
     slug: string;
+    displayType?: 'news' | 'update';
     shortSummary?: string;
     shortDescription: string;
     fullContent?: string;
@@ -46,11 +47,38 @@ export interface INews extends Document {
         noHallucinationPassed?: boolean;
         warning?: string;
     };
+    aiEnrichment?: {
+        shortSummary?: string;
+        detailedExplanation?: string;
+        studentFriendlyExplanation?: string;
+        keyPoints?: string[];
+        suggestedCategory?: string;
+        suggestedTags?: string[];
+        importanceHint?: 'low' | 'normal' | 'high' | 'urgent';
+        suggestedAudience?: string;
+        smsText?: string;
+        emailSubject?: string;
+        emailBody?: string;
+        importantDates?: string[];
+        confidence?: number;
+        citations?: string[];
+        provider?: string;
+        model?: string;
+        warning?: string;
+    };
     reviewMeta?: {
         reviewerId?: mongoose.Types.ObjectId;
         reviewedAt?: Date;
         rejectReason?: string;
     };
+    classification?: {
+        primaryCategory?: string;
+        tags?: string[];
+        universityIds?: mongoose.Types.ObjectId[];
+        clusterIds?: mongoose.Types.ObjectId[];
+        groupIds?: mongoose.Types.ObjectId[];
+    };
+    priority?: 'normal' | 'priority' | 'breaking';
     isManual?: boolean;
     scheduledAt?: Date;
     scheduleAt?: Date;
@@ -70,6 +98,18 @@ export interface INews extends Document {
         canonicalUrl?: string;
         shortUrl?: string;
         templateId?: string;
+    };
+    publishOutcome?: {
+        type?: 'news' | 'notice' | 'update';
+        targetId?: string;
+        publishedAt?: Date;
+        publishedBy?: mongoose.Types.ObjectId;
+    };
+    deliveryMeta?: {
+        lastJobId?: mongoose.Types.ObjectId;
+        lastChannel?: 'sms' | 'email' | 'both';
+        lastAudienceSummary?: string;
+        lastSentAt?: Date;
     };
     appearanceOverrides?: {
         layoutMode?: 'rss_reader' | 'grid' | 'list';

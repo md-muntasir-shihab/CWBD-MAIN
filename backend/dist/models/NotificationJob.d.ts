@@ -18,12 +18,15 @@ export interface INotificationJob extends Document {
     templateIds?: mongoose.Types.ObjectId[];
     payloadOverrides?: Record<string, string>;
     customBody?: string;
+    customSubject?: string;
     selectedFieldMap?: Record<string, boolean>;
     recipientMode?: string;
     guardianTargeted: boolean;
     status: NotificationJobStatus;
     scheduledAtUTC?: Date;
     processedAtUTC?: Date;
+    lastAttemptedAtUTC?: Date;
+    nextRetryAtUTC?: Date;
     totalTargets: number;
     sentCount: number;
     failedCount: number;
@@ -31,6 +34,9 @@ export interface INotificationJob extends Document {
     actualCost: number;
     triggerKey?: string;
     duplicatePreventionKey?: string;
+    originModule?: 'campaign' | 'news' | 'notice' | 'trigger';
+    originEntityId?: string;
+    originAction?: string;
     quietHoursApplied: boolean;
     createdByAdminId: mongoose.Types.ObjectId;
     errorMessage?: string;

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { ADMIN_PATHS } from '../../../routes/adminPaths';
 import { downloadFile } from '../../../utils/download';
+import ModernToggle from '../../../components/ui/ModernToggle';
 
 type Toast = { show: boolean; message: string; type: 'success' | 'error' };
 type GroupType = 'manual' | 'dynamic';
@@ -355,7 +356,7 @@ export default function StudentGroupsPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <select value={exportFormat} onChange={(e) => setExportFormat(e.target.value as 'csv' | 'xlsx')} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-white">
+          <select aria-label="Export format" value={exportFormat} onChange={(e) => setExportFormat(e.target.value as 'csv' | 'xlsx')} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-white">
             <option value="xlsx">XLSX</option>
             <option value="csv">CSV</option>
           </select>
@@ -372,7 +373,7 @@ export default function StudentGroupsPage() {
       <div className="space-y-3">
         <div className="relative">
           <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
-          <input className={`${inputCls} pl-8`} placeholder="Search groups..." value={search} onChange={e => setSearch(e.target.value)} />
+          <input aria-label="Search groups" className={`${inputCls} pl-8`} placeholder="Search groups..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         {filteredGroups.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
@@ -383,7 +384,7 @@ export default function StudentGroupsPage() {
             {selectedIds.length > 0 && (
               <>
                 <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-medium text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">{selectedIds.length} selected</span>
-                <select value={bulkField} onChange={(e) => {
+                <select aria-label="Bulk edit field" value={bulkField} onChange={(e) => {
                   const nextField = e.target.value as (typeof GROUP_BULK_FIELDS)[number]['value'];
                   setBulkField(nextField);
                   setBulkValue(nextField === 'isFeatured' || nextField === 'isActive' ? 'true' : '');
@@ -391,25 +392,25 @@ export default function StudentGroupsPage() {
                   {GROUP_BULK_FIELDS.map((field) => <option key={field.value} value={field.value}>{field.label}</option>)}
                 </select>
                 {bulkField === 'department' && (
-                  <select value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-white">
+                  <select aria-label="Department value" value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-white">
                     <option value="">Choose department</option>
                     {DEPARTMENTS.map((item) => <option key={item} value={item}>{item}</option>)}
                   </select>
                 )}
                 {bulkField === 'defaultExamVisibility' && (
-                  <select value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-white">
+                  <select aria-label="Visibility value" value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-white">
                     <option value="">Choose visibility</option>
                     {EXAM_VIS.map((item) => <option key={item} value={item}>{item.replace(/_/g, ' ')}</option>)}
                   </select>
                 )}
                 {bulkField === 'isFeatured' || bulkField === 'isActive' ? (
-                  <select value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-white">
+                  <select aria-label="Boolean value" value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-white">
                     <option value="true">True</option>
                     <option value="false">False</option>
                   </select>
                 ) : null}
                 {bulkField === 'batch' && (
-                  <input value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} placeholder="Batch value" className={inputCls} />
+                  <input aria-label="Batch value" value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} placeholder="Batch value" className={inputCls} />
                 )}
                 <button onClick={() => void handleBulkUpdate()} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">Bulk Edit</button>
                 <button onClick={() => void handleBulkDelete()} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">Bulk Delete</button>
@@ -525,12 +526,13 @@ export default function StudentGroupsPage() {
                 </select>
               </div>
             </div>
-            <div className="mt-3">
-              <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
-                <input type="checkbox" checked={form.isFeatured} onChange={e => set('isFeatured', e.target.checked)} className="rounded border-slate-300" />
-                <Star size={14} className="text-amber-500" />
-                Featured group
-              </label>
+            <div className="mt-4 flex items-center">
+              <ModernToggle
+                label={<span className="flex items-center gap-2"><Star size={14} className="text-amber-500" /> Featured group</span>}
+                checked={form.isFeatured}
+                onChange={v => set('isFeatured', v)}
+                size="sm"
+              />
             </div>
           </div>
 

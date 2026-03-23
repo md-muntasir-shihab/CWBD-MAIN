@@ -3,15 +3,17 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.addSystemTimelineEvent = void 0;
 exports.adminGetStudentTimeline = adminGetStudentTimeline;
 exports.adminAddTimelineEntry = adminAddTimelineEntry;
 exports.adminDeleteTimelineEntry = adminDeleteTimelineEntry;
 exports.adminGetTimelineSummary = adminGetTimelineSummary;
-exports.addSystemTimelineEvent = addSystemTimelineEvent;
 const mongoose_1 = __importDefault(require("mongoose"));
 const StudentContactTimeline_1 = __importDefault(require("../models/StudentContactTimeline"));
 const AuditLog_1 = __importDefault(require("../models/AuditLog"));
 const requestMeta_1 = require("../utils/requestMeta");
+const studentTimelineService_1 = require("../services/studentTimelineService");
+Object.defineProperty(exports, "addSystemTimelineEvent", { enumerable: true, get: function () { return studentTimelineService_1.addSystemTimelineEvent; } });
 /* ── helpers ── */
 function asObjectId(value) {
     const raw = String(value || '').trim();
@@ -126,18 +128,5 @@ async function adminGetTimelineSummary(req, res) {
     ]);
     const total = await StudentContactTimeline_1.default.countDocuments({ studentId });
     res.json({ summary, total });
-}
-/* ═══════════════════════════════════════════════════════════
-   UTILITY — add system event programmatically
-   ═══════════════════════════════════════════════════════════ */
-async function addSystemTimelineEvent(studentId, type, content, metadata, linkedId) {
-    await StudentContactTimeline_1.default.create({
-        studentId,
-        type,
-        content,
-        linkedId,
-        sourceType: 'system',
-        metadata,
-    });
 }
 //# sourceMappingURL=studentTimelineController.js.map

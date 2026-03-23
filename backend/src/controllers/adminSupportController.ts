@@ -74,6 +74,10 @@ export async function adminGetNotices(req: AuthRequest, res: Response): Promise<
         const filter: Record<string, unknown> = {};
         const target = String(query.target || '').trim();
         if (target) filter.target = target;
+        const sourceNewsId = String(query.sourceNewsId || '').trim();
+        if (sourceNewsId && mongoose.Types.ObjectId.isValid(sourceNewsId)) {
+            filter.sourceNewsId = new mongoose.Types.ObjectId(sourceNewsId);
+        }
 
         const status = String(query.status || '').trim().toLowerCase();
         if (status === 'active') filter.isActive = true;
@@ -113,6 +117,9 @@ export async function adminCreateNotice(req: AuthRequest, res: Response): Promis
 
         const targetRaw = String(body.target || 'all').trim();
         const target = targetRaw === 'groups' || targetRaw === 'students' ? targetRaw : 'all';
+        const classification = body.classification && typeof body.classification === 'object'
+            ? body.classification as Record<string, unknown>
+            : {};
 
         const createdBy = asObjectId(req.user._id);
         if (!createdBy) {
@@ -127,6 +134,31 @@ export async function adminCreateNotice(req: AuthRequest, res: Response): Promis
             targetIds: Array.isArray(body.targetIds)
                 ? body.targetIds.map((item) => String(item).trim()).filter(Boolean)
                 : [],
+            sourceNewsId: asObjectId(body.sourceNewsId),
+            priority: ['priority', 'breaking'].includes(String(body.priority || '').trim()) ? String(body.priority).trim() : 'normal',
+            classification: {
+                primaryCategory: String(classification.primaryCategory || body.primaryCategory || '').trim(),
+                tags: Array.isArray(classification.tags)
+                    ? classification.tags.map((item: unknown) => String(item).trim()).filter(Boolean)
+                    : [],
+                universityIds: Array.isArray(classification.universityIds)
+                    ? classification.universityIds
+                        .map((item: unknown) => asObjectId(item))
+                        .filter(Boolean)
+                    : [],
+                clusterIds: Array.isArray(classification.clusterIds)
+                    ? classification.clusterIds
+                        .map((item: unknown) => asObjectId(item))
+                        .filter(Boolean)
+                    : [],
+                groupIds: Array.isArray(classification.groupIds)
+                    ? classification.groupIds
+                        .map((item: unknown) => asObjectId(item))
+                        .filter(Boolean)
+                    : [],
+            },
+            templateRef: String(body.templateRef || '').trim(),
+            triggerRef: String(body.triggerRef || '').trim(),
             startAt: body.startAt ? new Date(String(body.startAt)) : new Date(),
             endAt: body.endAt ? new Date(String(body.endAt)) : null,
             isActive: body.isActive !== undefined ? Boolean(body.isActive) : true,
@@ -165,6 +197,7 @@ export async function adminCreateNotice(req: AuthRequest, res: Response): Promis
         await createAudit(req, 'notice_created', {
             noticeId: String(notice._id),
             target,
+            sourceNewsId: notice.sourceNewsId ? String(notice.sourceNewsId) : '',
             targetIdsCount: Array.isArray(notice.targetIds) ? notice.targetIds.length : 0,
         });
 

@@ -6,7 +6,9 @@ import { useAuth } from '../../hooks/useAuth';
 import { useModuleAccess } from '../../hooks/useModuleAccess';
 import ThemeSwitchPro from '../ui/ThemeSwitchPro';
 import { ADMIN_MENU_ITEMS, ADMIN_PATHS, isAdminPathActive, type AdminMenuItem } from '../../routes/adminPaths';
-import { adminGetActionableAlerts, adminMarkActionableAlertsRead } from '../../services/api';
+import { adminGetActionableAlerts, adminGetAdminUiLayout, adminMarkActionableAlertsRead } from '../../services/api';
+import AdminGuideButton from './AdminGuideButton';
+import { getAdminPageGuide } from './adminPageGuides';
 
 type AdminShellProps = {
     title: string;
@@ -43,6 +45,12 @@ export default function AdminShell({ title, description, children }: AdminShellP
         staleTime: 30_000,
         enabled: canReadActionableAlerts,
     });
+    const adminUiLayoutQuery = useQuery({
+        queryKey: ['admin', 'ui-layout'],
+        queryFn: async () => (await adminGetAdminUiLayout()).data,
+        staleTime: 60_000,
+        enabled: Boolean(user),
+    });
     const markReadMutation = useMutation({
         mutationFn: async (ids?: string[]) => (await adminMarkActionableAlertsRead(ids)).data,
         onSuccess: async () => {
@@ -58,14 +66,45 @@ export default function AdminShell({ title, description, children }: AdminShellP
             if (item.allowedRoles && !item.allowedRoles.includes(String(user?.role || '') as typeof item.allowedRoles[number])) {
                 return false;
             }
-            if (item.requiredLegacyPermission && user?.role !== 'superadmin' && !user?.permissions?.[item.requiredLegacyPermission]) {
-                return false;
+            if (!item.module) {
+                if (item.requiredLegacyPermission && user?.role !== 'superadmin' && !user?.permissions?.[item.requiredLegacyPermission]) {
+                    return false;
+                }
+                return true;
             }
-            if (!item.module) return true;
             if (item.module === 'dashboard' || item.module === 'admin_profile') return true;
-            return hasAnyAccess(item.module);
+            const moduleVisible = hasAnyAccess(item.module);
+            if (!moduleVisible) return false;
+            // Legacy permission bits are kept for backward compatibility,
+            // but module ACL is the canonical source for menu visibility.
+            return true;
         });
     }, [hasAnyAccess, user]);
+
+    const orderedVisibleMenuItems = useMemo(() => {
+        const sidebarOrder = adminUiLayoutQuery.data?.layout?.sidebarOrder || [];
+        if (!Array.isArray(sidebarOrder) || sidebarOrder.length === 0) {
+            return visibleMenuItems;
+        }
+
+        const preferredIndex = new Map<string, number>();
+        sidebarOrder.forEach((key, index) => {
+            if (!preferredIndex.has(key)) {
+                preferredIndex.set(String(key), index);
+            }
+        });
+        const fallbackIndex = new Map<string, number>();
+        visibleMenuItems.forEach((item, index) => {
+            fallbackIndex.set(item.key, index);
+        });
+
+        return [...visibleMenuItems].sort((a, b) => {
+            const aPreferred = preferredIndex.has(a.key) ? preferredIndex.get(a.key)! : Number.MAX_SAFE_INTEGER;
+            const bPreferred = preferredIndex.has(b.key) ? preferredIndex.get(b.key)! : Number.MAX_SAFE_INTEGER;
+            if (aPreferred !== bPreferred) return aPreferred - bPreferred;
+            return (fallbackIndex.get(a.key) || 0) - (fallbackIndex.get(b.key) || 0);
+        });
+    }, [adminUiLayoutQuery.data?.layout?.sidebarOrder, visibleMenuItems]);
 
     const breadcrumb = useMemo(() => {
         if (location.pathname === '/__cw_admin__/settings') return 'Admin / Settings';
@@ -77,6 +116,7 @@ export default function AdminShell({ title, description, children }: AdminShellP
     }, [location.pathname, title]);
 
     const currentRoute = `${location.pathname}${location.search}`;
+    const pageGuide = useMemo(() => getAdminPageGuide(currentRoute), [currentRoute]);
     const alertItems = canReadActionableAlerts ? (alertsQuery.data?.items || []) : [];
     const unreadAlertCount = canReadActionableAlerts ? Number(alertsQuery.data?.unreadCount || 0) : 0;
 
@@ -134,55 +174,84 @@ export default function AdminShell({ title, description, children }: AdminShellP
         const isExpanded = expandedMenus[item.key];
         const active = isAdminPathActive(location.pathname, item);
         const Icon = item.icon;
+        const itemGuide = getAdminPageGuide(item.path);
 
         return (
             <div key={item.key} className="space-y-0.5">
                 {hasChildren ? (
-                    <button
-                        type="button"
-                        onClick={() => {
-                            if (collapsed) {
-                                setCollapsed(false);
-                                setExpandedMenus((prev) => ({ ...prev, [item.key]: true }));
-                                return;
-                            }
-                            toggleMenu(item.key);
-                        }}
-                        title={collapsed ? item.label : undefined}
+                    <div
                         className={`
-                            w-full flex items-center gap-3 rounded-xl text-sm font-medium transition-all duration-200
-                            ${collapsed ? 'justify-center px-2 py-3' : 'px-3 py-2.5'}
+                            flex items-stretch rounded-xl text-sm font-medium transition-all duration-200
                             ${active
                                 ? 'bg-gradient-to-r from-indigo-600 to-cyan-600 text-white shadow-lg shadow-indigo-500/20'
                                 : 'text-slate-600 hover:bg-slate-100 hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-indigo-300'
                             }
                         `}
                     >
-                        {Icon && <Icon className="h-[18px] w-[18px] flex-shrink-0" />}
+                        <Link
+                            to={item.path}
+                            onClick={() => {
+                                if (collapsed) {
+                                    setCollapsed(false);
+                                }
+                                setDrawerOpen(false);
+                            }}
+                            title={collapsed ? item.label : undefined}
+                            className={`
+                                flex min-w-0 flex-1 items-center gap-3
+                                ${collapsed ? 'justify-center px-2 py-3' : 'px-3 py-2.5'}
+                            `}
+                        >
+                            {Icon && <Icon className="h-[18px] w-[18px] flex-shrink-0" />}
+                            {!collapsed && <span className="truncate">{item.label}</span>}
+                        </Link>
+                        {!collapsed && itemGuide ? (
+                            <div className={`flex items-center pr-1 ${active ? 'text-white' : ''}`}>
+                                <AdminGuideButton {...itemGuide} tone="indigo" />
+                            </div>
+                        ) : null}
                         {!collapsed && (
-                            <>
-                                <span className="flex-1 truncate text-left">{item.label}</span>
+                            <button
+                                type="button"
+                                onClick={() => toggleMenu(item.key)}
+                                aria-label={`Toggle ${item.label}`}
+                                className={`
+                                    inline-flex items-center justify-center rounded-r-xl px-3
+                                    ${active ? 'hover:bg-white/10' : 'hover:bg-slate-100 dark:hover:bg-white/5'}
+                                `}
+                            >
                                 <ChevronRight className={`h-3.5 w-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
-                            </>
+                            </button>
                         )}
-                    </button>
+                    </div>
                 ) : (
-                    <Link
-                        to={item.path}
-                        onClick={() => setDrawerOpen(false)}
-                        title={collapsed ? item.label : undefined}
+                    <div
                         className={`
-                            flex items-center gap-3 rounded-xl text-sm font-medium transition-all duration-200
-                            ${collapsed ? 'justify-center px-2 py-3' : 'px-3 py-2.5'}
+                            flex items-center rounded-xl text-sm font-medium transition-all duration-200
                             ${active
                                 ? 'bg-gradient-to-r from-indigo-600 to-cyan-600 text-white shadow-lg shadow-indigo-500/20'
                                 : 'text-slate-600 hover:bg-slate-100 hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-indigo-300'
                             }
                         `}
                     >
-                        {Icon && <Icon className="h-[18px] w-[18px] flex-shrink-0" />}
-                        {!collapsed && <span className="truncate">{item.label}</span>}
-                    </Link>
+                        <Link
+                            to={item.path}
+                            onClick={() => setDrawerOpen(false)}
+                            title={collapsed ? item.label : undefined}
+                            className={`
+                                flex min-w-0 flex-1 items-center gap-3
+                                ${collapsed ? 'justify-center px-2 py-3' : 'px-3 py-2.5'}
+                            `}
+                        >
+                            {Icon && <Icon className="h-[18px] w-[18px] flex-shrink-0" />}
+                            {!collapsed && <span className="truncate">{item.label}</span>}
+                        </Link>
+                        {!collapsed && itemGuide ? (
+                            <div className={`flex items-center pr-2 ${active ? 'text-white' : ''}`}>
+                                <AdminGuideButton {...itemGuide} tone="indigo" />
+                            </div>
+                        ) : null}
+                    </div>
                 )}
 
                 {!collapsed && hasChildren && isExpanded && (
@@ -190,22 +259,32 @@ export default function AdminShell({ title, description, children }: AdminShellP
                         {item.children!.map((child) => {
                             const childActive = matchesMenuPath(child.path);
                             const ChildIcon = child.icon;
+                            const childGuide = getAdminPageGuide(child.path);
                             return (
-                                <Link
+                                <div
                                     key={child.key}
-                                    to={child.path}
-                                    onClick={() => setDrawerOpen(false)}
                                     className={`
-                                        flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] transition-all duration-200
+                                        flex items-center gap-2 rounded-lg text-[13px] transition-all duration-200
                                         ${childActive
                                             ? 'bg-indigo-500/10 font-medium text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300'
                                             : 'text-slate-500 hover:bg-slate-100 hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-indigo-300'
                                         }
                                     `}
                                 >
-                                    {ChildIcon && <ChildIcon className="h-3.5 w-3.5 flex-shrink-0" />}
-                                    <span className="truncate">{child.label}</span>
-                                </Link>
+                                    <Link
+                                        to={child.path}
+                                        onClick={() => setDrawerOpen(false)}
+                                        className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2"
+                                    >
+                                        {ChildIcon && <ChildIcon className="h-3.5 w-3.5 flex-shrink-0" />}
+                                        <span className="truncate">{child.label}</span>
+                                    </Link>
+                                    {childGuide ? (
+                                        <div className="pr-2">
+                                            <AdminGuideButton {...childGuide} tone="indigo" />
+                                        </div>
+                                    ) : null}
+                                </div>
                             );
                         })}
                     </div>
@@ -273,7 +352,7 @@ export default function AdminShell({ title, description, children }: AdminShellP
 
                     {/* Navigation */}
                     <nav className="flex-1 space-y-0.5 overflow-y-auto p-2 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
-                        {visibleMenuItems.map(renderSidebarItem)}
+                        {orderedVisibleMenuItems.map(renderSidebarItem)}
                     </nav>
 
                     {/* User info + Logout */}
@@ -326,10 +405,27 @@ export default function AdminShell({ title, description, children }: AdminShellP
                                 </button>
                                 <div className="min-w-0">
                                     <p className="truncate text-[11px] uppercase tracking-widest text-slate-400 dark:text-slate-500">{breadcrumb}</p>
-                                    <h1 className="truncate text-base font-bold text-slate-900 dark:text-white">{title}</h1>
+                                    <div className="flex items-center gap-2">
+                                        <h1 className="truncate text-base font-bold text-slate-900 dark:text-white">{title}</h1>
+                                        {pageGuide ? (
+                                            <div className="hidden sm:inline-flex">
+                                                <AdminGuideButton
+                                                    {...pageGuide}
+                                                    variant="full"
+                                                    tone="indigo"
+                                                    actionLabel="How this works"
+                                                />
+                                            </div>
+                                        ) : null}
+                                    </div>
                                 </div>
                             </div>
                             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                                {pageGuide ? (
+                                    <div className="sm:hidden">
+                                        <AdminGuideButton {...pageGuide} tone="indigo" />
+                                    </div>
+                                ) : null}
                                 <ThemeSwitchPro />
                                 {canReadActionableAlerts && (
                                     <div ref={notifRef} className="relative">

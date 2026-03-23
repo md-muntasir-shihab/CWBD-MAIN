@@ -26,6 +26,17 @@ const ALLOWED_ROOT_KEYS = [
     'retention',
     'panic',
     'rateLimit',
+    'authentication',
+    'passwordPolicies',
+    'twoFactor',
+    'sessions',
+    'accessControl',
+    'verificationRecovery',
+    'uploadSecurity',
+    'alerting',
+    'exportSecurity',
+    'backupRestore',
+    'runtimeGuards',
 ];
 function isObject(value) {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);

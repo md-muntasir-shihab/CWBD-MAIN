@@ -2,7 +2,7 @@
  * React Query hooks for the Universities module.
  * Supports optional mock-API mode via VITE_USE_MOCK_API.
  */
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import {
   getUniversities,
   getUniversityBySlug,
@@ -76,7 +76,8 @@ export function useUniversities(params: UniversityListParams) {
   return useQuery<UniversityCard[]>({
     queryKey: ['universities', { category, clusterGroup: clusterGroup || '', q: q || '', sort, page, limit }],
     enabled: Boolean(category),
-    queryFn: async () => {
+    placeholderData: keepPreviousData,
+    queryFn: async ({ signal }) => {
       if (USE_MOCK) {
         const res = mockGetUniversities({ category, clusterGroup, q, sort, page, limit });
         return (res.items as unknown as ApiUniversity[]).map(normalizeUniversityCard);
@@ -84,7 +85,7 @@ export function useUniversities(params: UniversityListParams) {
       const apiParams: Record<string, string | number> = { category, sort, page, limit };
       if (q) apiParams.q = q;
       if (clusterGroup) apiParams.clusterGroup = clusterGroup;
-      const response = await getUniversities(apiParams);
+      const response = await getUniversities(apiParams, signal);
       return unpackUniversityList(response.data).map(normalizeUniversityCard);
     },
     staleTime: 60_000,

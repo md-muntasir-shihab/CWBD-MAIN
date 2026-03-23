@@ -1,14 +1,11 @@
 export declare const approveAndPublishNow: (id: string, actorId?: string) => Promise<(import("mongoose").Document<unknown, {}, {
-    status: "pending_review" | "duplicate_review" | "draft" | "published" | "scheduled" | "rejected";
+    status: "draft" | "published" | "pending_review" | "duplicate_review" | "rejected" | "scheduled";
     title: string;
+    category: string;
     slug: string;
+    tags: string[];
     shortSummary: string;
     fullContent: string;
-    coverSource: "default" | "rss" | "admin";
-    tags: string[];
-    category: string;
-    isAiGenerated: boolean;
-    isManuallyCreated: boolean;
     sourceName: string;
     sourceUrl: string;
     originalArticleUrl: string;
@@ -17,10 +14,10 @@ export declare const approveAndPublishNow: (id: string, actorId?: string) => Pro
     rssRawContent: string;
     fetchedFullText: boolean;
     duplicateReasons: string[];
-    coverImageUrl?: string | null | undefined;
-    aiNotes?: string | null | undefined;
+    coverSource: "admin" | "default" | "rss";
+    isAiGenerated: boolean;
+    isManuallyCreated: boolean;
     publishedAt?: NativeDate | null | undefined;
-    scheduledAt?: NativeDate | null | undefined;
     sourceId?: {
         prototype?: import("mongoose").Types.ObjectId | null | undefined;
         cacheHexString?: unknown;
@@ -30,9 +27,12 @@ export declare const approveAndPublishNow: (id: string, actorId?: string) => Pro
         createFromBase64?: {} | null | undefined;
         isValid?: {} | null | undefined;
     } | null | undefined;
+    coverImageUrl?: string | null | undefined;
     rssGuid?: string | null | undefined;
     rssPublishedAt?: NativeDate | null | undefined;
     fetchedFullTextAt?: NativeDate | null | undefined;
+    aiNotes?: string | null | undefined;
+    scheduledAt?: NativeDate | null | undefined;
     duplicateKeyHash?: string | null | undefined;
     duplicateOfNewsId?: {
         prototype?: import("mongoose").Types.ObjectId | null | undefined;
@@ -64,16 +64,13 @@ export declare const approveAndPublishNow: (id: string, actorId?: string) => Pro
 } & import("mongoose").DefaultTimestampProps, {}, {
     timestamps: true;
 }> & {
-    status: "pending_review" | "duplicate_review" | "draft" | "published" | "scheduled" | "rejected";
+    status: "draft" | "published" | "pending_review" | "duplicate_review" | "rejected" | "scheduled";
     title: string;
+    category: string;
     slug: string;
+    tags: string[];
     shortSummary: string;
     fullContent: string;
-    coverSource: "default" | "rss" | "admin";
-    tags: string[];
-    category: string;
-    isAiGenerated: boolean;
-    isManuallyCreated: boolean;
     sourceName: string;
     sourceUrl: string;
     originalArticleUrl: string;
@@ -82,10 +79,10 @@ export declare const approveAndPublishNow: (id: string, actorId?: string) => Pro
     rssRawContent: string;
     fetchedFullText: boolean;
     duplicateReasons: string[];
-    coverImageUrl?: string | null | undefined;
-    aiNotes?: string | null | undefined;
+    coverSource: "admin" | "default" | "rss";
+    isAiGenerated: boolean;
+    isManuallyCreated: boolean;
     publishedAt?: NativeDate | null | undefined;
-    scheduledAt?: NativeDate | null | undefined;
     sourceId?: {
         prototype?: import("mongoose").Types.ObjectId | null | undefined;
         cacheHexString?: unknown;
@@ -95,9 +92,12 @@ export declare const approveAndPublishNow: (id: string, actorId?: string) => Pro
         createFromBase64?: {} | null | undefined;
         isValid?: {} | null | undefined;
     } | null | undefined;
+    coverImageUrl?: string | null | undefined;
     rssGuid?: string | null | undefined;
     rssPublishedAt?: NativeDate | null | undefined;
     fetchedFullTextAt?: NativeDate | null | undefined;
+    aiNotes?: string | null | undefined;
+    scheduledAt?: NativeDate | null | undefined;
     duplicateKeyHash?: string | null | undefined;
     duplicateOfNewsId?: {
         prototype?: import("mongoose").Types.ObjectId | null | undefined;
@@ -132,16 +132,13 @@ export declare const approveAndPublishNow: (id: string, actorId?: string) => Pro
     __v: number;
 }) | null>;
 export declare const scheduleNews: (id: string, when: Date, actorId?: string) => Promise<(import("mongoose").Document<unknown, {}, {
-    status: "pending_review" | "duplicate_review" | "draft" | "published" | "scheduled" | "rejected";
+    status: "draft" | "published" | "pending_review" | "duplicate_review" | "rejected" | "scheduled";
     title: string;
+    category: string;
     slug: string;
+    tags: string[];
     shortSummary: string;
     fullContent: string;
-    coverSource: "default" | "rss" | "admin";
-    tags: string[];
-    category: string;
-    isAiGenerated: boolean;
-    isManuallyCreated: boolean;
     sourceName: string;
     sourceUrl: string;
     originalArticleUrl: string;
@@ -150,10 +147,10 @@ export declare const scheduleNews: (id: string, when: Date, actorId?: string) =>
     rssRawContent: string;
     fetchedFullText: boolean;
     duplicateReasons: string[];
-    coverImageUrl?: string | null | undefined;
-    aiNotes?: string | null | undefined;
+    coverSource: "admin" | "default" | "rss";
+    isAiGenerated: boolean;
+    isManuallyCreated: boolean;
     publishedAt?: NativeDate | null | undefined;
-    scheduledAt?: NativeDate | null | undefined;
     sourceId?: {
         prototype?: import("mongoose").Types.ObjectId | null | undefined;
         cacheHexString?: unknown;
@@ -163,9 +160,12 @@ export declare const scheduleNews: (id: string, when: Date, actorId?: string) =>
         createFromBase64?: {} | null | undefined;
         isValid?: {} | null | undefined;
     } | null | undefined;
+    coverImageUrl?: string | null | undefined;
     rssGuid?: string | null | undefined;
     rssPublishedAt?: NativeDate | null | undefined;
     fetchedFullTextAt?: NativeDate | null | undefined;
+    aiNotes?: string | null | undefined;
+    scheduledAt?: NativeDate | null | undefined;
     duplicateKeyHash?: string | null | undefined;
     duplicateOfNewsId?: {
         prototype?: import("mongoose").Types.ObjectId | null | undefined;
@@ -197,16 +197,13 @@ export declare const scheduleNews: (id: string, when: Date, actorId?: string) =>
 } & import("mongoose").DefaultTimestampProps, {}, {
     timestamps: true;
 }> & {
-    status: "pending_review" | "duplicate_review" | "draft" | "published" | "scheduled" | "rejected";
+    status: "draft" | "published" | "pending_review" | "duplicate_review" | "rejected" | "scheduled";
     title: string;
+    category: string;
     slug: string;
+    tags: string[];
     shortSummary: string;
     fullContent: string;
-    coverSource: "default" | "rss" | "admin";
-    tags: string[];
-    category: string;
-    isAiGenerated: boolean;
-    isManuallyCreated: boolean;
     sourceName: string;
     sourceUrl: string;
     originalArticleUrl: string;
@@ -215,10 +212,10 @@ export declare const scheduleNews: (id: string, when: Date, actorId?: string) =>
     rssRawContent: string;
     fetchedFullText: boolean;
     duplicateReasons: string[];
-    coverImageUrl?: string | null | undefined;
-    aiNotes?: string | null | undefined;
+    coverSource: "admin" | "default" | "rss";
+    isAiGenerated: boolean;
+    isManuallyCreated: boolean;
     publishedAt?: NativeDate | null | undefined;
-    scheduledAt?: NativeDate | null | undefined;
     sourceId?: {
         prototype?: import("mongoose").Types.ObjectId | null | undefined;
         cacheHexString?: unknown;
@@ -228,9 +225,12 @@ export declare const scheduleNews: (id: string, when: Date, actorId?: string) =>
         createFromBase64?: {} | null | undefined;
         isValid?: {} | null | undefined;
     } | null | undefined;
+    coverImageUrl?: string | null | undefined;
     rssGuid?: string | null | undefined;
     rssPublishedAt?: NativeDate | null | undefined;
     fetchedFullTextAt?: NativeDate | null | undefined;
+    aiNotes?: string | null | undefined;
+    scheduledAt?: NativeDate | null | undefined;
     duplicateKeyHash?: string | null | undefined;
     duplicateOfNewsId?: {
         prototype?: import("mongoose").Types.ObjectId | null | undefined;
@@ -265,16 +265,13 @@ export declare const scheduleNews: (id: string, when: Date, actorId?: string) =>
     __v: number;
 }) | null>;
 export declare const rejectNews: (id: string, actorId?: string) => Promise<(import("mongoose").Document<unknown, {}, {
-    status: "pending_review" | "duplicate_review" | "draft" | "published" | "scheduled" | "rejected";
+    status: "draft" | "published" | "pending_review" | "duplicate_review" | "rejected" | "scheduled";
     title: string;
+    category: string;
     slug: string;
+    tags: string[];
     shortSummary: string;
     fullContent: string;
-    coverSource: "default" | "rss" | "admin";
-    tags: string[];
-    category: string;
-    isAiGenerated: boolean;
-    isManuallyCreated: boolean;
     sourceName: string;
     sourceUrl: string;
     originalArticleUrl: string;
@@ -283,10 +280,10 @@ export declare const rejectNews: (id: string, actorId?: string) => Promise<(impo
     rssRawContent: string;
     fetchedFullText: boolean;
     duplicateReasons: string[];
-    coverImageUrl?: string | null | undefined;
-    aiNotes?: string | null | undefined;
+    coverSource: "admin" | "default" | "rss";
+    isAiGenerated: boolean;
+    isManuallyCreated: boolean;
     publishedAt?: NativeDate | null | undefined;
-    scheduledAt?: NativeDate | null | undefined;
     sourceId?: {
         prototype?: import("mongoose").Types.ObjectId | null | undefined;
         cacheHexString?: unknown;
@@ -296,9 +293,12 @@ export declare const rejectNews: (id: string, actorId?: string) => Promise<(impo
         createFromBase64?: {} | null | undefined;
         isValid?: {} | null | undefined;
     } | null | undefined;
+    coverImageUrl?: string | null | undefined;
     rssGuid?: string | null | undefined;
     rssPublishedAt?: NativeDate | null | undefined;
     fetchedFullTextAt?: NativeDate | null | undefined;
+    aiNotes?: string | null | undefined;
+    scheduledAt?: NativeDate | null | undefined;
     duplicateKeyHash?: string | null | undefined;
     duplicateOfNewsId?: {
         prototype?: import("mongoose").Types.ObjectId | null | undefined;
@@ -330,16 +330,13 @@ export declare const rejectNews: (id: string, actorId?: string) => Promise<(impo
 } & import("mongoose").DefaultTimestampProps, {}, {
     timestamps: true;
 }> & {
-    status: "pending_review" | "duplicate_review" | "draft" | "published" | "scheduled" | "rejected";
+    status: "draft" | "published" | "pending_review" | "duplicate_review" | "rejected" | "scheduled";
     title: string;
+    category: string;
     slug: string;
+    tags: string[];
     shortSummary: string;
     fullContent: string;
-    coverSource: "default" | "rss" | "admin";
-    tags: string[];
-    category: string;
-    isAiGenerated: boolean;
-    isManuallyCreated: boolean;
     sourceName: string;
     sourceUrl: string;
     originalArticleUrl: string;
@@ -348,10 +345,10 @@ export declare const rejectNews: (id: string, actorId?: string) => Promise<(impo
     rssRawContent: string;
     fetchedFullText: boolean;
     duplicateReasons: string[];
-    coverImageUrl?: string | null | undefined;
-    aiNotes?: string | null | undefined;
+    coverSource: "admin" | "default" | "rss";
+    isAiGenerated: boolean;
+    isManuallyCreated: boolean;
     publishedAt?: NativeDate | null | undefined;
-    scheduledAt?: NativeDate | null | undefined;
     sourceId?: {
         prototype?: import("mongoose").Types.ObjectId | null | undefined;
         cacheHexString?: unknown;
@@ -361,9 +358,12 @@ export declare const rejectNews: (id: string, actorId?: string) => Promise<(impo
         createFromBase64?: {} | null | undefined;
         isValid?: {} | null | undefined;
     } | null | undefined;
+    coverImageUrl?: string | null | undefined;
     rssGuid?: string | null | undefined;
     rssPublishedAt?: NativeDate | null | undefined;
     fetchedFullTextAt?: NativeDate | null | undefined;
+    aiNotes?: string | null | undefined;
+    scheduledAt?: NativeDate | null | undefined;
     duplicateKeyHash?: string | null | undefined;
     duplicateOfNewsId?: {
         prototype?: import("mongoose").Types.ObjectId | null | undefined;
