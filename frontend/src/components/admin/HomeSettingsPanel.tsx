@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { AlertTriangle, Eye, GripVertical, ImageUp, RefreshCw, RotateCcw, Save } from 'lucide-react';
+import { AlertTriangle, Eye, GripVertical, RefreshCw, RotateCcw, Save } from 'lucide-react';
 import {
     adminGetHomeSettings,
     adminGetHomeSettingsDefaults,
@@ -10,7 +10,6 @@ import {
     adminGetUniversities,
     adminGetUniversityCategories,
     adminUpdateUniversityCluster,
-    adminUploadNewsMedia,
     adminGetHomeConfig,
     adminResetHomeSettingsSection,
     adminUpdateHomeConfig,
@@ -25,6 +24,7 @@ import {
 import ModernToggle from '../ui/ModernToggle';
 import { invalidateQueryGroup, invalidationGroups, queryKeys } from '../../lib/queryKeys';
 import AdminGuideButton, { type AdminGuideButtonProps } from './AdminGuideButton';
+import AdminImageUploadField from './AdminImageUploadField';
 
 type SectionKey = keyof HomeSettingsConfig;
 type QuickClusterState = Pick<AdminUniversityCluster, '_id' | 'name' | 'homeVisible' | 'homeOrder'> & { memberCount: number };
@@ -287,7 +287,7 @@ const FALLBACK_HOME_SETTINGS: HomeSettingsConfig = {
         showExamDates: true,
         showExamCenters: true,
         cardDensity: 'comfortable',
-        defaultSort: 'nearest_deadline',
+        defaultSort: 'alphabetical',
     },
     highlightedCategories: [],
     featuredUniversities: [],
@@ -670,7 +670,6 @@ export default function HomeSettingsPanel() {
     const queryClient = useQueryClient();
     const [draft, setDraftState] = useState<HomeSettingsConfig | null>(null);
     const [livePreview, setLivePreview] = useState(false);
-    const [uploadingDefaultUniversityLogo, setUploadingDefaultUniversityLogo] = useState(false);
     const [resettingSection, setResettingSection] = useState<string>('');
     const [categoryToAdd, setCategoryToAdd] = useState('');
     const [featuredUniversityToAdd, setFeaturedUniversityToAdd] = useState('');
@@ -792,33 +791,6 @@ export default function HomeSettingsPanel() {
 
     const updateDraft = (updater: (prev: HomeSettingsConfig) => HomeSettingsConfig) => {
         setDraftState((prev) => (prev ? updater(prev) : prev));
-    };
-
-    const uploadDefaultUniversityLogo = async (file?: File | null) => {
-        if (!file) return;
-        try {
-            setUploadingDefaultUniversityLogo(true);
-            const response = await adminUploadNewsMedia(file);
-            const payload = response.data as {
-                item?: { url?: string };
-                url?: string;
-                absoluteUrl?: string;
-            };
-            const uploadedUrl = String(payload?.item?.url || payload?.url || payload?.absoluteUrl || '').trim();
-            if (!uploadedUrl) throw new Error('No URL returned');
-            updateDraft((prev) => ({
-                ...prev,
-                universityCardConfig: {
-                    ...prev.universityCardConfig,
-                    defaultUniversityLogo: uploadedUrl,
-                },
-            }));
-            toast.success('Default university logo uploaded');
-        } catch {
-            toast.error('Failed to upload default university logo');
-        } finally {
-            setUploadingDefaultUniversityLogo(false);
-        }
     };
 
     const categoryOptions = useMemo(() => {
@@ -1046,7 +1018,56 @@ export default function HomeSettingsPanel() {
     };
 
     if (settingsQuery.isLoading || !draft) {
-        return <div className="flex justify-center py-20"><RefreshCw className="w-6 h-6 text-indigo-400 animate-spin" /></div>;
+        const loadingGuides: InlineGuide[] = [
+            getSectionGuide('sectionVisibility'),
+            getSectionGuide('hero'),
+            toggleGuides['Show Search Box'],
+            toggleGuides['Show Next Deadline Card'],
+            getSectionGuide('subscriptionBanner'),
+            getSectionGuide('timeline'),
+            getSectionGuide('universityPreview'),
+            getSectionGuide('universityDashboard'),
+            getSectionGuide('universityCardConfig'),
+            getSectionGuide('examsWidget'),
+            getSectionGuide('newsPreview'),
+            getSectionGuide('resourcesPreview'),
+            getSectionGuide('socialStrip'),
+            getSectionGuide('adsSection'),
+            getSectionGuide('footer'),
+            getSectionGuide('ui'),
+        ];
+
+        return (
+            <div className="space-y-6">
+                <div className="rounded-2xl border border-indigo-500/15 bg-slate-900/60 p-5">
+                    <div className="flex items-center gap-3">
+                        <RefreshCw className="h-5 w-5 animate-spin text-indigo-300" />
+                        <div>
+                            <h2 className="text-lg font-bold text-white">Loading Home Settings</h2>
+                            <p className="text-xs text-slate-400">
+                                Controls are loading. Guide actions remain available while live data sync finishes.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {loadingGuides.map((guide) => (
+                        <div
+                            key={guide.title}
+                            className="rounded-2xl border border-indigo-500/15 bg-slate-900/60 p-4"
+                        >
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <p className="text-sm font-semibold text-white">{guide.title}</p>
+                                    <p className="mt-1 text-xs text-slate-400">{guide.content}</p>
+                                </div>
+                                <AdminGuideButton {...guide} tone="indigo" />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
     }
 
     return (
@@ -1162,7 +1183,16 @@ export default function HomeSettingsPanel() {
                     <SectionHeader title="Hero" section="hero" onReset={resetSection} resetting={resettingSection === 'hero'} />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <Input label="Pill Text" value={draft.hero.pillText} onChange={(value) => updateDraft((prev) => ({ ...prev, hero: { ...prev.hero, pillText: value } }))} />
-                        <Input label="Hero Image URL" value={draft.hero.heroImageUrl} onChange={(value) => updateDraft((prev) => ({ ...prev, hero: { ...prev.hero, heroImageUrl: value } }))} />
+                        <AdminImageUploadField
+                            label="Hero Image"
+                            value={draft.hero.heroImageUrl}
+                            onChange={(nextValue) => updateDraft((prev) => ({ ...prev, hero: { ...prev.hero, heroImageUrl: nextValue } }))}
+                            helper="Primary visual shown in the home hero section."
+                            category="admin_upload"
+                            previewAlt="Home hero image"
+                            previewClassName="min-h-[190px]"
+                            panelClassName="bg-slate-950/30 dark:bg-slate-950/55"
+                        />
                     </div>
                     <div className="mt-3 space-y-3">
                         <Input label="Title" value={draft.hero.title} onChange={(value) => updateDraft((prev) => ({ ...prev, hero: { ...prev.hero, title: value } }))} />
@@ -1477,28 +1507,23 @@ export default function HomeSettingsPanel() {
 
                 <section className="bg-slate-900/60 rounded-2xl border border-indigo-500/10 p-5">
                     <SectionHeader title="University Card Config" section="universityCardConfig" onReset={resetSection} resetting={resettingSection === 'universityCardConfig'} />
-                    <div className="mb-3 flex flex-wrap items-center gap-2">
-                        <label className="inline-flex items-center gap-2 rounded-xl border border-indigo-500/25 px-3 py-2 text-xs text-indigo-100 hover:bg-indigo-500/10 cursor-pointer">
-                            {uploadingDefaultUniversityLogo ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <ImageUp className="w-3.5 h-3.5" />}
-                            {uploadingDefaultUniversityLogo ? 'Uploading...' : 'Upload Default Logo'}
-                            <input
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={(event) => {
-                                    void uploadDefaultUniversityLogo(event.target.files?.[0] || null);
-                                    event.currentTarget.value = '';
-                                }}
-                            />
-                        </label>
-                        <span className="text-[11px] text-slate-500">Used when a university logo is missing.</span>
-                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <Input
-                            label="Default University Logo URL"
-                            helper="Used when a university logo is missing."
+                        <AdminImageUploadField
+                            label="Default University Logo"
                             value={draft.universityCardConfig.defaultUniversityLogo}
-                            onChange={(value) => updateDraft((prev) => ({ ...prev, universityCardConfig: { ...prev.universityCardConfig, defaultUniversityLogo: value } }))}
+                            onChange={(nextValue) => updateDraft((prev) => ({
+                                ...prev,
+                                universityCardConfig: {
+                                    ...prev.universityCardConfig,
+                                    defaultUniversityLogo: nextValue,
+                                },
+                            }))}
+                            helper="Shown when a university does not have its own uploaded logo."
+                            category="admin_upload"
+                            previewAlt="Fallback university logo"
+                            fit="contain"
+                            previewClassName="min-h-[170px]"
+                            panelClassName="bg-slate-950/30 dark:bg-slate-950/55"
                         />
                         <NumberInput
                             label="Closing Soon Days Threshold"
@@ -1579,8 +1604,8 @@ export default function HomeSettingsPanel() {
                                 }))}
                                 className="mt-1 w-full rounded-xl bg-slate-950/65 border border-indigo-500/15 px-3 py-2 text-sm text-white"
                             >
+                                <option value="alphabetical">Name (A-Z)</option>
                                 <option value="nearest_deadline">Nearest Deadline</option>
-                                <option value="alphabetical">Alphabetical</option>
                             </select>
                         </div>
                     </div>

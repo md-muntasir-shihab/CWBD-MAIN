@@ -5,7 +5,6 @@ import {
     ArrowUp,
     Check,
     GraduationCap,
-    ImageUp,
     Loader2,
     RefreshCw,
     Save,
@@ -14,10 +13,10 @@ import {
     X,
 } from 'lucide-react';
 import AdminGuardShell from '../components/admin/AdminGuardShell';
+import AdminImageUploadField from '../components/admin/AdminImageUploadField';
 import {
     adminGetUniversities,
     adminGetUniversitySettings,
-    adminUploadNewsMedia,
     adminUpdateUniversitySettings,
     type ApiUniversity,
     type AdminUniversitySettingsData,
@@ -60,7 +59,6 @@ export default function AdminUniversitySettingsPage() {
     const [local, setLocal] = useState<AdminUniversitySettingsData>(DEFAULTS);
     const [slugInput, setSlugInput] = useState('');
     const [selectedFeaturedSlug, setSelectedFeaturedSlug] = useState('');
-    const [uploadingDefaultLogo, setUploadingDefaultLogo] = useState(false);
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
     const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const originalRef = useRef<AdminUniversitySettingsData | null>(null);
@@ -168,30 +166,6 @@ export default function AdminUniversitySettingsPage() {
         }));
         setSlugInput('');
         setSelectedFeaturedSlug('');
-    }
-
-    async function uploadDefaultLogo(file?: File | null) {
-        if (!file) return;
-        try {
-            setUploadingDefaultLogo(true);
-            const response = await adminUploadNewsMedia(file);
-            const payload = response.data as {
-                item?: { url?: string };
-                url?: string;
-                absoluteUrl?: string;
-            };
-            const uploadedUrl = String(payload?.item?.url || payload?.url || payload?.absoluteUrl || '').trim();
-            if (!uploadedUrl) throw new Error('No URL returned');
-            setLocal((prev) => ({
-                ...prev,
-                defaultUniversityLogoUrl: uploadedUrl,
-            }));
-            showToast('Default logo uploaded successfully.', 'success');
-        } catch {
-            showToast('Failed to upload default logo.', 'error');
-        } finally {
-            setUploadingDefaultLogo(false);
-        }
     }
 
     function removeSlug(slug: string) {
@@ -519,47 +493,26 @@ export default function AdminUniversitySettingsPage() {
                 </section>
 
                 {/* Default Logo URL */}
-                <section className="card-flat p-5 space-y-3">
-                    <h2 className="text-base font-semibold cw-text">Default University Logo URL</h2>
+                <section className="card-flat border border-cyan-500/10 p-5 space-y-4">
+                    <h2 className="text-base font-semibold cw-text">Default University Logo</h2>
                     <p className="text-sm cw-muted">
                         Fallback logo shown when a university has no logo uploaded. Leave blank to use a placeholder icon.
                     </p>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <label className="btn-outline text-sm inline-flex items-center gap-2 cursor-pointer">
-                            {uploadingDefaultLogo ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageUp className="w-4 h-4" />}
-                            {uploadingDefaultLogo ? 'Uploading...' : 'Upload Default Logo'}
-                            <input
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={(e) => {
-                                    void uploadDefaultLogo(e.target.files?.[0] || null);
-                                    e.currentTarget.value = '';
-                                }}
-                            />
-                        </label>
-                        <span className="text-xs cw-muted">PNG/WebP recommended.</span>
-                    </div>
-                    <input
-                        type="url"
-                        placeholder="https://..."
+                    <AdminImageUploadField
+                        label="Fallback Logo"
                         value={local.defaultUniversityLogoUrl || ''}
-                        onChange={(e) =>
+                        onChange={(nextValue) =>
                             setLocal((prev) => ({
                                 ...prev,
-                                defaultUniversityLogoUrl: e.target.value.trim() || null,
+                                defaultUniversityLogoUrl: nextValue.trim() || null,
                             }))
                         }
-                        className="input-field w-full"
+                        helper="Used across home and university listings when a logo is missing."
+                        category="admin_upload"
+                        previewAlt="Default university logo"
+                        fit="contain"
+                        previewClassName="min-h-[170px]"
                     />
-                    {local.defaultUniversityLogoUrl && (
-                        <img
-                            src={local.defaultUniversityLogoUrl}
-                            alt="Logo preview"
-                            className="h-16 w-16 rounded-xl border border-card-border object-contain bg-surface p-1"
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                        />
-                    )}
                 </section>
 
                 {/* Bottom Save */}

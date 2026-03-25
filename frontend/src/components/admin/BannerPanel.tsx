@@ -1,14 +1,15 @@
 ﻿import { useMemo, useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { Plus, Edit, Trash2, Image, Upload, RefreshCw } from 'lucide-react';
+import { Plus, Edit, Trash2, Image, RefreshCw } from 'lucide-react';
 import {
     adminGetBanners,
     adminCreateBanner,
     adminUpdateBanner,
     adminDeleteBanner,
     adminPublishBanner,
-    adminSignBannerUpload,
 } from '../../services/api';
+import AdminImageUploadField from './AdminImageUploadField';
+import { uploadSignedBannerAsset } from './bannerUpload';
 
 interface BannerItem {
     _id: string;
@@ -47,7 +48,6 @@ export default function BannerPanel() {
     const [banners, setBanners] = useState<BannerItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [uploading, setUploading] = useState(false);
     const [editModal, setEditModal] = useState<null | 'create' | BannerItem>(null);
     const [form, setForm] = useState(EMPTY_FORM);
 
@@ -100,48 +100,9 @@ export default function BannerPanel() {
         setEditModal(banner);
     };
 
-    const uploadBannerAsset = async (file: File) => {
-        setUploading(true);
-        try {
-            const { data: signed } = await adminSignBannerUpload(file.name, file.type || 'application/octet-stream');
-            if (signed.provider === 's3' && signed.method === 'PUT') {
-                const response = await fetch(signed.uploadUrl, {
-                    method: 'PUT',
-                    headers: signed.headers || { 'Content-Type': file.type || 'application/octet-stream' },
-                    body: file,
-                });
-                if (!response.ok) {
-                    throw new Error('S3 upload failed');
-                }
-                setForm((prev) => ({ ...prev, imageUrl: signed.publicUrl }));
-                toast.success('Banner uploaded');
-                return;
-            }
-
-            const token = sessionStorage.getItem('campusway-token') || localStorage.getItem('campusway-token') || '';
-            const body = new FormData();
-            body.append('file', file);
-            const response = await fetch(signed.uploadUrl, {
-                method: 'POST',
-                headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-                body,
-            });
-            if (!response.ok) {
-                throw new Error('Local upload failed');
-            }
-            const result = await response.json();
-            setForm((prev) => ({ ...prev, imageUrl: result.url || signed.publicUrl }));
-            toast.success('Banner uploaded');
-        } catch (error: any) {
-            toast.error(error.message || 'Failed to upload banner');
-        } finally {
-            setUploading(false);
-        }
-    };
-
     const saveBanner = async () => {
         if (!form.imageUrl.trim()) {
-            toast.error('Image URL is required');
+            toast.error('Banner image is required');
             return;
         }
         setSaving(true);
@@ -259,32 +220,19 @@ export default function BannerPanel() {
                             <button onClick={() => setEditModal(null)} className="text-slate-400 hover:text-white text-xl">×</button>
                         </div>
                         <div className="p-6 space-y-4">
-                            <div className="rounded-xl border border-indigo-500/10 p-3 bg-slate-950/65">
-                                <label className="text-xs text-slate-400 mb-2 block">Upload Image</label>
-                                <div className="flex items-center gap-3">
-                                    <label className="px-3 py-2 rounded-lg bg-indigo-500/15 text-indigo-200 text-sm cursor-pointer hover:bg-indigo-500/25 inline-flex items-center gap-2">
-                                        <Upload className="w-4 h-4" />
-                                        {uploading ? 'Uploading...' : 'Choose File'}
-                                        <input
-                                            type="file"
-                                            className="hidden"
-                                            accept="image/*"
-                                            onChange={(event) => {
-                                                const file = event.target.files?.[0];
-                                                if (!file) return;
-                                                void uploadBannerAsset(file);
-                                            }}
-                                        />
-                                    </label>
-                                    <span className="text-xs text-slate-500">Signed S3 upload with local fallback</span>
-                                </div>
-                            </div>
-
-                            {form.imageUrl ? (
-                                <div className="rounded-xl overflow-hidden bg-slate-950/65 h-40">
-                                    <img src={form.imageUrl} alt="Preview" className="w-full h-full object-cover" />
-                                </div>
-                            ) : null}
+                            <AdminImageUploadField
+                                label="Banner Image"
+                                value={form.imageUrl}
+                                onChange={(nextValue) => setForm((prev) => ({ ...prev, imageUrl: nextValue }))}
+                                helper="Uses the existing signed banner upload flow with local fallback."
+                                required
+                                previewAlt={form.altText || form.title || 'Banner preview'}
+                                onUpload={uploadSignedBannerAsset}
+                                uploadSuccessMessage="Banner uploaded"
+                                uploadErrorMessage="Failed to upload banner"
+                                panelClassName="bg-slate-950/65 border-indigo-500/10"
+                                previewClassName="min-h-[180px] bg-slate-950/80"
+                            />
 
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
@@ -307,11 +255,6 @@ export default function BannerPanel() {
                             <div>
                                 <label className="text-xs text-slate-400 mb-1 block">Title</label>
                                 <input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })}
-                                    className="w-full bg-slate-950/65 border border-indigo-500/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:border-indigo-500/30 outline-none" />
-                            </div>
-                            <div>
-                                <label className="text-xs text-slate-400 mb-1 block">Image URL</label>
-                                <input value={form.imageUrl} onChange={(event) => setForm({ ...form, imageUrl: event.target.value })}
                                     className="w-full bg-slate-950/65 border border-indigo-500/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-600 focus:border-indigo-500/30 outline-none" />
                             </div>
                             <div>
@@ -346,7 +289,7 @@ export default function BannerPanel() {
                         </div>
                         <div className="px-6 py-4 border-t border-indigo-500/10 flex gap-3 justify-end">
                             <button onClick={() => setEditModal(null)} className="px-4 py-2 text-sm text-slate-400 hover:text-white rounded-xl hover:bg-white/5 transition-colors">Cancel</button>
-                            <button onClick={() => void saveBanner()} disabled={saving || uploading} className="px-6 py-2 text-sm bg-gradient-to-r from-indigo-600 to-cyan-600 text-white rounded-xl hover:opacity-90 shadow-lg shadow-indigo-500/20 disabled:opacity-50">
+                            <button onClick={() => void saveBanner()} disabled={saving} className="px-6 py-2 text-sm bg-gradient-to-r from-indigo-600 to-cyan-600 text-white rounded-xl hover:opacity-90 shadow-lg shadow-indigo-500/20 disabled:opacity-50">
                                 {saving ? 'Saving...' : editModal === 'create' ? 'Create' : 'Save'}
                             </button>
                         </div>

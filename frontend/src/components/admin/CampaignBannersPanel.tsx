@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import {
     Plus, Edit, Trash2, Image, RefreshCw, Eye, EyeOff,
     Calendar, Clock, ExternalLink, X, ChevronUp, ChevronDown,
-    Megaphone, Upload,
+    Megaphone,
 } from 'lucide-react';
 import {
     adminGetBanners,
@@ -11,8 +11,9 @@ import {
     adminUpdateBanner,
     adminDeleteBanner,
     adminPublishBanner,
-    adminSignBannerUpload,
 } from '../../services/api';
+import AdminImageUploadField from './AdminImageUploadField';
+import { uploadSignedBannerAsset } from './bannerUpload';
 
 /* ── Types ── */
 interface CampaignBanner {
@@ -69,7 +70,6 @@ export default function CampaignBannersPanel() {
     const [banners, setBanners] = useState<CampaignBanner[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [uploading, setUploading] = useState<'desktop' | 'mobile' | null>(null);
     const [modal, setModal] = useState<null | 'create' | CampaignBanner>(null);
     const [form, setForm] = useState(EMPTY_FORM);
 
@@ -122,44 +122,6 @@ export default function CampaignBannersPanel() {
     };
 
     /* ── Image upload ── */
-    const uploadImage = async (file: File, target: 'desktop' | 'mobile') => {
-        setUploading(target);
-        try {
-            const { data: signed } = await adminSignBannerUpload(file.name, file.type || 'application/octet-stream');
-
-            if (signed.provider === 's3' && signed.method === 'PUT') {
-                const res = await fetch(signed.uploadUrl, {
-                    method: 'PUT',
-                    headers: signed.headers || { 'Content-Type': file.type || 'application/octet-stream' },
-                    body: file,
-                });
-                if (!res.ok) throw new Error('S3 upload failed');
-                const field = target === 'mobile' ? 'mobileImageUrl' : 'imageUrl';
-                setForm((p) => ({ ...p, [field]: signed.publicUrl }));
-                toast.success(`${target === 'mobile' ? 'Mobile' : 'Desktop'} image uploaded`);
-                return;
-            }
-
-            const token = sessionStorage.getItem('campusway-token') || localStorage.getItem('campusway-token') || '';
-            const body = new FormData();
-            body.append('file', file);
-            const res = await fetch(signed.uploadUrl, {
-                method: 'POST',
-                headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-                body,
-            });
-            if (!res.ok) throw new Error('Upload failed');
-            const result = await res.json();
-            const field = target === 'mobile' ? 'mobileImageUrl' : 'imageUrl';
-            setForm((p) => ({ ...p, [field]: result.url || signed.publicUrl }));
-            toast.success(`${target === 'mobile' ? 'Mobile' : 'Desktop'} image uploaded`);
-        } catch (err: any) {
-            toast.error(err.message || 'Failed to upload image');
-        } finally {
-            setUploading(null);
-        }
-    };
-
     /* ── Save ── */
     const saveBanner = async () => {
         if (!form.imageUrl.trim()) {
@@ -433,69 +395,33 @@ export default function CampaignBannersPanel() {
                             </div>
 
                             {/* Desktop image */}
-                            <div>
-                                <label className="text-xs text-slate-400 mb-1 block">
-                                    Desktop Image <span className="text-rose-400">*</span>
-                                </label>
-                                {form.imageUrl ? (
-                                    <div className="relative rounded-xl overflow-hidden h-36 bg-slate-800/60 mb-2">
-                                        <img src={form.imageUrl} alt="Preview" className="w-full h-full object-cover" />
-                                        <button
-                                            onClick={() => setForm((p) => ({ ...p, imageUrl: '' }))}
-                                            className="absolute top-2 right-2 bg-black/50 p-1 rounded-lg"
-                                        >
-                                            <X className="w-3.5 h-3.5 text-white" />
-                                        </button>
-                                    </div>
-                                ) : null}
-                                <div className="flex gap-2">
-                                    <input
-                                        value={form.imageUrl}
-                                        onChange={(e) => setForm((p) => ({ ...p, imageUrl: e.target.value }))}
-                                        className="flex-1 bg-slate-800/60 border border-indigo-500/15 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
-                                        placeholder="Image URL or upload →"
-                                    />
-                                    <label className="shrink-0 bg-white/5 border border-indigo-500/15 rounded-xl px-3 py-2 text-sm text-slate-300 hover:bg-white/10 cursor-pointer flex items-center gap-1">
-                                        <Upload className="w-4 h-4" />
-                                        {uploading === 'desktop' ? '...' : 'Upload'}
-                                        <input
-                                            type="file"
-                                            accept="image/*"
-                                            className="hidden"
-                                            onChange={(e) => {
-                                                const file = e.target.files?.[0];
-                                                if (file) void uploadImage(file, 'desktop');
-                                            }}
-                                        />
-                                    </label>
-                                </div>
-                            </div>
+                            <AdminImageUploadField
+                                label="Desktop Image"
+                                value={form.imageUrl}
+                                onChange={(nextValue) => setForm((p) => ({ ...p, imageUrl: nextValue }))}
+                                helper="Required main creative for the home campaign banner carousel."
+                                required
+                                previewAlt={form.altText || form.title || 'Desktop banner preview'}
+                                onUpload={uploadSignedBannerAsset}
+                                uploadSuccessMessage="Desktop image uploaded"
+                                uploadErrorMessage="Failed to upload desktop image"
+                                panelClassName="bg-slate-800/45 border-indigo-500/15"
+                                previewClassName="min-h-[170px] bg-slate-900/70"
+                            />
 
                             {/* Mobile image */}
-                            <div>
-                                <label className="text-xs text-slate-400 mb-1 block">Mobile Image (optional)</label>
-                                <div className="flex gap-2">
-                                    <input
-                                        value={form.mobileImageUrl}
-                                        onChange={(e) => setForm((p) => ({ ...p, mobileImageUrl: e.target.value }))}
-                                        className="flex-1 bg-slate-800/60 border border-indigo-500/15 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
-                                        placeholder="Mobile-specific image URL"
-                                    />
-                                    <label className="shrink-0 bg-white/5 border border-indigo-500/15 rounded-xl px-3 py-2 text-sm text-slate-300 hover:bg-white/10 cursor-pointer flex items-center gap-1">
-                                        <Upload className="w-4 h-4" />
-                                        {uploading === 'mobile' ? '...' : 'Upload'}
-                                        <input
-                                            type="file"
-                                            accept="image/*"
-                                            className="hidden"
-                                            onChange={(e) => {
-                                                const file = e.target.files?.[0];
-                                                if (file) void uploadImage(file, 'mobile');
-                                            }}
-                                        />
-                                    </label>
-                                </div>
-                            </div>
+                            <AdminImageUploadField
+                                label="Mobile Image"
+                                value={form.mobileImageUrl}
+                                onChange={(nextValue) => setForm((p) => ({ ...p, mobileImageUrl: nextValue }))}
+                                helper="Optional mobile-specific version. Leave empty to reuse the desktop image."
+                                previewAlt={form.altText || form.title || 'Mobile banner preview'}
+                                onUpload={uploadSignedBannerAsset}
+                                uploadSuccessMessage="Mobile image uploaded"
+                                uploadErrorMessage="Failed to upload mobile image"
+                                panelClassName="bg-slate-800/45 border-indigo-500/15"
+                                previewClassName="min-h-[170px] bg-slate-900/70"
+                            />
 
                             {/* Link URL */}
                             <div>

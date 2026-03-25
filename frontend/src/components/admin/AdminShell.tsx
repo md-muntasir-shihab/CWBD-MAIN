@@ -8,7 +8,7 @@ import ThemeSwitchPro from '../ui/ThemeSwitchPro';
 import { ADMIN_MENU_ITEMS, ADMIN_PATHS, isAdminPathActive, type AdminMenuItem } from '../../routes/adminPaths';
 import { adminGetActionableAlerts, adminGetAdminUiLayout, adminMarkActionableAlertsRead } from '../../services/api';
 import AdminGuideButton from './AdminGuideButton';
-import { getAdminPageGuide } from './adminPageGuides';
+import { getAdminPageGuide, getAdminPageQuickGuides } from './adminPageGuides';
 
 type AdminShellProps = {
     title: string;
@@ -117,6 +117,7 @@ export default function AdminShell({ title, description, children }: AdminShellP
 
     const currentRoute = `${location.pathname}${location.search}`;
     const pageGuide = useMemo(() => getAdminPageGuide(currentRoute), [currentRoute]);
+    const quickPageGuides = useMemo(() => getAdminPageQuickGuides(currentRoute), [currentRoute]);
     const alertItems = canReadActionableAlerts ? (alertsQuery.data?.items || []) : [];
     const unreadAlertCount = canReadActionableAlerts ? Number(alertsQuery.data?.unreadCount || 0) : 0;
 
@@ -172,19 +173,18 @@ export default function AdminShell({ title, description, children }: AdminShellP
     const renderSidebarItem = (item: AdminMenuItem) => {
         const hasChildren = item.children && item.children.length > 0;
         const isExpanded = expandedMenus[item.key];
-        const active = isAdminPathActive(location.pathname, item);
+        const active = isAdminPathActive(location.pathname, item) || matchesMenuPath(item.path);
         const Icon = item.icon;
-        const itemGuide = getAdminPageGuide(item.path);
 
         return (
-            <div key={item.key} className="space-y-0.5">
+            <div key={item.key} className="space-y-1">
                 {hasChildren ? (
                     <div
                         className={`
-                            flex items-stretch rounded-xl text-sm font-medium transition-all duration-200
+                            flex items-center overflow-hidden rounded-2xl text-sm font-medium transition-all duration-200
                             ${active
-                                ? 'bg-gradient-to-r from-indigo-600 to-cyan-600 text-white shadow-lg shadow-indigo-500/20'
-                                : 'text-slate-600 hover:bg-slate-100 hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-indigo-300'
+                                ? 'bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500 text-white shadow-lg shadow-indigo-500/20 ring-1 ring-white/10'
+                                : 'text-slate-600 hover:bg-slate-100/90 hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-indigo-300'
                             }
                         `}
                     >
@@ -199,25 +199,20 @@ export default function AdminShell({ title, description, children }: AdminShellP
                             title={collapsed ? item.label : undefined}
                             className={`
                                 flex min-w-0 flex-1 items-center gap-3
-                                ${collapsed ? 'justify-center px-2 py-3' : 'px-3 py-2.5'}
+                                ${collapsed ? 'justify-center px-2 py-3.5' : 'px-3.5 py-3'}
                             `}
                         >
                             {Icon && <Icon className="h-[18px] w-[18px] flex-shrink-0" />}
                             {!collapsed && <span className="truncate">{item.label}</span>}
                         </Link>
-                        {!collapsed && itemGuide ? (
-                            <div className={`flex items-center pr-1 ${active ? 'text-white' : ''}`}>
-                                <AdminGuideButton {...itemGuide} tone="indigo" />
-                            </div>
-                        ) : null}
                         {!collapsed && (
                             <button
                                 type="button"
                                 onClick={() => toggleMenu(item.key)}
                                 aria-label={`Toggle ${item.label}`}
                                 className={`
-                                    inline-flex items-center justify-center rounded-r-xl px-3
-                                    ${active ? 'hover:bg-white/10' : 'hover:bg-slate-100 dark:hover:bg-white/5'}
+                                    inline-flex items-center justify-center self-stretch px-3 text-current/70 transition-colors
+                                    ${active ? 'hover:text-white' : 'hover:text-indigo-600 dark:hover:text-indigo-300'}
                                 `}
                             >
                                 <ChevronRight className={`h-3.5 w-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
@@ -227,10 +222,10 @@ export default function AdminShell({ title, description, children }: AdminShellP
                 ) : (
                     <div
                         className={`
-                            flex items-center rounded-xl text-sm font-medium transition-all duration-200
+                            flex items-center overflow-hidden rounded-2xl text-sm font-medium transition-all duration-200
                             ${active
-                                ? 'bg-gradient-to-r from-indigo-600 to-cyan-600 text-white shadow-lg shadow-indigo-500/20'
-                                : 'text-slate-600 hover:bg-slate-100 hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-indigo-300'
+                                ? 'bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500 text-white shadow-lg shadow-indigo-500/20 ring-1 ring-white/10'
+                                : 'text-slate-600 hover:bg-slate-100/90 hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-indigo-300'
                             }
                         `}
                     >
@@ -240,33 +235,27 @@ export default function AdminShell({ title, description, children }: AdminShellP
                             title={collapsed ? item.label : undefined}
                             className={`
                                 flex min-w-0 flex-1 items-center gap-3
-                                ${collapsed ? 'justify-center px-2 py-3' : 'px-3 py-2.5'}
+                                ${collapsed ? 'justify-center px-2 py-3.5' : 'px-3.5 py-3'}
                             `}
                         >
                             {Icon && <Icon className="h-[18px] w-[18px] flex-shrink-0" />}
                             {!collapsed && <span className="truncate">{item.label}</span>}
                         </Link>
-                        {!collapsed && itemGuide ? (
-                            <div className={`flex items-center pr-2 ${active ? 'text-white' : ''}`}>
-                                <AdminGuideButton {...itemGuide} tone="indigo" />
-                            </div>
-                        ) : null}
                     </div>
                 )}
 
                 {!collapsed && hasChildren && isExpanded && (
-                    <div className="ml-8 space-y-0.5 border-l-2 border-indigo-500/10 pl-3 dark:border-indigo-500/20">
+                    <div className="ml-7 space-y-1 border-l border-indigo-500/15 pl-4 dark:border-indigo-500/20">
                         {item.children!.map((child) => {
                             const childActive = matchesMenuPath(child.path);
                             const ChildIcon = child.icon;
-                            const childGuide = getAdminPageGuide(child.path);
                             return (
                                 <div
                                     key={child.key}
                                     className={`
-                                        flex items-center gap-2 rounded-lg text-[13px] transition-all duration-200
+                                        flex items-center gap-2 rounded-xl text-[13px] transition-all duration-200
                                         ${childActive
-                                            ? 'bg-indigo-500/10 font-medium text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300'
+                                            ? 'bg-indigo-500/10 font-medium text-indigo-600 shadow-sm dark:bg-indigo-500/15 dark:text-indigo-300'
                                             : 'text-slate-500 hover:bg-slate-100 hover:text-indigo-600 dark:text-slate-400 dark:hover:bg-white/5 dark:hover:text-indigo-300'
                                         }
                                     `}
@@ -279,11 +268,6 @@ export default function AdminShell({ title, description, children }: AdminShellP
                                         {ChildIcon && <ChildIcon className="h-3.5 w-3.5 flex-shrink-0" />}
                                         <span className="truncate">{child.label}</span>
                                     </Link>
-                                    {childGuide ? (
-                                        <div className="pr-2">
-                                            <AdminGuideButton {...childGuide} tone="indigo" />
-                                        </div>
-                                    ) : null}
                                 </div>
                             );
                         })}
@@ -294,7 +278,7 @@ export default function AdminShell({ title, description, children }: AdminShellP
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-white">
+        <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.14),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(99,102,241,0.16),_transparent_24%),rgb(2,6,23)] dark:text-white">
             <div className="flex min-h-screen">
                 {/* Mobile backdrop */}
                 {drawerOpen && (
@@ -308,7 +292,7 @@ export default function AdminShell({ title, description, children }: AdminShellP
                 <aside
                     className={`
                         fixed inset-y-0 left-0 z-50 flex flex-col
-                        bg-white/95 dark:bg-gradient-to-b dark:from-slate-950 dark:to-slate-900/80
+                        bg-white/95 shadow-2xl shadow-slate-900/5 dark:bg-gradient-to-b dark:from-slate-950 dark:via-slate-950 dark:to-slate-900/80
                         border-r border-slate-200 dark:border-indigo-500/10
                         transition-all duration-300 ease-in-out
                         w-64 ${collapsed ? 'lg:w-[72px]' : ''}
@@ -317,7 +301,7 @@ export default function AdminShell({ title, description, children }: AdminShellP
                     `}
                 >
                     {/* Logo / Brand */}
-                    <div className={`flex items-center border-b border-slate-200 p-4 dark:border-indigo-500/10 ${collapsed ? 'justify-center' : 'justify-between'}`}>
+                    <div className={`flex items-center border-b border-slate-200 px-4 py-5 dark:border-indigo-500/10 ${collapsed ? 'justify-center' : 'justify-between'}`}>
                         <Link to="/__cw_admin__/dashboard" className="flex items-center gap-3">
                             <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-cyan-500 shadow-lg shadow-indigo-500/20">
                                 <Shield className="h-5 w-5 text-white" />
@@ -342,7 +326,7 @@ export default function AdminShell({ title, description, children }: AdminShellP
                     <button
                         type="button"
                         onClick={() => setCollapsed(!collapsed)}
-                        className="absolute -right-3 top-20 z-10 hidden h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white transition-colors hover:bg-indigo-500/10 dark:border-indigo-500/20 dark:bg-slate-900/90 dark:hover:bg-indigo-500/20 lg:flex"
+                        className="absolute -right-3 top-24 z-10 hidden h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white shadow-md transition-colors hover:bg-indigo-500/10 dark:border-indigo-500/20 dark:bg-slate-900/95 dark:hover:bg-indigo-500/20 lg:flex"
                         title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                     >
                         {collapsed
@@ -351,14 +335,14 @@ export default function AdminShell({ title, description, children }: AdminShellP
                     </button>
 
                     {/* Navigation */}
-                    <nav className="flex-1 space-y-0.5 overflow-y-auto p-2 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
+                    <nav className="flex-1 space-y-1 overflow-y-auto px-2.5 py-3 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800">
                         {orderedVisibleMenuItems.map(renderSidebarItem)}
                     </nav>
 
                     {/* User info + Logout */}
-                    <div className={`border-t border-slate-200 p-3 dark:border-indigo-500/10 ${collapsed ? 'flex flex-col items-center gap-2' : ''}`}>
+                    <div className={`border-t border-slate-200 bg-slate-50/70 p-3 dark:border-indigo-500/10 dark:bg-slate-950/65 ${collapsed ? 'flex flex-col items-center gap-2' : ''}`}>
                         {!collapsed && (
-                            <div className="mb-3 flex items-center gap-3 px-1">
+                            <div className="mb-3 flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white/80 px-3 py-3 dark:border-indigo-500/10 dark:bg-slate-900/55">
                                 <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-sm font-bold text-white shadow-md">
                                     {(user?.fullName || user?.username || 'A').charAt(0).toUpperCase()}
                                 </div>
@@ -392,8 +376,8 @@ export default function AdminShell({ title, description, children }: AdminShellP
                 {/* Main content */}
                 <main className="min-w-0 flex-1 overflow-x-hidden">
                     {/* Header */}
-                    <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90">
-                        <div className="flex h-16 items-center justify-between gap-2 px-4 sm:px-6">
+                    <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/92 backdrop-blur dark:border-slate-800 dark:bg-slate-950/88">
+                        <div className="flex min-h-[72px] items-center justify-between gap-3 px-4 py-3 sm:px-6">
                             <div className="flex min-w-0 items-center gap-2">
                                 <button
                                     type="button"
@@ -405,7 +389,7 @@ export default function AdminShell({ title, description, children }: AdminShellP
                                 </button>
                                 <div className="min-w-0">
                                     <p className="truncate text-[11px] uppercase tracking-widest text-slate-400 dark:text-slate-500">{breadcrumb}</p>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <h1 className="truncate text-base font-bold text-slate-900 dark:text-white">{title}</h1>
                                         {pageGuide ? (
                                             <div className="hidden sm:inline-flex">
@@ -443,8 +427,8 @@ export default function AdminShell({ title, description, children }: AdminShellP
                                             )}
                                         </button>
                                         {notifOpen && (
-                                            <div className="absolute right-0 top-11 z-30 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-                                                <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 text-sm font-semibold dark:border-slate-700">
+                                            <div className="absolute right-0 top-11 z-30 w-80 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+                                                <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/80 px-4 py-3 text-sm font-semibold dark:border-slate-700 dark:bg-slate-950/70">
                                                     <span>Admin Alerts</span>
                                                     <button
                                                         type="button"
@@ -492,9 +476,25 @@ export default function AdminShell({ title, description, children }: AdminShellP
                                 </button>
                             </div>
                         </div>
+                        {quickPageGuides.length > 0 ? (
+                            <div className="border-t border-slate-200 px-4 py-2 sm:px-6 dark:border-slate-800">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    {quickPageGuides.map((guide) => (
+                                        <div key={guide.title} className="inline-flex">
+                                            <AdminGuideButton
+                                                {...guide}
+                                                variant="full"
+                                                tone="indigo"
+                                                actionLabel="View guide"
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : null}
                     </header>
 
-                    <div className="px-4 py-6 sm:px-6">
+                    <div className="px-4 py-6 sm:px-6 lg:px-7">
                         {description ? <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">{description}</p> : null}
                         {children}
                     </div>

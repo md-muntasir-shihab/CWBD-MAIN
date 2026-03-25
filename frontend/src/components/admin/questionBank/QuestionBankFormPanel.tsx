@@ -7,6 +7,7 @@ import {
     useUpdateBankQuestion,
 } from '../../../hooks/useQuestionBankV2Queries';
 import type { BankQuestionOption } from '../../../types/questionBank';
+import AdminImageUploadField from '../AdminImageUploadField';
 
 interface Props {
     editId: string | null;
@@ -207,10 +208,16 @@ export default function QuestionBankFormPanel({ editId, onDone }: Props) {
                         <textarea value={questionBn} onChange={(e) => setQuestionBn(e.target.value)} rows={3} className={inputCls} placeholder="প্রশ্ন বাংলায় লিখুন..." required={languageMode === 'bn'} />
                     </div>
                 )}
-                <div>
-                    <label className={labelCls}>Question Image URL</label>
-                    <input value={questionImageUrl} onChange={(e) => setQuestionImageUrl(e.target.value)} className={inputCls} placeholder="https://..." />
-                </div>
+                <AdminImageUploadField
+                    label="Question Image"
+                    value={questionImageUrl}
+                    onChange={setQuestionImageUrl}
+                    helper="Optional diagram or prompt image for this question."
+                    category="admin_upload"
+                    fit="contain"
+                    previewClassName="min-h-[180px]"
+                    panelClassName="dark:bg-slate-900/45"
+                />
             </div>
 
             {/* Options */}
@@ -246,7 +253,16 @@ export default function QuestionBankFormPanel({ editId, onDone }: Props) {
                 {(languageMode === 'bn' || languageMode === 'both') && (
                     <textarea value={explanationBn} onChange={(e) => setExplanationBn(e.target.value)} rows={2} className={inputCls} placeholder="ব্যাখ্যা (BN)..." />
                 )}
-                <input value={explanationImageUrl} onChange={(e) => setExplanationImageUrl(e.target.value)} className={inputCls} placeholder="Explanation Image URL..." />
+                <AdminImageUploadField
+                    label="Explanation Image"
+                    value={explanationImageUrl}
+                    onChange={setExplanationImageUrl}
+                    helper="Optional solution image shown under the explanation block."
+                    category="admin_upload"
+                    fit="contain"
+                    previewClassName="min-h-[180px]"
+                    panelClassName="dark:bg-slate-900/45"
+                />
             </div>
 
             {/* Extra metadata */}

@@ -3,16 +3,16 @@ import toast from 'react-hot-toast';
 import {
     Plus, Edit, Trash2, RefreshCw, Search,
     FolderOpen, Newspaper, Star, Image as ImageIcon,
-    Settings, Calendar, CheckCircle, Clock, Archive, Upload
+    Settings, Calendar, CheckCircle, Clock, Archive
 } from 'lucide-react';
 import {
     adminGetNews, adminCreateNews, adminUpdateNews,
     adminDeleteNews,
     adminGetNewsCategories, adminCreateNewsCategory, adminUpdateNewsCategory,
     adminDeleteNewsCategory, adminToggleNewsCategory,
-    adminUploadMedia,
     ApiNews, ApiNewsCategory
 } from '../../services/api';
+import AdminImageUploadField from './AdminImageUploadField';
 
 export default function NewsPanel() {
     const [activeTab, setActiveTab] = useState<'articles' | 'categories'>('articles');
@@ -47,7 +47,6 @@ export default function NewsPanel() {
         publishDate: new Date().toISOString()
     });
     const [tagInput, setTagInput] = useState('');
-    const [uploadingField, setUploadingField] = useState<'featuredImage' | 'coverImage' | null>(null);
 
     const [showCatForm, setShowCatForm] = useState(false);
     const [editingCat, setEditingCat] = useState<ApiNewsCategory | null>(null);
@@ -134,21 +133,6 @@ export default function NewsPanel() {
             setShowArticleForm(false);
             fetchNews();
         } catch { toast.error('Failed to save article'); }
-    };
-
-    const handleFileUpload = async (field: 'featuredImage' | 'coverImage', file: File) => {
-        if (!file) return;
-        setUploadingField(field);
-        const t = toast.loading(`Uploading ${field === 'featuredImage' ? 'thumbnail' : 'cover'}...`);
-        try {
-            const res = await adminUploadMedia(file);
-            setArticleForm(prev => ({ ...prev, [field]: res.data.url }));
-            toast.success('Upload complete', { id: t });
-        } catch (err: any) {
-            toast.error(err.response?.data?.message || 'Upload failed', { id: t });
-        } finally {
-            setUploadingField(null);
-        }
     };
 
     const deleteArticle = async (id: string) => {
@@ -368,53 +352,27 @@ export default function NewsPanel() {
                                             <ImageIcon className="w-4 h-4" /> Media
                                         </h4>
 
-                                        <div>
-                                            <div className="flex items-center justify-between mb-2">
-                                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Thumbnail Image</label>
-                                                <label className="cursor-pointer text-[10px] text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1 bg-indigo-400/10 px-2 py-1 rounded-lg">
-                                                    <Upload className="w-3 h-3" />
-                                                    {uploadingField === 'featuredImage' ? 'Uploading...' : 'Upload'}
-                                                    <input
-                                                        type="file"
-                                                        className="hidden"
-                                                        accept="image/*"
-                                                        onChange={e => e.target.files?.[0] && handleFileUpload('featuredImage', e.target.files[0])}
-                                                        disabled={!!uploadingField}
-                                                    />
-                                                </label>
-                                            </div>
-                                            <input
-                                                type="text"
-                                                value={articleForm.featuredImage}
-                                                onChange={e => setArticleForm({ ...articleForm, featuredImage: e.target.value })}
-                                                placeholder="https://example.com/thumb.jpg"
-                                                className="w-full bg-slate-900/65 border border-indigo-500/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none"
-                                            />
-                                        </div>
+                                        <AdminImageUploadField
+                                            label="Thumbnail Image"
+                                            value={articleForm.featuredImage}
+                                            onChange={(nextValue) => setArticleForm((prev) => ({ ...prev, featuredImage: nextValue }))}
+                                            helper="Primary news thumbnail used in cards and list previews."
+                                            category="admin_upload"
+                                            previewAlt={articleForm.title || 'News thumbnail'}
+                                            previewClassName="min-h-[160px]"
+                                            panelClassName="bg-slate-900/45 border-indigo-500/10"
+                                        />
 
-                                        <div>
-                                            <div className="flex items-center justify-between mb-2">
-                                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Cover Image (Optional)</label>
-                                                <label className="cursor-pointer text-[10px] text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1 bg-indigo-400/10 px-2 py-1 rounded-lg">
-                                                    <Upload className="w-3 h-3" />
-                                                    {uploadingField === 'coverImage' ? 'Uploading...' : 'Upload'}
-                                                    <input
-                                                        type="file"
-                                                        className="hidden"
-                                                        accept="image/*"
-                                                        onChange={e => e.target.files?.[0] && handleFileUpload('coverImage', e.target.files[0])}
-                                                        disabled={!!uploadingField}
-                                                    />
-                                                </label>
-                                            </div>
-                                            <input
-                                                type="text"
-                                                value={articleForm.coverImage}
-                                                onChange={e => setArticleForm({ ...articleForm, coverImage: e.target.value })}
-                                                placeholder="https://example.com/cover.jpg"
-                                                className="w-full bg-slate-900/65 border border-indigo-500/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none"
-                                            />
-                                        </div>
+                                        <AdminImageUploadField
+                                            label="Cover Image"
+                                            value={articleForm.coverImage}
+                                            onChange={(nextValue) => setArticleForm((prev) => ({ ...prev, coverImage: nextValue }))}
+                                            helper="Optional wide image for the article detail header."
+                                            category="admin_upload"
+                                            previewAlt={articleForm.title || 'News cover'}
+                                            previewClassName="min-h-[160px]"
+                                            panelClassName="bg-slate-900/45 border-indigo-500/10"
+                                        />
                                     </div>
 
                                     <div className="bg-slate-950/45 p-6 rounded-2xl border border-indigo-500/5 space-y-4">

@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Save, RefreshCw, Globe, Mail, Phone, Upload, Palette, Coins } from 'lucide-react';
-import { adminUpdateWebsiteSettings, getPublicSettings } from '../../services/api';
+import { Save, RefreshCw, Globe, Mail, Phone, Upload, Palette, Coins, FileText } from 'lucide-react';
+import { adminUpdateWebsiteSettings, getPublicSettings, type WebsiteStaticPagesConfig } from '../../services/api';
 import CyberToggle from '../ui/CyberToggle';
 import SocialLinksManager from './SocialLinksManager';
 import { invalidateQueryGroup, invalidationGroups, queryKeys } from '../../lib/queryKeys';
 import { useAdminRuntimeFlags } from '../../hooks/useAdminRuntimeFlags';
 import InfoHint from '../ui/InfoHint';
 import AdminGuideButton from './AdminGuideButton';
+import StaticPagesEditor from './StaticPagesEditor';
+import AdminImageUploadField from './AdminImageUploadField';
+import { createDefaultWebsiteStaticPages, mergeWebsiteStaticPages } from '../../lib/websiteStaticPages';
 
 type SiteSettingsForm = {
     websiteName: string;
@@ -49,6 +52,7 @@ type SiteSettingsForm = {
     subscriptionPageSubtitle: string;
     subscriptionDefaultBannerUrl: string;
     subscriptionLoggedOutCtaMode: 'login' | 'contact';
+    staticPages: WebsiteStaticPagesConfig;
 };
 
 const defaultSettings: SiteSettingsForm = {
@@ -90,6 +94,7 @@ const defaultSettings: SiteSettingsForm = {
     subscriptionPageSubtitle: 'Choose free or paid plans to unlock premium exam access.',
     subscriptionDefaultBannerUrl: '',
     subscriptionLoggedOutCtaMode: 'contact',
+    staticPages: createDefaultWebsiteStaticPages(),
 };
 
 export default function SiteSettingsPanel() {
@@ -131,6 +136,7 @@ export default function SiteSettingsPanel() {
                 ...defaultSettings.pricingUi,
                 ...(data.pricingUi || {}),
             },
+            staticPages: mergeWebsiteStaticPages(data.staticPages),
         });
         setPreviewLogo(data.logo || '');
         setPreviewFavicon(data.favicon || '');
@@ -153,6 +159,7 @@ export default function SiteSettingsPanel() {
             formData.append('subscriptionPageSubtitle', settings.subscriptionPageSubtitle);
             formData.append('subscriptionDefaultBannerUrl', settings.subscriptionDefaultBannerUrl);
             formData.append('subscriptionLoggedOutCtaMode', settings.subscriptionLoggedOutCtaMode);
+            formData.append('staticPages', JSON.stringify(settings.staticPages));
 
             if (logoFile) formData.append('logo', logoFile);
             if (faviconFile) formData.append('favicon', faviconFile);
@@ -186,7 +193,96 @@ export default function SiteSettingsPanel() {
     };
 
     if (settingsQuery.isLoading) {
-        return <div className="flex justify-center py-20"><RefreshCw className="w-6 h-6 text-indigo-400 animate-spin" /></div>;
+        const loadingGuides = [
+            {
+                title: 'Website Settings',
+                content: 'Global branding, public contact data, theme defaults, and subscription presentation.',
+            },
+            {
+                title: 'Website Name',
+                content: 'The shared brand label used in the public navigation, auth surfaces, and metadata.',
+            },
+            {
+                title: 'Contact Email',
+                content: 'Public support email that appears in public and footer-facing surfaces.',
+            },
+            {
+                title: 'Contact Phone',
+                content: 'Primary phone or WhatsApp line for public support touchpoints.',
+            },
+            {
+                title: 'Theme Defaults',
+                content: 'Default theme mode and how the theme switch behaves for new visitors.',
+            },
+            {
+                title: 'Allow System Mode',
+                content: 'Controls whether visitors can let CampusWay follow their device theme.',
+                enabledNote: 'Visitors can choose system-following theme behavior.',
+                disabledNote: 'Theme selection is restricted to explicit light or dark choices.',
+            },
+            {
+                title: 'Switch Variant',
+                content: 'Changes the visual style of the shared theme toggle.',
+            },
+            {
+                title: 'Animation Level',
+                content: 'Controls how much motion appears across shared public UI.',
+            },
+            {
+                title: 'Social Links',
+                content: 'Shared social platform links used by public CTA clusters and footer areas.',
+            },
+            {
+                title: 'Pricing Display',
+                content: 'Currency symbol, locale, and formatting rules for plan pricing.',
+            },
+            {
+                title: 'Subscription Page',
+                content: 'Controls subscription page headline, subtitle, and guest CTA behavior.',
+            },
+            {
+                title: 'Static Pages',
+                content: 'Shared About, Terms, and Privacy content used in public pages.',
+            },
+        ];
+
+        return (
+            <div className="space-y-6">
+                <div className="rounded-2xl border border-indigo-500/15 bg-slate-900/60 p-5">
+                    <div className="flex items-center gap-3">
+                        <RefreshCw className="h-5 w-5 animate-spin text-indigo-300" />
+                        <div>
+                            <h2 className="text-lg font-bold text-white">Loading Website Settings</h2>
+                            <p className="text-xs text-slate-400">
+                                Branding and theme controls are syncing. Guide actions stay available during load.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {loadingGuides.map((guide) => (
+                        <div
+                            key={guide.title}
+                            className="rounded-2xl border border-indigo-500/15 bg-slate-900/60 p-4"
+                        >
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <p className="text-sm font-semibold text-white">{guide.title}</p>
+                                    <p className="mt-1 text-xs text-slate-400">{guide.content}</p>
+                                </div>
+                                <AdminGuideButton
+                                    title={guide.title}
+                                    content={guide.content}
+                                    enabledNote={guide.enabledNote}
+                                    disabledNote={guide.disabledNote}
+                                    tone="indigo"
+                                />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
     }
 
     const renderToggleCard = (
@@ -477,11 +573,15 @@ export default function SiteSettingsPanel() {
                                 />
                             </div>
                             <div>
-                                <label className="text-xs text-slate-400">Default Plan Banner URL</label>
-                                <input
+                                <AdminImageUploadField
+                                    label="Default Plan Banner"
                                     value={settings.subscriptionDefaultBannerUrl}
-                                    onChange={(e) => setSettings({ ...settings, subscriptionDefaultBannerUrl: e.target.value })}
-                                    className="mt-1 w-full rounded-xl bg-slate-950/65 border border-indigo-500/15 px-3 py-2.5 text-sm text-white"
+                                    onChange={(nextValue) => setSettings({ ...settings, subscriptionDefaultBannerUrl: nextValue })}
+                                    helper="Fallback banner used on the subscription page when a plan-specific banner is missing."
+                                    category="admin_upload"
+                                    previewAlt="Default subscription banner"
+                                    previewClassName="min-h-[170px]"
+                                    panelClassName="bg-slate-950/35 dark:bg-slate-950/65"
                                 />
                             </div>
                             <div>
@@ -498,6 +598,38 @@ export default function SiteSettingsPanel() {
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <div className="bg-slate-900/60 rounded-2xl border border-indigo-500/10 p-6 space-y-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-indigo-400" />
+                            Static Pages
+                        </h3>
+                        <p className="mt-1 text-xs text-slate-500">
+                            Control the public About, Terms, and Privacy pages, including About-page founder information.
+                        </p>
+                    </div>
+                    <AdminGuideButton
+                        title="Static Pages"
+                        content="Use this section to manage public About, Terms, and Privacy content without editing code."
+                        actions={[
+                            { label: 'Sections', description: 'Each page section can be enabled, disabled, reordered, and rewritten from here.' },
+                            { label: 'Founder Profiles', description: 'The About page can publish founder details, bios, photos, and external links.' },
+                        ]}
+                        enabledNote="Enabled sections, highlights, and founder profiles are rendered publicly as soon as you save."
+                        disabledNote="Disabled blocks stay saved in admin but are hidden from the public site."
+                        affected="Public About, Terms, and Privacy pages, plus the footer legal journey that links into them."
+                        tone="indigo"
+                        actionLabel="View static-page guide"
+                    />
+                </div>
+
+                <StaticPagesEditor
+                    value={settings.staticPages}
+                    onChange={(staticPages) => setSettings((current) => ({ ...current, staticPages }))}
+                />
             </div>
 
             <SocialLinksManager />
