@@ -60,6 +60,16 @@ test.describe('Phase4 Pipelines Validation', () => {
     const createdPlanIds: string[] = [];
     const createdExamIds: string[] = [];
 
+    async function refreshAdminSession(request: APIRequestContext): Promise<void> {
+        const adminLogin = await apiLogin(
+            request,
+            seededCreds.admin.desktop.email,
+            seededCreds.admin.desktop.password,
+        );
+        adminToken = adminLogin.token;
+        adminRole = String(adminLogin.user?.role || '');
+    }
+
     test.beforeAll(async ({ request }, workerInfo) => {
         test.skip(workerInfo.project.name.includes('mobile'), 'Pipeline suite runs on desktop only.');
 
@@ -369,6 +379,7 @@ test.describe('Phase4 Pipelines Validation', () => {
 
     test('P4.3 payment pending->paid updates dashboard and P4.4 audit logs capture action', async ({ request }) => {
         const marker = `phase4-pay-${Date.now()}`;
+        await refreshAdminSession(request);
 
         const createPlan = await request.post(`/api/${ADMIN_PATH}/subscription-plans`, {
             headers: authHeader(adminToken),

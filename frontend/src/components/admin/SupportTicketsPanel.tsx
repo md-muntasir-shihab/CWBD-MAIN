@@ -141,8 +141,12 @@ export default function SupportTicketsPanel() {
     const notices = noticesQuery.data || [];
     const students = studentsQuery.data || [];
     const groups = groupsQuery.data || [];
-    const loading = ticketsQuery.isFetching || noticesQuery.isFetching;
-    const hasError = ticketsQuery.isError || noticesQuery.isError;
+    const loading = tab === 'tickets'
+        ? ticketsQuery.isFetching
+        : (noticesQuery.isFetching || studentsQuery.isFetching || groupsQuery.isFetching);
+    const hasError = tab === 'tickets'
+        ? ticketsQuery.isError
+        : (noticesQuery.isError || studentsQuery.isError || groupsQuery.isError);
 
     const recipientOptions = useMemo<NoticeRecipientOption[]>(() => {
         if (noticeForm.target === 'students') {
@@ -705,7 +709,9 @@ export default function SupportTicketsPanel() {
             <div className="min-h-[400px]">
                 {hasError ? (
                     <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-5 text-sm text-rose-200">
-                        Failed to load support data.
+                        {tab === 'tickets'
+                            ? 'Failed to load support tickets. Notices remain available from the other tab.'
+                            : 'Failed to load notice tools. Ticket inbox remains available from the other tab.'}
                         <button type="button" onClick={() => void reloadSupportData()} className="btn-outline ml-3 text-sm">Retry</button>
                     </div>
                 ) : loading && !selectedTicket ? (

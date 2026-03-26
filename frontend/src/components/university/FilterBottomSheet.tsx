@@ -105,10 +105,10 @@ export default function FilterBottomSheet({
                                     onChange={(e) => setSort(e.target.value as UniversityCardSort)}
                                     className="input-field h-11 w-full"
                                 >
-                                    <option value="closing_soon">Closing Soon</option>
-                                    <option value="exam_soon">Exam Soon</option>
                                     <option value="name_asc">Name (A-Z)</option>
                                     <option value="name_desc">Name (Z-A)</option>
+                                    <option value="closing_soon">Closing Soon</option>
+                                    <option value="exam_soon">Exam Soon</option>
                                 </select>
                             </div>
                         </div>

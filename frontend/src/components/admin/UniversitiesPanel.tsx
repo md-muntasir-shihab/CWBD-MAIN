@@ -42,8 +42,10 @@ import {
   adminUpdateUniversityCluster,
   adminValidateUniversityImport,
 } from '../../services/api';
+import { useAuth } from '../../hooks/useAuth';
 import { useAdminRuntimeFlags } from '../../hooks/useAdminRuntimeFlags';
 import { downloadFile } from '../../utils/download';
+import { promptForSensitiveActionProof } from '../../utils/sensitiveAction';
 import AdminGuideButton, { type AdminGuideButtonProps } from './AdminGuideButton';
 
 type Tab = 'universities' | 'categories' | 'clusters' | 'import';
@@ -325,8 +327,11 @@ function AdminDateField({
 }
 
 export default function UniversitiesPanel() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const runtimeFlags = useAdminRuntimeFlags();
+  const canManageTaxonomy = ['superadmin', 'admin', 'moderator'].includes(String(user?.role || ''));
+  const canDeleteTaxonomy = ['superadmin', 'admin'].includes(String(user?.role || ''));
   const [tab, setTab] = useState<Tab>('universities');
   const [universities, setUniversities] = useState<ApiUniversity[]>([]);
   const [allCandidates, setAllCandidates] = useState<ApiUniversity[]>([]);
@@ -340,6 +345,8 @@ export default function UniversitiesPanel() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [clusterFilter, setClusterFilter] = useState('');
+  const [categoryStatusView, setCategoryStatusView] = useState<'all' | 'active' | 'inactive'>('all');
+  const [clusterStatusView, setClusterStatusView] = useState<'all' | 'active' | 'inactive'>('all');
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [page, setPage] = useState(1);
@@ -463,6 +470,16 @@ export default function UniversitiesPanel() {
     () => new Map(featuredHomeUniversities.map((item, index) => [String(item.universityId), index + 1])),
     [featuredHomeUniversities],
   );
+  const visibleCategoryItems = useMemo(() => {
+    if (categoryStatusView === 'active') return categoryMaster.filter((item) => item.isActive !== false);
+    if (categoryStatusView === 'inactive') return categoryMaster.filter((item) => item.isActive === false);
+    return categoryMaster;
+  }, [categoryMaster, categoryStatusView]);
+  const visibleClusterItems = useMemo(() => {
+    if (clusterStatusView === 'active') return clusters.filter((item) => item.isActive !== false);
+    if (clusterStatusView === 'inactive') return clusters.filter((item) => item.isActive === false);
+    return clusters;
+  }, [clusterStatusView, clusters]);
   const mappedImportFields = useMemo(
     () => IMPORT_FIELDS.filter((field) => Boolean(importMapping[field]) || importDefaults[field] !== undefined),
     [importDefaults, importMapping],
@@ -675,7 +692,20 @@ export default function UniversitiesPanel() {
 
   const deleteOne = async (id: string) => {
     if (!window.confirm('Delete this university?')) return;
-    try { await adminDeleteUniversity(id); toast.success('Deleted'); await invalidateUniversityQueries(); await loadUniversities(); await loadFacets(); await loadCandidates(); }
+    try {
+      const proof = await promptForSensitiveActionProof({
+        actionLabel: 'delete university record',
+        defaultReason: `Delete university ${id}`,
+        requireOtpHint: true,
+      });
+      if (!proof) return;
+      await adminDeleteUniversity(id, proof);
+      toast.success('Deleted');
+      await invalidateUniversityQueries();
+      await loadUniversities();
+      await loadFacets();
+      await loadCandidates();
+    }
     catch (error: unknown) { toast.error(readErrorMessage(error, 'Delete failed')); }
   };
 
@@ -963,7 +993,13 @@ export default function UniversitiesPanel() {
   const deactivateCluster = async (id: string) => {
     if (!window.confirm('Deactivate cluster?')) return;
     try {
-      await adminDeleteUniversityCluster(id);
+      const proof = await promptForSensitiveActionProof({
+        actionLabel: 'deactivate university cluster',
+        defaultReason: `Deactivate university cluster ${id}`,
+        requireOtpHint: true,
+      });
+      if (!proof) return;
+      await adminDeleteUniversityCluster(id, proof);
       toast.success('Cluster deactivated');
       await invalidateUniversityQueries();
       await loadClusters();
@@ -1155,7 +1191,13 @@ export default function UniversitiesPanel() {
   const archiveCategory = async (id: string) => {
     if (!window.confirm('Archive this category?')) return;
     try {
-      await adminDeleteUniversityCategory(id);
+      const proof = await promptForSensitiveActionProof({
+        actionLabel: 'archive university category',
+        defaultReason: `Archive university category ${id}`,
+        requireOtpHint: true,
+      });
+      if (!proof) return;
+      await adminDeleteUniversityCategory(id, proof);
       await invalidateUniversityQueries();
       await loadUniversities();
       await loadCategoryMaster();
@@ -1397,63 +1439,45 @@ export default function UniversitiesPanel() {
                           );
                         })}
                         <td className="px-3 py-2.5 sticky right-0 bg-slate-900/90 backdrop-blur-md shadow-[-8px_0_12px_-4px_rgba(0,0,0,0.3)] z-10">
-                          <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-1.5">
                             {homeFeaturedOrderMap.has(u._id) ? (
                               <>
                                 <span className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold text-cyan-200">
                                   Home #{homeFeaturedOrderMap.get(u._id)}
                                 </span>
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    disabled={savingHomeFeaturedSelection || (homeFeaturedOrderMap.get(u._id) || 0) <= 1}
-                                    onClick={() => void moveUniversityHomeFeatured(u._id, 'up')}
-                                    className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-2 py-1 text-[11px] font-semibold text-cyan-200 disabled:opacity-40"
-                                  >
-                                    Up
-                                  </button>
-                                  <AdminGuideButton {...UNIVERSITY_GUIDES.homeUp} tone="indigo" />
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    disabled={savingHomeFeaturedSelection || (homeFeaturedOrderMap.get(u._id) || 0) >= featuredHomeUniversities.length}
-                                    onClick={() => void moveUniversityHomeFeatured(u._id, 'down')}
-                                    className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-2 py-1 text-[11px] font-semibold text-cyan-200 disabled:opacity-40"
-                                  >
-                                    Down
-                                  </button>
-                                  <AdminGuideButton {...UNIVERSITY_GUIDES.homeDown} tone="indigo" />
-                                </div>
+                                <button
+                                  type="button"
+                                  disabled={savingHomeFeaturedSelection || (homeFeaturedOrderMap.get(u._id) || 0) <= 1}
+                                  onClick={() => void moveUniversityHomeFeatured(u._id, 'up')}
+                                  className="rounded-full border border-cyan-500/20 bg-cyan-500/5 px-2.5 py-1 text-[11px] font-semibold text-cyan-200 disabled:opacity-40"
+                                >
+                                  Move Up
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={savingHomeFeaturedSelection || (homeFeaturedOrderMap.get(u._id) || 0) >= featuredHomeUniversities.length}
+                                  onClick={() => void moveUniversityHomeFeatured(u._id, 'down')}
+                                  className="rounded-full border border-cyan-500/20 bg-cyan-500/5 px-2.5 py-1 text-[11px] font-semibold text-cyan-200 disabled:opacity-40"
+                                >
+                                  Move Down
+                                </button>
                               </>
                             ) : (
                               <span className="rounded-lg border border-slate-700 bg-slate-950/60 px-2.5 py-1 text-[11px] font-semibold text-slate-400">
                                 Not on Home
                               </span>
                             )}
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                disabled={savingHomeFeaturedSelection}
-                                onClick={() => void toggleUniversityHomeFeatured(u)}
-                                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all disabled:opacity-40 ${homeFeaturedOrderMap.has(u._id) ? 'bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20' : 'bg-sky-500/10 text-sky-300 hover:bg-sky-500/20'}`}
-                              >
-                                {homeFeaturedOrderMap.has(u._id) ? 'Hide Home' : 'Show Home'}
-                              </button>
-                              <AdminGuideButton {...UNIVERSITY_GUIDES.homeToggle} tone="indigo" />
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <button type="button" onClick={() => openEdit(u)} className="rounded-lg bg-indigo-500/10 px-2.5 py-1 text-xs font-semibold text-indigo-400 hover:bg-indigo-500/20 transition-all">Edit</button>
-                              <AdminGuideButton {...UNIVERSITY_GUIDES.edit} tone="indigo" />
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <button type="button" onClick={() => void adminToggleUniversityStatus(u._id).then(async () => { await invalidateUniversityQueries(); await loadUniversities(); })} className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${u.isActive ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' : 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'}`}>{u.isActive ? 'Disable' : 'Enable'}</button>
-                              <AdminGuideButton {...UNIVERSITY_GUIDES.status} tone="indigo" />
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <button type="button" onClick={() => void deleteOne(u._id)} className="rounded-lg bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-400 hover:bg-red-500/20 transition-all">Delete</button>
-                              <AdminGuideButton {...UNIVERSITY_GUIDES.delete} tone="indigo" />
-                            </div>
+                            <button
+                              type="button"
+                              disabled={savingHomeFeaturedSelection}
+                              onClick={() => void toggleUniversityHomeFeatured(u)}
+                              className={`rounded-full px-2.5 py-1 text-xs font-semibold transition-all disabled:opacity-40 ${homeFeaturedOrderMap.has(u._id) ? 'bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20' : 'bg-sky-500/10 text-sky-300 hover:bg-sky-500/20'}`}
+                            >
+                              {homeFeaturedOrderMap.has(u._id) ? 'Hide Home' : 'Show Home'}
+                            </button>
+                            <button type="button" onClick={() => openEdit(u)} className="rounded-full bg-indigo-500/10 px-2.5 py-1 text-xs font-semibold text-indigo-300 hover:bg-indigo-500/20 transition-all">Edit</button>
+                            <button type="button" onClick={() => void adminToggleUniversityStatus(u._id).then(async () => { await invalidateUniversityQueries(); await loadUniversities(); })} className={`rounded-full px-2.5 py-1 text-xs font-semibold transition-all ${u.isActive ? 'bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20' : 'bg-amber-500/10 text-amber-300 hover:bg-amber-500/20'}`}>{u.isActive ? 'Disable' : 'Enable'}</button>
+                            <button type="button" onClick={() => void deleteOne(u._id)} className="rounded-full bg-rose-500/10 px-2.5 py-1 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 transition-all">Delete</button>
                           </div>
                         </td>
                       </tr>
@@ -1496,14 +1520,8 @@ export default function UniversitiesPanel() {
                         </div>
                       </div>
                       <div className="flex gap-1">
-                        <div className="flex items-center gap-1">
-                          <button type="button" onClick={() => openEdit(u)} className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-all"><Edit className="w-4 h-4" /></button>
-                          <AdminGuideButton {...UNIVERSITY_GUIDES.edit} tone="indigo" />
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button type="button" onClick={() => void deleteOne(u._id)} className="rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all"><Trash2 className="w-4 h-4" /></button>
-                          <AdminGuideButton {...UNIVERSITY_GUIDES.delete} tone="indigo" />
-                        </div>
+                        <button type="button" onClick={() => openEdit(u)} className="inline-flex items-center gap-1 rounded-full bg-indigo-500/10 px-3 py-1.5 text-xs font-semibold text-indigo-300 hover:bg-indigo-500/20 transition-all"><Edit className="w-3.5 h-3.5" /> Edit</button>
+                        <button type="button" onClick={() => void deleteOne(u._id)} className="inline-flex items-center gap-1 rounded-full bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 transition-all"><Trash2 className="w-3.5 h-3.5" /> Delete</button>
                       </div>
                     </div>
                     <div className="grid grid-cols-1 gap-2 rounded-xl border border-indigo-500/5 bg-slate-950/40 p-3 text-[11px] sm:grid-cols-2">
@@ -1525,7 +1543,6 @@ export default function UniversitiesPanel() {
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <div className="flex items-center gap-1">
                         <button
                           type="button"
                           disabled={savingHomeFeaturedSelection}
@@ -1534,11 +1551,9 @@ export default function UniversitiesPanel() {
                         >
                           {homeFeaturedOrderMap.has(u._id) ? 'Hide Home' : 'Show Home'}
                         </button>
-                        <AdminGuideButton {...UNIVERSITY_GUIDES.homeToggle} tone="indigo" />
-                      </div>
+                      
                       {homeFeaturedOrderMap.has(u._id) && (
                         <>
-                          <div className="flex items-center gap-1">
                             <button
                               type="button"
                               disabled={savingHomeFeaturedSelection || (homeFeaturedOrderMap.get(u._id) || 0) <= 1}
@@ -1547,9 +1562,6 @@ export default function UniversitiesPanel() {
                             >
                               Move Up
                             </button>
-                            <AdminGuideButton {...UNIVERSITY_GUIDES.homeUp} tone="indigo" />
-                          </div>
-                          <div className="flex items-center gap-1">
                             <button
                               type="button"
                               disabled={savingHomeFeaturedSelection || (homeFeaturedOrderMap.get(u._id) || 0) >= featuredHomeUniversities.length}
@@ -1558,14 +1570,9 @@ export default function UniversitiesPanel() {
                             >
                               Move Down
                             </button>
-                            <AdminGuideButton {...UNIVERSITY_GUIDES.homeDown} tone="indigo" />
-                          </div>
                         </>
                       )}
-                      <div className="flex items-center gap-1">
                         <button type="button" onClick={() => void adminToggleUniversityStatus(u._id).then(async () => { await invalidateUniversityQueries(); await loadUniversities(); })} className={`rounded-lg px-3 py-2 text-xs font-semibold transition-all ${u.isActive ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' : 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'}`}>{u.isActive ? 'Disable' : 'Enable'}</button>
-                        <AdminGuideButton {...UNIVERSITY_GUIDES.status} tone="indigo" />
-                      </div>
                     </div>
                   </article>
                 ))
@@ -1590,15 +1597,31 @@ export default function UniversitiesPanel() {
             <button
               type="button"
               onClick={openCategoryCreate}
-              className="ml-auto inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 px-3 py-2 text-xs font-semibold text-white hover:opacity-90 shadow-lg shadow-indigo-500/20 transition-all"
+              disabled={!canManageTaxonomy}
+              className="ml-auto inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 px-3 py-2 text-xs font-semibold text-white hover:opacity-90 shadow-lg shadow-indigo-500/20 transition-all disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Plus className="w-4 h-4" /> Add Category
             </button>
           </div>
+          <div className="rounded-2xl border border-amber-500/15 bg-amber-500/10 p-4 text-sm text-amber-100">
+            Archive only hides a category from active use. Linked universities stay intact and can be managed or reassigned later.
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(['all', 'active', 'inactive'] as const).map((view) => (
+                <button
+                  key={view}
+                  type="button"
+                  onClick={() => setCategoryStatusView(view)}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold transition ${categoryStatusView === view ? 'bg-white text-slate-900' : 'border border-white/15 text-amber-100 hover:bg-white/10'}`}
+                >
+                  {view === 'all' ? 'All' : view === 'active' ? 'Active' : 'Archived / Inactive'}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {categoryMaster.length === 0 ? (
+            {visibleCategoryItems.length === 0 ? (
               <div className="rounded-xl border border-indigo-500/10 bg-slate-900/40 p-12 text-center text-slate-500">No categories found.</div>
-            ) : categoryMaster.map((item) => (
+            ) : visibleCategoryItems.map((item) => (
               <article key={item._id} className="rounded-xl border border-indigo-500/10 bg-slate-900/60 backdrop-blur-sm p-4 space-y-3 hover:border-indigo-500/25 transition-all">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -1615,11 +1638,14 @@ export default function UniversitiesPanel() {
                   <p className="text-slate-500 font-medium">Last Sync</p><p className="text-slate-300 font-bold">{item.syncMeta?.lastSyncedAt ? dateText(item.syncMeta.lastSyncedAt) : 'Never'}</p>
                   <p className="text-slate-500 font-medium">Shared Centers</p><p className="text-slate-300 font-bold">{item.sharedConfig?.examCenters?.length || 0}</p>
                 </div>
-                <div className="mt-auto grid grid-cols-1 gap-2 sm:grid-cols-4">
-                  <button type="button" onClick={() => openCategoryEdit(item)} className="rounded-lg bg-indigo-500/10 px-2 py-1.5 text-[11px] font-bold text-indigo-400 hover:bg-indigo-500/20 transition-all">Edit</button>
-                  <button type="button" onClick={() => void syncCategoryItem(item)} className="rounded-lg bg-cyan-500/10 px-2 py-1.5 text-[11px] font-bold text-cyan-300 hover:bg-cyan-500/20 transition-all">Sync</button>
-                  <button type="button" onClick={() => void toggleCategory(item._id)} className="rounded-lg bg-emerald-500/10 px-2 py-1.5 text-[11px] font-bold text-emerald-400 hover:bg-emerald-500/20 transition-all">{item.isActive ? 'Disable' : 'Enable'}</button>
-                  <button type="button" onClick={() => void archiveCategory(item._id)} className="rounded-lg bg-red-500/10 px-2 py-1.5 text-[11px] font-bold text-red-400 hover:bg-red-500/20 transition-all">Archive</button>
+                <div className="rounded-xl border border-indigo-500/5 bg-slate-950/30 px-3 py-2 text-[11px] text-slate-400">
+                  Archive does not delete universities. Use Enable to restore visibility later.
+                </div>
+                <div className="mt-auto grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <button type="button" disabled={!canManageTaxonomy} onClick={() => openCategoryEdit(item)} className="rounded-full bg-indigo-500/10 px-2 py-1.5 text-[11px] font-bold text-indigo-300 hover:bg-indigo-500/20 transition-all disabled:cursor-not-allowed disabled:opacity-40">Edit</button>
+                  <button type="button" disabled={!canManageTaxonomy} onClick={() => void syncCategoryItem(item)} className="rounded-full bg-cyan-500/10 px-2 py-1.5 text-[11px] font-bold text-cyan-300 hover:bg-cyan-500/20 transition-all disabled:cursor-not-allowed disabled:opacity-40">Sync</button>
+                  <button type="button" disabled={!canManageTaxonomy} onClick={() => void toggleCategory(item._id)} className="rounded-full bg-emerald-500/10 px-2 py-1.5 text-[11px] font-bold text-emerald-300 hover:bg-emerald-500/20 transition-all disabled:cursor-not-allowed disabled:opacity-40">{item.isActive ? 'Disable' : 'Enable'}</button>
+                  <button type="button" disabled={!canDeleteTaxonomy} onClick={() => void archiveCategory(item._id)} className="rounded-full bg-rose-500/10 px-2 py-1.5 text-[11px] font-bold text-rose-300 hover:bg-rose-500/20 transition-all disabled:cursor-not-allowed disabled:opacity-40">Archive</button>
                 </div>
               </article>
             ))}
@@ -1631,10 +1657,25 @@ export default function UniversitiesPanel() {
         <section className="space-y-4">
           <div className="rounded-2xl border border-indigo-500/10 bg-slate-900/60 backdrop-blur-sm p-4 flex items-center gap-2">
             <h3 className="text-sm font-bold text-white tracking-tight">Cluster Management</h3>
-            <button type="button" onClick={openClusterCreate} className="ml-auto inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 px-3 py-2 text-xs font-semibold text-white hover:opacity-90 shadow-lg shadow-indigo-500/20 transition-all"><Plus className="w-4 h-4" /> New Cluster</button>
+            <button type="button" onClick={openClusterCreate} disabled={!canManageTaxonomy} className="ml-auto inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 px-3 py-2 text-xs font-semibold text-white hover:opacity-90 shadow-lg shadow-indigo-500/20 transition-all disabled:cursor-not-allowed disabled:opacity-40"><Plus className="w-4 h-4" /> New Cluster</button>
+          </div>
+          <div className="rounded-2xl border border-amber-500/15 bg-amber-500/10 p-4 text-sm text-amber-100">
+            Disabling a cluster keeps its universities safe. Inactive clusters stay in admin and can be restored after review.
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(['all', 'active', 'inactive'] as const).map((view) => (
+                <button
+                  key={view}
+                  type="button"
+                  onClick={() => setClusterStatusView(view)}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold transition ${clusterStatusView === view ? 'bg-white text-slate-900' : 'border border-white/15 text-amber-100 hover:bg-white/10'}`}
+                >
+                  {view === 'all' ? 'All' : view === 'active' ? 'Active' : 'Disabled'}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {clusters.length === 0 ? <div className="rounded-xl border border-indigo-500/10 bg-slate-900/40 p-12 text-center text-slate-500">No clusters found.</div> : clusters.map((c) => (
+            {visibleClusterItems.length === 0 ? <div className="rounded-xl border border-indigo-500/10 bg-slate-900/40 p-12 text-center text-slate-500">No clusters found.</div> : visibleClusterItems.map((c) => (
               <article key={c._id} className="rounded-xl border border-indigo-500/10 bg-slate-900/60 backdrop-blur-sm p-4 space-y-3 hover:border-indigo-500/25 transition-all">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -1649,11 +1690,14 @@ export default function UniversitiesPanel() {
                   <p className="text-slate-500 font-medium">Warnings</p><p className="text-amber-300 font-bold">{c.resolution?.warnings?.length || 0}</p>
                   <p className="text-slate-500 font-medium">Centers</p><p className="text-slate-300 font-bold">{c.dates?.examCenters?.length || 0}</p>
                 </div>
-                <div className="mt-auto grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <button type="button" onClick={() => void openClusterEdit(c)} className="rounded-lg bg-indigo-500/10 px-2 py-1.5 text-[11px] font-bold text-indigo-400 hover:bg-indigo-500/20 transition-all">Edit</button>
-                  <button type="button" onClick={() => void syncCluster(c._id)} className="rounded-lg bg-emerald-500/10 px-2 py-1.5 text-[11px] font-bold text-emerald-400 hover:bg-emerald-500/20 transition-all">Sync</button>
-                  <button type="button" onClick={() => void resolveCluster(c._id)} className="rounded-lg bg-indigo-500/5 px-2 py-1.5 text-[11px] font-bold text-indigo-300 hover:bg-indigo-500/10 transition-all">Resolve</button>
-                  <button type="button" onClick={() => void deactivateCluster(c._id)} className="rounded-lg bg-red-500/10 px-2 py-1.5 text-[11px] font-bold text-red-400 hover:bg-red-500/20 transition-all">Disable</button>
+                <div className="rounded-xl border border-indigo-500/5 bg-slate-950/30 px-3 py-2 text-[11px] text-slate-400">
+                  Disable keeps all linked universities untouched. Re-enable the cluster later from this list.
+                </div>
+                <div className="mt-auto grid grid-cols-2 gap-2 sm:grid-cols-2">
+                  <button type="button" disabled={!canManageTaxonomy} onClick={() => void openClusterEdit(c)} className="rounded-full bg-indigo-500/10 px-2 py-1.5 text-[11px] font-bold text-indigo-300 hover:bg-indigo-500/20 transition-all disabled:cursor-not-allowed disabled:opacity-40">Edit</button>
+                  <button type="button" disabled={!canManageTaxonomy} onClick={() => void syncCluster(c._id)} className="rounded-full bg-emerald-500/10 px-2 py-1.5 text-[11px] font-bold text-emerald-300 hover:bg-emerald-500/20 transition-all disabled:cursor-not-allowed disabled:opacity-40">Sync</button>
+                  <button type="button" disabled={!canManageTaxonomy} onClick={() => void resolveCluster(c._id)} className="rounded-full bg-indigo-500/5 px-2 py-1.5 text-[11px] font-bold text-indigo-300 hover:bg-indigo-500/10 transition-all disabled:cursor-not-allowed disabled:opacity-40">Resolve</button>
+                  <button type="button" disabled={!canDeleteTaxonomy} onClick={() => void deactivateCluster(c._id)} className="rounded-full bg-rose-500/10 px-2 py-1.5 text-[11px] font-bold text-rose-300 hover:bg-rose-500/20 transition-all disabled:cursor-not-allowed disabled:opacity-40">Disable</button>
                 </div>
               </article>
             ))}
@@ -2053,7 +2097,16 @@ export default function UniversitiesPanel() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-500 uppercase ml-1">Cluster Name</label><input value={clusterForm.name} onChange={(e) => setClusterForm((p) => ({ ...p, name: e.target.value }))} className="w-full rounded-xl border border-indigo-500/10 bg-slate-950/65 px-4 py-2.5 text-sm text-white focus:border-indigo-500/50 outline-none transition-all" /></div>
                 <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-500 uppercase ml-1">URL Slug</label><input value={clusterForm.slug} onChange={(e) => setClusterForm((p) => ({ ...p, slug: e.target.value }))} className="w-full rounded-xl border border-indigo-500/10 bg-slate-950/65 px-4 py-2.5 text-sm text-white focus:border-indigo-500/50 outline-none transition-all" /></div>
-                <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-500 uppercase ml-1">Description</label><input value={clusterForm.description} onChange={(e) => setClusterForm((p) => ({ ...p, description: e.target.value }))} className="w-full rounded-xl border border-indigo-500/10 bg-slate-950/65 px-4 py-2.5 text-sm text-white focus:border-indigo-500/50 outline-none transition-all" /></div>
+                <div className="space-y-1.5 lg:col-span-3">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase ml-1">Description</label>
+                  <textarea
+                    value={clusterForm.description}
+                    onChange={(e) => setClusterForm((p) => ({ ...p, description: e.target.value }))}
+                    rows={4}
+                    placeholder="Write a clear cluster description, rule summary, or public-facing explanation."
+                    className="w-full rounded-2xl border border-indigo-500/10 bg-slate-950/70 px-4 py-3 text-sm text-white focus:border-indigo-500/50 outline-none transition-all resize-y shadow-inner shadow-slate-950/20"
+                  />
+                </div>
 
                 <AdminDateField label="Master App Start" value={clusterForm.dates.applicationStartDate} onChange={(next) => setClusterForm((p) => ({ ...p, dates: { ...p.dates, applicationStartDate: next } }))} />
                 <AdminDateField label="Master App End" value={clusterForm.dates.applicationEndDate} onChange={(next) => setClusterForm((p) => ({ ...p, dates: { ...p.dates, applicationEndDate: next } }))} />

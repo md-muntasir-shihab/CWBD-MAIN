@@ -12,6 +12,7 @@ export interface CampaignListItem {
   estimatedCost?: number;
   actualCost?: number;
   createdAt: string;
+  scheduledAt?: string;
 }
 
 export interface CampaignDetail extends CampaignListItem {
@@ -77,8 +78,6 @@ export interface NotificationSettings {
   triggerToggles: { triggerKey: string; enabled: boolean; channels: string[]; guardianIncluded: boolean }[];
   subscriptionReminderDays: number[];
   resultPublishAutoSend: boolean;
-  testSendPhone?: string;
-  testSendEmail?: string;
   autoSyncCostToFinance: boolean;
 }
 
@@ -92,6 +91,101 @@ export interface ExportHistoryItem {
   failedRows: number;
   performedByName?: string;
   createdAt: string;
+}
+
+export interface SubscriptionContactCenterPlanOverview {
+  planId: string;
+  planName: string;
+  planCode: string;
+  totalMembers: number;
+  activeCount: number;
+  expiredCount: number;
+  renewalDueCount: number;
+  cancelledCount: number;
+  phoneReadyCount: number;
+  emailReadyCount: number;
+  lastUpdatedAtUTC: string | null;
+}
+
+export interface SubscriptionContactCenterMember {
+  subscriptionId: string;
+  userId: string;
+  fullName: string;
+  username: string;
+  accountStatus: string;
+  email: string;
+  phone: string;
+  guardianName: string;
+  guardianPhone: string;
+  guardianEmail: string;
+  planId: string;
+  planName: string;
+  planCode: string;
+  subscriptionStatus: string;
+  autoRenewEnabled: boolean;
+  bucket: 'active' | 'expired' | 'renewal_due' | 'cancelled_paused' | 'pending';
+  startAtUTC: string | null;
+  expiresAtUTC: string | null;
+  daysToExpiry: number | null;
+  department: string;
+  sscBatch: string;
+  hscBatch: string;
+  institutionName: string;
+  groupNames: string[];
+  pendingDue: number;
+  paymentDue: boolean;
+  profileScore: number;
+  lastUpdatedAtUTC: string | null;
+  openProfileRoute: string;
+}
+
+export interface SubscriptionContactCenterPreset {
+  _id: string;
+  name: string;
+  prefix: string;
+  suffix: string;
+  separator: string;
+  includeName: boolean;
+  includeEmail: boolean;
+  includeGuardian: boolean;
+  includePlan: boolean;
+  includeStatus: boolean;
+  isDefault: boolean;
+  updatedAt: string | null;
+}
+
+export interface SubscriptionContactCenterLogItem {
+  _id: string;
+  kind: string;
+  title: string;
+  category: string;
+  format: string;
+  rowCount: number;
+  performedByName: string;
+  createdAt: string;
+  details?: unknown;
+}
+
+export interface SubscriptionContactCenterFilters {
+  planIds?: string[];
+  planCodes?: string[];
+  bucket?: string;
+  subscriptionStatuses?: string[];
+  accountStatuses?: string[];
+  departments?: string[];
+  batches?: string[];
+  sscBatches?: string[];
+  institutionNames?: string[];
+  groupIds?: string[];
+  search?: string;
+  hasPhone?: boolean;
+  hasEmail?: boolean;
+  hasGuardian?: boolean;
+  paymentDue?: boolean;
+  renewalThresholdDays?: number;
+  profileScoreRange?: { min?: number; max?: number };
+  savedAudienceId?: string;
+  selectedUserIds?: string[];
 }
 
 type Params = Record<string, string | number | boolean | undefined>;
@@ -140,6 +234,7 @@ function normalizeCampaign(rawValue: unknown): CampaignDetail {
     estimatedCost: Number(raw.estimatedCost ?? raw.estimatedCostBDT ?? 0),
     actualCost: Number(raw.actualCost ?? 0),
     createdAt: String(raw.createdAt ?? new Date().toISOString()),
+    scheduledAt: typeof raw.scheduledAtUTC === 'string' ? raw.scheduledAtUTC : undefined,
     audienceRef: typeof raw.audienceRef === 'string' ? raw.audienceRef : undefined,
     templateIds,
     customBody: typeof raw.customBody === 'string' ? raw.customBody : undefined,
@@ -193,10 +288,6 @@ function normalizeSettings(rawValue: unknown): NotificationSettings {
     triggerToggles: triggerToggles as NotificationSettings['triggerToggles'],
     subscriptionReminderDays: Array.isArray(raw.subscriptionReminderDays) ? raw.subscriptionReminderDays as number[] : [7, 3, 1],
     resultPublishAutoSend: Boolean(raw.resultPublishAutoSend),
-    testSendPhone: typeof raw.testSendPhone === 'string'
-      ? raw.testSendPhone
-      : (typeof raw.testSendPhoneNumber === 'string' ? raw.testSendPhoneNumber : undefined),
-    testSendEmail: typeof raw.testSendEmail === 'string' ? raw.testSendEmail : undefined,
     autoSyncCostToFinance: Boolean(raw.autoSyncCostToFinance ?? true),
   };
 }
@@ -231,9 +322,18 @@ function buildCampaignPayload(input: Record<string, unknown>, preview = false) {
     manualStudentIds: audienceType === 'manual' && Array.isArray(input.manualStudentIds)
       ? input.manualStudentIds.map(id => String(id)).filter(Boolean)
       : undefined,
+    includeUserIds: Array.isArray(input.includeUserIds)
+      ? input.includeUserIds.map(id => String(id)).filter(Boolean)
+      : undefined,
+    excludeUserIds: Array.isArray(input.excludeUserIds)
+      ? input.excludeUserIds.map(id => String(id)).filter(Boolean)
+      : undefined,
     guardianTargeted,
     recipientMode,
     scheduledAtUTC: input.scheduledAtUTC,
+    originModule: typeof input.originModule === 'string' ? input.originModule : undefined,
+    originEntityId: typeof input.originEntityId === 'string' ? input.originEntityId : undefined,
+    originAction: typeof input.originAction === 'string' ? input.originAction : undefined,
     triggerKey: typeof input.triggerKey === 'string' ? input.triggerKey : undefined,
     testSend: Boolean(input.testSend),
   };
@@ -283,6 +383,9 @@ export const sendCampaign = (data: Record<string, unknown>) =>
 
 export const retryCampaign = (id: string) =>
   api.post(`/admin/notifications/campaigns/${id}/retry`).then(r => r.data);
+
+export const getCampaignDashboardSummary = () =>
+  api.get('/admin/notifications/dashboard-summary').then((r) => r.data as CampaignDashboardSummary);
 
 export const getDeliveryLogs = (params: Params = {}) =>
   api.get('/admin/notifications/delivery-logs', { params }).then((r) => {
@@ -374,8 +477,108 @@ export const updateNotificationSettings = (data: Partial<NotificationSettings>) 
   api.put('/admin/notifications/settings', {
     ...data,
     triggers: data.triggerToggles,
-    testSendPhoneNumber: data.testSendPhone,
   }).then(r => normalizeSettings(r.data));
+
+export const getSubscriptionContactCenterOverview = (filters: SubscriptionContactCenterFilters = {}) =>
+  api.get('/admin/subscription-contact-center/overview', { params: filters }).then(r => r.data as {
+    summary: {
+      totalMembers: number;
+      activeCount: number;
+      expiredCount: number;
+      renewalDueCount: number;
+      cancelledCount: number;
+      phoneReadyCount: number;
+      emailReadyCount: number;
+    };
+    plans: SubscriptionContactCenterPlanOverview[];
+    filterOptions: {
+      plans: Array<{ id: string; code: string; name: string }>;
+      groups: Array<{ id: string; name: string }>;
+      departments: string[];
+      institutionNames: string[];
+      savedAudiences: Array<{ id: string; name: string; memberCountCached: number }>;
+    };
+    renewalThresholdDays: number;
+    thresholdOptions: number[];
+  });
+
+export const getSubscriptionContactCenterMembers = (params: SubscriptionContactCenterFilters & { page?: number; limit?: number } = {}) =>
+  api.get('/admin/subscription-contact-center/members', { params }).then(r => r.data as {
+    items: SubscriptionContactCenterMember[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    summary: {
+      totalMembers: number;
+      selectedFilterBucket: string;
+      phoneReadyCount: number;
+      emailReadyCount: number;
+    };
+    filterOptions: {
+      plans: Array<{ id: string; code: string; name: string }>;
+      groups: Array<{ id: string; name: string }>;
+      departments: string[];
+      institutionNames: string[];
+      savedAudiences: Array<{ id: string; name: string; memberCountCached: number }>;
+    };
+    renewalThresholdDays: number;
+    thresholdOptions: number[];
+    permissions: {
+      canViewGuardian: boolean;
+      canExport: boolean;
+      canPersonalOutreach: boolean;
+    };
+  });
+
+export const previewSubscriptionContactCopy = (data: {
+  filters?: SubscriptionContactCenterFilters;
+  scope: 'phones' | 'emails' | 'combined' | 'guardian' | 'student_guardian' | 'raw';
+  presetId?: string;
+  preset?: Partial<SubscriptionContactCenterPreset>;
+  mode?: 'copy_preview' | 'personal_outreach';
+}) =>
+  api.post('/admin/subscription-contact-center/copy-preview', data).then(r => r.data as {
+    text: string;
+    previewText: string;
+    rowCount: number;
+    fileName: string;
+  });
+
+export const exportSubscriptionContactCenter = async (data: {
+  filters?: SubscriptionContactCenterFilters;
+  scope: 'phones' | 'emails' | 'combined' | 'guardian' | 'student_guardian' | 'raw';
+  format: 'xlsx' | 'csv' | 'txt' | 'json' | 'clipboard';
+  presetId?: string;
+  preset?: Partial<SubscriptionContactCenterPreset>;
+}) => {
+  if (data.format === 'json' || data.format === 'txt' || data.format === 'clipboard') {
+    const res = await api.post('/admin/subscription-contact-center/export', data);
+    return res.data as { text?: string; previewText?: string; rowCount?: number; fileName?: string; data?: Record<string, unknown>[]; count?: number };
+  }
+  return api.post('/admin/subscription-contact-center/export', data, { responseType: 'blob' });
+};
+
+export const getSubscriptionContactCenterPresets = () =>
+  api.get('/admin/subscription-contact-center/presets').then(r => (r.data?.items ?? []) as SubscriptionContactCenterPreset[]);
+
+export const createSubscriptionContactCenterPreset = (data: Partial<SubscriptionContactCenterPreset>) =>
+  api.post('/admin/subscription-contact-center/presets', data).then(r => r.data?.item as SubscriptionContactCenterPreset);
+
+export const updateSubscriptionContactCenterPreset = (id: string, data: Partial<SubscriptionContactCenterPreset>) =>
+  api.patch(`/admin/subscription-contact-center/presets/${id}`, data).then(r => r.data?.item as SubscriptionContactCenterPreset);
+
+export const deleteSubscriptionContactCenterPreset = (id: string) =>
+  api.delete(`/admin/subscription-contact-center/presets/${id}`).then(r => r.data as { success: boolean });
+
+export const getSubscriptionContactCenterLogs = (params: { page?: number; limit?: number } = {}) =>
+  api.get('/admin/subscription-contact-center/logs', { params }).then(r => r.data as {
+    items: SubscriptionContactCenterLogItem[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  });
 
 type DataHubExportRequest = {
   category: string;
@@ -428,6 +631,12 @@ export interface TriggerToggle {
   enabled: boolean;
   channels: ('sms' | 'email')[];
   guardianIncluded: boolean;
+  templateKey?: string;
+  delayMinutes?: number;
+  batchSize?: number;
+  retryEnabled?: boolean;
+  quietHoursMode?: 'respect' | 'bypass';
+  audienceMode?: 'affected' | 'subscription_active' | 'subscription_renewal_due' | 'custom';
 }
 
 export interface TriggerSettings {
@@ -436,6 +645,45 @@ export interface TriggerSettings {
   resultPublishChannels: ('sms' | 'email')[];
   resultPublishGuardianIncluded: boolean;
   subscriptionReminderDays: number[];
+}
+
+export interface CampaignDashboardSummary {
+  totals: {
+    totalCampaigns: number;
+    queuedCount: number;
+    processingCount: number;
+    completedCount: number;
+    failedCount: number;
+    scheduledCount: number;
+    sentToday: number;
+    failedToday: number;
+    activeTriggers: number;
+    activeProviders: number;
+    failedProviders: number;
+  };
+  audience: {
+    totalMembers: number;
+    activeCount: number;
+    expiredCount: number;
+    renewalDueCount: number;
+    cancelledCount: number;
+    phoneReadyCount: number;
+    emailReadyCount: number;
+  };
+  upcomingJobs: Array<Record<string, unknown>>;
+  providerHealth: Array<{
+    id: string;
+    name: string;
+    type: string;
+    provider: string;
+    isEnabled: boolean;
+    totalAttempts: number;
+    failedAttempts: number;
+    failureRate: number;
+    lastSuccessAt: string | null;
+    updatedAt: string;
+  }>;
+  recentFailures: Array<Record<string, unknown>>;
 }
 
 // ── Provider API ──────────────────────────────────────────────────────────────

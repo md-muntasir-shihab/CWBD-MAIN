@@ -106,6 +106,9 @@ export default function LoginPage() {
                                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                 </button>
                             </div>
+                            <p className="mt-2 text-xs leading-5 cw-muted">
+                                Password recovery now goes through admin verification. Use <span className="font-semibold cw-text">Forgot password?</span> to open a contact request with your email and phone number.
+                            </p>
                         </div>
 
                         <button type="submit" disabled={loading} className="btn-primary h-12 w-full justify-center gap-2 rounded-xl">

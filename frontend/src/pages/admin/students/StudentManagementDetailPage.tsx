@@ -488,10 +488,23 @@ function SubscriptionTab({ s, setAssignModal, setExtendModal, expireSubMut, togg
   toggleAutoMut: { mutate: () => void; isPending: boolean };
 }) {
   const sub = s.subscription;
+  const currentTimeline = (() => {
+    if (!sub?.startDate || !sub?.expiryDate) return null;
+    const start = new Date(sub.startDate).getTime();
+    const end = new Date(sub.expiryDate).getTime();
+    if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return null;
+    const now = Date.now();
+    const progress = Math.min(100, Math.max(0, ((now - start) / (end - start)) * 100));
+    const remainingDays = Math.ceil((end - now) / (1000 * 60 * 60 * 24));
+    return {
+      progress,
+      label: remainingDays >= 0 ? `${remainingDays} day${remainingDays === 1 ? '' : 's'} left` : 'Expired',
+    };
+  })();
   return (
     <div className="space-y-4">
       <Card title="Current Subscription" icon={CreditCard} action={
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button onClick={() => setAssignModal(true)} className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700">Assign Plan</button>
           {sub?.state === 'active' && (
             <>
@@ -501,6 +514,20 @@ function SubscriptionTab({ s, setAssignModal, setExtendModal, expireSubMut, togg
           )}
         </div>
       }>
+        {currentTimeline ? (
+          <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/60">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Subscription Window</p>
+              <span className="text-xs font-medium text-slate-500">{currentTimeline.label}</span>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+              <div
+                className={`h-full rounded-full ${sub?.state === 'expired' ? 'bg-rose-500' : 'bg-indigo-500'}`}
+                style={{ width: `${currentTimeline.progress}%` }}
+              />
+            </div>
+          </div>
+        ) : null}
         <InfoRow label="Status" value={sub?.state} />
         <InfoRow label="Plan" value={sub?.planName ? `${sub.planName} (${sub.planCode})` : undefined} />
         <InfoRow label="Start Date" value={sub?.startDate ? new Date(sub.startDate).toLocaleDateString() : undefined} />
@@ -518,7 +545,7 @@ function SubscriptionTab({ s, setAssignModal, setExtendModal, expireSubMut, togg
         <Card title="Subscription History" icon={Clock}>
           <div className="space-y-2">
             {sub.history.map((h: { _id: string; planName?: string; status: string; startAtUTC: string; expiresAtUTC: string }) => (
-              <div key={h._id} className="flex items-center justify-between rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
+              <div key={h._id} className="flex flex-col gap-3 rounded-lg bg-slate-50 p-3 dark:bg-slate-800 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{h.planName || 'Plan'}</p>
                   <p className="text-xs text-slate-400">{new Date(h.startAtUTC).toLocaleDateString()} → {new Date(h.expiresAtUTC).toLocaleDateString()}</p>

@@ -26,6 +26,14 @@ function authHeader(token: string): Record<string, string> {
     return { Authorization: `Bearer ${token}` };
 }
 
+function sensitiveExportHeaders(token: string): Record<string, string> {
+    return {
+        ...authHeader(token),
+        'x-sensitive-reason': 'release gate verification export check',
+        'x-current-password': seededCreds.admin.desktop.password,
+    };
+}
+
 test.describe('Import / Export / Bulk Verification', () => {
     test.describe.configure({ mode: 'serial' });
 
@@ -75,7 +83,7 @@ test.describe('Import / Export / Bulk Verification', () => {
 
         for (const endpoint of exportEndpoints) {
             const response = await request.get(endpoint, {
-                headers: authHeader(adminToken),
+                headers: sensitiveExportHeaders(adminToken),
             });
             expect(response.status(), `Export endpoint failed: ${endpoint}`).toBe(200);
             const disposition = String(response.headers()['content-disposition'] || '');

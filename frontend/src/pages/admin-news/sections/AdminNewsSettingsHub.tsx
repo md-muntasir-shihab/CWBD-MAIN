@@ -8,7 +8,6 @@ import {
     adminNewsV2UploadMedia,
     adminUpdateNewsSettings,
 } from '../../../services/api';
-import AdminNewsSettingsSection from './AdminNewsSettingsSection';
 
 type SettingsPanel = 'appearance' | 'ai' | 'share';
 
@@ -258,14 +257,20 @@ export default function AdminNewsSettingsHub({ initialPanel = 'appearance' }: Pr
                 <SummaryCard
                     title="Appearance"
                     text="Page title, banners, and visual defaults."
+                    active={panel === 'appearance'}
+                    onClick={() => setPanel('appearance')}
                 />
                 <SummaryCard
                     title="Workflow"
                     text="Fetch, draft, publish, and review defaults."
+                    active={panel === 'ai'}
+                    onClick={() => setPanel('ai')}
                 />
                 <SummaryCard
                     title="Communication"
                     text="Share templates and outbound button defaults."
+                    active={panel === 'share'}
+                    onClick={() => setPanel('share')}
                 />
             </div>
 
@@ -276,6 +281,9 @@ export default function AdminNewsSettingsHub({ initialPanel = 'appearance' }: Pr
                         <p className="text-sm text-slate-500 dark:text-slate-400">
                             Manage branding, workflow, AI preset, and share templates from one place.
                         </p>
+                        <div className="mt-2 inline-flex rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200">
+                            Editing {panel === 'appearance' ? 'appearance' : panel === 'ai' ? 'workflow + ai' : 'share + outbound buttons'}
+                        </div>
                     </div>
                     <NewsHelpButton
                         title="News Settings Center"
@@ -454,52 +462,32 @@ export default function AdminNewsSettingsHub({ initialPanel = 'appearance' }: Pr
                 </div>
             </form>
 
-            <div className="card-flat space-y-4 border border-cyan-500/20 p-4">
-                <div className="grid gap-2 md:grid-cols-3">
-                    <PanelButton active={panel === 'appearance'} title="Appearance" text="Branding and visual defaults" onClick={() => setPanel('appearance')} />
-                    <PanelButton active={panel === 'ai'} title="AI Provider" text="Drafting, prompt, and verification" onClick={() => setPanel('ai')} />
-                    <PanelButton active={panel === 'share'} title="Share / UTM" text="Templates and tracking defaults" onClick={() => setPanel('share')} />
-                </div>
-
-                {panel === 'appearance' && <AdminNewsSettingsSection mode="appearance" />}
-                {panel === 'ai' && <AdminNewsSettingsSection mode="ai" />}
-                {panel === 'share' && <AdminNewsSettingsSection mode="share" />}
-            </div>
         </div>
     );
 }
 
-function SummaryCard({ title, text }: { title: string; text: string }) {
-    return (
-        <div className="rounded-2xl border border-slate-200/80 bg-slate-100/70 p-4 dark:border-slate-800/70 dark:bg-slate-950/50">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-600 dark:text-cyan-300">{title}</p>
-            <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{text}</p>
-        </div>
-    );
-}
-
-function PanelButton({
-    active,
+function SummaryCard({
     title,
     text,
+    active,
     onClick,
 }: {
-    active: boolean;
     title: string;
     text: string;
+    active: boolean;
     onClick: () => void;
 }) {
     return (
         <button
             type="button"
-            className={`rounded-2xl border px-4 py-3 text-left transition ${active
-                ? 'border-cyan-400 bg-cyan-500/15 text-cyan-100'
-                : 'border-slate-200/80 bg-slate-100/70 text-slate-700 hover:border-cyan-400/60 hover:bg-cyan-500/5 dark:border-slate-800/70 dark:bg-slate-950/40 dark:text-slate-300'
-                }`}
             onClick={onClick}
+            className={`rounded-2xl border p-4 text-left transition ${active
+                ? 'border-cyan-400 bg-cyan-500/10 shadow-[0_12px_32px_rgba(6,182,212,0.12)]'
+                : 'border-slate-200/80 bg-slate-100/70 hover:border-cyan-400/40 dark:border-slate-800/70 dark:bg-slate-950/50'
+            }`}
         >
-            <p className="text-sm font-semibold">{title}</p>
-            <p className="mt-1 text-xs leading-5 opacity-80">{text}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-600 dark:text-cyan-300">{title}</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{text}</p>
         </button>
     );
 }

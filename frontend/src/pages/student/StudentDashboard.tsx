@@ -3,6 +3,7 @@ import { useStudentDashboardFull, useDashboardRealtime } from '../../hooks/useSt
 import type { DashboardSectionConfig } from '../../services/api';
 
 import WelcomeHeader from '../../components/student/dashboard/WelcomeHeader';
+import StudentEntryProfileCard from '../../components/student/dashboard/StudentEntryProfileCard';
 import QuickStatusCards from '../../components/student/dashboard/QuickStatusCards';
 import SmartProgressTracker from '../../components/student/dashboard/SmartProgressTracker';
 import ProfileCompletion from '../../components/student/dashboard/ProfileCompletion';
@@ -76,6 +77,7 @@ export default function StudentDashboard() {
                 dailyFocus={data.dailyFocus}
                 personalizedCtas={data.personalizedCtas}
             />
+            <StudentEntryProfileCard header={data.header} support={data.support} />
             {/* 2 — Quick Status Cards */}
             {isSectionVisible(sections, 'quickStatus') && (
                 <QuickStatusCards status={data.quickStatus} />

@@ -17,18 +17,12 @@ import {
     retryFailedDeliveries,
     triggerAutoSend,
 } from '../services/notificationOrchestrationService';
-import {
-    getTestSendMeta,
-    previewTestSend,
-    executeTestSend,
-    getTestSendLogs,
-    retryTestSendLog,
-    searchStudentsForTestSend,
-} from '../services/testSendService';
 import NotificationJob from '../models/NotificationJob';
 import NotificationDeliveryLog from '../models/NotificationDeliveryLog';
 import NotificationTemplate from '../models/NotificationTemplate';
 import NotificationSettings from '../models/NotificationSettings';
+import NotificationProvider from '../models/NotificationProvider';
+import AnnouncementNotice from '../models/AnnouncementNotice';
 import {
     exportPhoneList,
     exportEmailList,
@@ -38,12 +32,64 @@ import {
     exportManualSendList,
     getImportExportHistory,
 } from '../services/dataHubService';
+import {
+    createSubscriptionContactPreset,
+    deleteSubscriptionContactPreset,
+    exportSubscriptionContactData,
+    getSubscriptionContactCenterMembers,
+    getSubscriptionContactCenterOverview,
+    getSubscriptionContactLogs,
+    listSubscriptionContactPresets,
+    previewSubscriptionContactCopy,
+    updateSubscriptionContactPreset,
+    type SubscriptionContactScope,
+} from '../services/subscriptionContactCenterService';
 
 // AuthRequest is provided by global Express augmentation (express-user-augmentation.d.ts)
 type AuthRequest = Request;
 
 const router = Router();
 const adminAuth = [authenticate, authorize('superadmin', 'admin', 'moderator', 'editor', 'viewer', 'support_agent', 'finance_agent')];
+const contactCenterViewAuth = [authenticate, authorize('superadmin', 'admin', 'moderator', 'support_agent')];
+const contactCenterExportAuth = [authenticate, authorize('superadmin', 'admin', 'moderator')];
+const contactCenterGuardianAuth = [authenticate, authorize('superadmin', 'admin')];
+const contactCenterPresetAuth = [authenticate, authorize('superadmin', 'admin', 'moderator')];
+
+function hasGuardianScope(scope: unknown): boolean {
+    const normalized = String(scope || '').trim().toLowerCase();
+    return normalized === 'guardian' || normalized === 'student_guardian';
+}
+
+function requiresGuardianAccess(body: Record<string, unknown>): boolean {
+    const preset = (body.preset && typeof body.preset === 'object') ? body.preset as Record<string, unknown> : null;
+    return hasGuardianScope(body.scope) || Boolean(preset?.includeGuardian);
+}
+
+function assertAdminId(req: AuthRequest): string {
+    return String(req.user!._id || '');
+}
+
+function assertActorRole(req: AuthRequest): string {
+    return String(req.user?.role || '');
+}
+
+function summarizeAudienceTarget(body: Record<string, unknown>): string {
+    const audienceType = String(body.audienceType || 'all').trim().toLowerCase();
+    if (audienceType === 'group') {
+        return body.audienceGroupId ? `saved-group:${String(body.audienceGroupId)}` : 'saved-group';
+    }
+    if (audienceType === 'manual') {
+        const count = Array.isArray(body.manualStudentIds) ? body.manualStudentIds.length : 0;
+        return count > 0 ? `manual:${count}` : 'manual';
+    }
+    if (audienceType === 'filter') {
+        const filterKeys = body.audienceFilters && typeof body.audienceFilters === 'object'
+            ? Object.keys(body.audienceFilters as Record<string, unknown>)
+            : [];
+        return filterKeys.length > 0 ? `filter:${filterKeys.join(',')}` : 'filter';
+    }
+    return 'all';
+}
 
 /* ────────────────────────────────────────────────────────────────
    Campaign management
@@ -110,6 +156,8 @@ router.post('/notifications/campaigns/preview', ...adminAuth, async (req: AuthRe
             audienceGroupId: req.body.audienceGroupId,
             audienceFilters: req.body.audienceFilters,
             manualStudentIds: req.body.manualStudentIds,
+            includeUserIds: req.body.includeUserIds,
+            excludeUserIds: req.body.excludeUserIds,
             guardianTargeted: req.body.guardianTargeted,
             recipientMode: req.body.recipientMode,
             adminId: req.user!._id,
@@ -135,13 +183,40 @@ router.post('/notifications/campaigns/send', ...adminAuth, async (req: AuthReque
             audienceGroupId: req.body.audienceGroupId,
             audienceFilters: req.body.audienceFilters,
             manualStudentIds: req.body.manualStudentIds,
+            includeUserIds: req.body.includeUserIds,
+            excludeUserIds: req.body.excludeUserIds,
             guardianTargeted: req.body.guardianTargeted ?? false,
             recipientMode: req.body.recipientMode ?? 'student',
             scheduledAtUTC: req.body.scheduledAtUTC ? new Date(req.body.scheduledAtUTC) : undefined,
             adminId: req.user!._id,
+            originModule: req.body.originModule,
+            originEntityId: req.body.originEntityId,
+            originAction: req.body.originAction,
             triggerKey: req.body.triggerKey,
             testSend: req.body.testSend ?? false,
         });
+
+        const originModule = String(req.body.originModule || '').trim().toLowerCase();
+        const originEntityId = String(req.body.originEntityId || '').trim();
+        if (originModule === 'notice' && originEntityId) {
+            const channels = Array.isArray(req.body.channels)
+                ? req.body.channels
+                    .map((channel: unknown) => String(channel || '').trim().toLowerCase())
+                    .filter(Boolean)
+                : [];
+
+            await AnnouncementNotice.findByIdAndUpdate(originEntityId, {
+                $set: {
+                    deliveryMeta: {
+                        lastJobId: result.jobId || null,
+                        lastChannel: channels.length > 1 ? 'both' : channels[0] === 'sms' ? 'sms' : 'email',
+                        lastAudienceSummary: summarizeAudienceTarget(req.body || {}),
+                        lastSentAt: new Date(),
+                    },
+                },
+            });
+        }
+
         res.json(result);
     } catch (err) {
         console.error('POST /notifications/campaigns/send error:', err);
@@ -281,11 +356,317 @@ router.put('/notifications/settings', ...adminAuth, async (req: Request, res: Re
    Data Hub exports
    ──────────────────────────────────────────────────────────────── */
 
+router.get('/subscription-contact-center/overview', ...contactCenterViewAuth, async (req: AuthRequest, res: Response) => {
+    try {
+        const data = await getSubscriptionContactCenterOverview(req.query as Record<string, unknown>);
+        res.json(data);
+    } catch (err) {
+        console.error('GET /subscription-contact-center/overview error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+router.get('/notifications/dashboard-summary', ...adminAuth, async (_req: AuthRequest, res: Response) => {
+    try {
+        const now = new Date();
+        const startOfToday = new Date(now);
+        startOfToday.setHours(0, 0, 0, 0);
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+        const [
+            totalCampaigns,
+            queuedCount,
+            processingCount,
+            completedCount,
+            failedCount,
+            scheduledCount,
+            sentToday,
+            failedToday,
+            activeTriggersDoc,
+            providers,
+            recentLogs,
+            upcomingJobs,
+            audienceOverview,
+        ] = await Promise.all([
+            NotificationJob.countDocuments(),
+            NotificationJob.countDocuments({ status: 'queued' }),
+            NotificationJob.countDocuments({ status: 'processing' }),
+            NotificationJob.countDocuments({ status: 'done' }),
+            NotificationJob.countDocuments({ status: { $in: ['failed', 'partial'] } }),
+            NotificationJob.countDocuments({ scheduledAtUTC: { $gt: now } }),
+            NotificationDeliveryLog.countDocuments({ status: 'sent', createdAt: { $gte: startOfToday } }),
+            NotificationDeliveryLog.countDocuments({ status: 'failed', createdAt: { $gte: startOfToday } }),
+            NotificationSettings.findOne().lean(),
+            NotificationProvider.find().select('displayName provider type isEnabled updatedAt').lean(),
+            NotificationDeliveryLog.find({ createdAt: { $gte: sevenDaysAgo } })
+                .sort({ createdAt: -1 })
+                .limit(200)
+                .select('providerUsed status createdAt originModule originEntityId')
+                .lean(),
+            NotificationJob.find({ scheduledAtUTC: { $gt: now } })
+                .sort({ scheduledAtUTC: 1, createdAt: 1 })
+                .limit(5)
+                .select('campaignName channel scheduledAtUTC status totalTargets')
+                .lean(),
+            getSubscriptionContactCenterOverview({}),
+        ]);
+
+        const logsByProvider = new Map<string, { total: number; failed: number; lastSuccessAt: string | null }>();
+        for (const log of recentLogs as Array<Record<string, unknown>>) {
+            const key = String(log.providerUsed || '').trim();
+            if (!key) continue;
+            const entry = logsByProvider.get(key) || { total: 0, failed: 0, lastSuccessAt: null };
+            entry.total += 1;
+            if (String(log.status) === 'failed') {
+                entry.failed += 1;
+            } else if (String(log.status) === 'sent' && !entry.lastSuccessAt) {
+                entry.lastSuccessAt = String(log.createdAt || '');
+            }
+            logsByProvider.set(key, entry);
+        }
+
+        const providerHealth = (providers as Array<Record<string, unknown>>).map((provider) => {
+            const key = String(provider.displayName || provider.provider || '');
+            const stats = logsByProvider.get(key) || { total: 0, failed: 0, lastSuccessAt: null };
+            return {
+                id: String(provider._id || ''),
+                name: key,
+                type: String(provider.type || ''),
+                provider: String(provider.provider || ''),
+                isEnabled: Boolean(provider.isEnabled),
+                totalAttempts: stats.total,
+                failedAttempts: stats.failed,
+                failureRate: stats.total > 0 ? Number(((stats.failed / stats.total) * 100).toFixed(1)) : 0,
+                lastSuccessAt: stats.lastSuccessAt,
+                updatedAt: String(provider.updatedAt || ''),
+            };
+        });
+
+        res.json({
+            totals: {
+                totalCampaigns,
+                queuedCount,
+                processingCount,
+                completedCount,
+                failedCount,
+                scheduledCount,
+                sentToday,
+                failedToday,
+                activeTriggers: Array.isArray(activeTriggersDoc?.triggers)
+                    ? activeTriggersDoc.triggers.filter((trigger) => trigger.enabled).length
+                    : 0,
+                activeProviders: providerHealth.filter((provider) => provider.isEnabled).length,
+                failedProviders: providerHealth.filter((provider) => provider.isEnabled && provider.failureRate >= 50 && provider.totalAttempts > 0).length,
+            },
+            audience: audienceOverview.summary,
+            upcomingJobs,
+            providerHealth,
+            recentFailures: (recentLogs as Array<Record<string, unknown>>)
+                .filter((log) => String(log.status) === 'failed')
+                .slice(0, 8),
+        });
+    } catch (err) {
+        console.error('GET /notifications/dashboard-summary error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+router.get('/subscription-contact-center/members', ...contactCenterViewAuth, async (req: AuthRequest, res: Response) => {
+    try {
+        const role = assertActorRole(req);
+        const canViewGuardian = ['superadmin', 'admin'].includes(role);
+        const data = await getSubscriptionContactCenterMembers({
+            filters: req.query as Record<string, unknown>,
+            page: req.query.page ? parseInt(String(req.query.page), 10) : 1,
+            limit: req.query.limit ? parseInt(String(req.query.limit), 10) : 25,
+            includeGuardianData: canViewGuardian,
+        });
+        res.json({
+            ...data,
+            permissions: {
+                canViewGuardian,
+                canExport: ['superadmin', 'admin', 'moderator'].includes(role),
+                canPersonalOutreach: ['superadmin', 'admin'].includes(role),
+            },
+        });
+    } catch (err) {
+        console.error('GET /subscription-contact-center/members error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+router.post('/subscription-contact-center/copy-preview', ...contactCenterExportAuth, async (req: AuthRequest, res: Response) => {
+    try {
+        const role = assertActorRole(req);
+        if (requiresGuardianAccess(req.body) && !['superadmin', 'admin'].includes(role)) {
+            res.status(403).json({ message: 'Guardian contact access is restricted' });
+            return;
+        }
+        if (String(req.body.mode || '') === 'personal_outreach' && !['superadmin', 'admin'].includes(role)) {
+            res.status(403).json({ message: 'Personal outreach is restricted' });
+            return;
+        }
+        const payload = await previewSubscriptionContactCopy({
+            filters: (req.body.filters || {}) as Record<string, unknown>,
+            scope: String(req.body.scope || 'phones') as SubscriptionContactScope,
+            presetId: typeof req.body.presetId === 'string' ? req.body.presetId : null,
+            preset: typeof req.body.preset === 'object' && req.body.preset !== null ? req.body.preset as Record<string, unknown> : null,
+            adminId: assertAdminId(req),
+            actorRole: role,
+            mode: req.body.mode === 'personal_outreach' ? 'personal_outreach' : 'copy_preview',
+        });
+        res.json(payload);
+    } catch (err) {
+        console.error('POST /subscription-contact-center/copy-preview error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+router.post('/subscription-contact-center/export', ...contactCenterExportAuth, async (req: AuthRequest, res: Response) => {
+    try {
+        const role = assertActorRole(req);
+        if (requiresGuardianAccess(req.body) && !['superadmin', 'admin'].includes(role)) {
+            res.status(403).json({ message: 'Guardian contact access is restricted' });
+            return;
+        }
+        const result = await exportSubscriptionContactData({
+            filters: (req.body.filters || {}) as Record<string, unknown>,
+            scope: String(req.body.scope || 'phones') as SubscriptionContactScope,
+            format: String(req.body.format || 'xlsx') as 'xlsx' | 'csv' | 'txt' | 'json' | 'clipboard',
+            presetId: typeof req.body.presetId === 'string' ? req.body.presetId : null,
+            preset: typeof req.body.preset === 'object' && req.body.preset !== null ? req.body.preset as Record<string, unknown> : null,
+            adminId: assertAdminId(req),
+            actorRole: role,
+        });
+
+        if (result.text && (req.body.format === 'txt' || req.body.format === 'clipboard')) {
+            res.json({ text: result.text, previewText: result.previewText, rowCount: result.rowCount, fileName: result.fileName });
+            return;
+        }
+
+        if (result.rows && req.body.format === 'json') {
+            res.json({ data: result.rows, count: result.rowCount, fileName: result.fileName });
+            return;
+        }
+
+        res.setHeader('Content-Type', result.mimeType);
+        res.setHeader('Content-Disposition', `attachment; filename=\"${result.fileName}\"`);
+        res.send(result.buffer);
+    } catch (err) {
+        console.error('POST /subscription-contact-center/export error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+router.get('/subscription-contact-center/presets', ...contactCenterPresetAuth, async (_req: AuthRequest, res: Response) => {
+    try {
+        const data = await listSubscriptionContactPresets();
+        res.json({ items: data });
+    } catch (err) {
+        console.error('GET /subscription-contact-center/presets error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+router.post('/subscription-contact-center/presets', ...contactCenterPresetAuth, async (req: AuthRequest, res: Response) => {
+    try {
+        const item = await createSubscriptionContactPreset({
+            payload: req.body,
+            adminId: assertAdminId(req),
+            actorRole: assertActorRole(req),
+        });
+        res.status(201).json({ item });
+    } catch (err) {
+        console.error('POST /subscription-contact-center/presets error:', err);
+        res.status(400).json({ message: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.patch('/subscription-contact-center/presets/:id', ...contactCenterPresetAuth, async (req: AuthRequest, res: Response) => {
+    try {
+        const item = await updateSubscriptionContactPreset({
+            presetId: String(req.params.id || ''),
+            payload: req.body,
+            adminId: assertAdminId(req),
+            actorRole: assertActorRole(req),
+        });
+        res.json({ item });
+    } catch (err) {
+        console.error('PATCH /subscription-contact-center/presets/:id error:', err);
+        res.status(400).json({ message: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.delete('/subscription-contact-center/presets/:id', ...contactCenterPresetAuth, async (req: AuthRequest, res: Response) => {
+    try {
+        const result = await deleteSubscriptionContactPreset({
+            presetId: String(req.params.id || ''),
+            adminId: assertAdminId(req),
+            actorRole: assertActorRole(req),
+        });
+        res.json(result);
+    } catch (err) {
+        console.error('DELETE /subscription-contact-center/presets/:id error:', err);
+        res.status(400).json({ message: err instanceof Error ? err.message : 'Server error' });
+    }
+});
+
+router.get('/subscription-contact-center/logs', ...contactCenterViewAuth, async (req: AuthRequest, res: Response) => {
+    try {
+        const data = await getSubscriptionContactLogs({
+            page: req.query.page ? parseInt(String(req.query.page), 10) : 1,
+            limit: req.query.limit ? parseInt(String(req.query.limit), 10) : 25,
+        });
+        res.json(data);
+    } catch (err) {
+        console.error('GET /subscription-contact-center/logs error:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
 router.post('/data-hub/export', ...adminAuth, async (req: AuthRequest, res: Response) => {
     try {
         const { category, format, filters, selectedFields, groupId, jobId, channel, includeGuardians } = req.body;
         const adminId = req.user!._id;
+        const actorRole = assertActorRole(req);
         const baseOpts = { category, format: format ?? 'xlsx', filters, selectedFields, adminId };
+
+        if (['phone_list', 'email_list', 'guardians', 'manual_send_list', 'audience_segment'].includes(String(category || ''))) {
+            const legacyFilters: Record<string, unknown> = { ...(filters || {}) };
+            if (groupId) legacyFilters.groupIds = [String(groupId)];
+            let scope: SubscriptionContactScope = 'phones';
+            if (category === 'email_list') scope = 'emails';
+            if (category === 'guardians') scope = 'guardian';
+            if (category === 'manual_send_list') scope = includeGuardians ? 'student_guardian' : (channel === 'email' ? 'emails' : 'phones');
+            if (category === 'audience_segment') scope = 'raw';
+            if ((scope === 'guardian' || scope === 'student_guardian') && !['superadmin', 'admin'].includes(actorRole)) {
+                res.status(403).json({ message: 'Guardian contact access is restricted' });
+                return;
+            }
+
+            const result = await exportSubscriptionContactData({
+                filters: legacyFilters,
+                scope,
+                format: String(format || 'xlsx') as 'xlsx' | 'csv' | 'txt' | 'json' | 'clipboard',
+                adminId: String(adminId),
+                actorRole,
+            });
+
+            if (result.text && (format === 'txt' || format === 'clipboard')) {
+                res.json({ text: result.text, rowCount: result.rowCount, fileName: result.fileName });
+                return;
+            }
+
+            if (result.rows && format === 'json') {
+                res.json({ data: result.rows, count: result.rowCount, fileName: result.fileName });
+                return;
+            }
+
+            res.setHeader('Content-Type', result.mimeType);
+            res.setHeader('Content-Disposition', `attachment; filename="${result.fileName}"`);
+            res.send(result.buffer);
+            return;
+        }
 
         let result;
         switch (category) {
@@ -392,7 +773,17 @@ router.get('/notifications/triggers', ...adminAuth, async (_req: Request, res: R
 router.put('/notifications/triggers/:triggerKey', ...adminAuth, async (req: AuthRequest, res: Response) => {
     try {
         const { triggerKey } = req.params;
-        const { enabled, channels, guardianIncluded } = req.body;
+        const {
+            enabled,
+            channels,
+            guardianIncluded,
+            templateKey,
+            delayMinutes,
+            batchSize,
+            retryEnabled,
+            quietHoursMode,
+            audienceMode,
+        } = req.body;
         if (!triggerKey || typeof triggerKey !== 'string') {
             res.status(400).json({ message: 'triggerKey is required' });
             return;
@@ -406,11 +797,30 @@ router.put('/notifications/triggers/:triggerKey', ...adminAuth, async (req: Auth
         }
 
         const idx = settings.triggers.findIndex((t) => t.triggerKey === triggerKey);
-        const triggerData = {
+        const triggerData: {
+            triggerKey: string;
+            enabled: boolean;
+            channels: ('sms' | 'email')[];
+            guardianIncluded: boolean;
+            templateKey: string;
+            delayMinutes: number;
+            batchSize: number;
+            retryEnabled: boolean;
+            quietHoursMode: 'respect' | 'bypass';
+            audienceMode: 'affected' | 'subscription_active' | 'subscription_renewal_due' | 'custom';
+        } = {
             triggerKey,
             enabled: enabled ?? true,
             channels: allowedChannels.length > 0 ? allowedChannels : ['sms'],
             guardianIncluded: guardianIncluded ?? false,
+            templateKey: templateKey ? String(templateKey).toUpperCase().trim() : '',
+            delayMinutes: Number.isFinite(Number(delayMinutes)) ? Math.max(0, Number(delayMinutes)) : 0,
+            batchSize: Number.isFinite(Number(batchSize)) ? Math.max(0, Number(batchSize)) : 0,
+            retryEnabled: retryEnabled ?? true,
+            quietHoursMode: quietHoursMode === 'bypass' ? 'bypass' : 'respect',
+            audienceMode: ['affected', 'subscription_active', 'subscription_renewal_due', 'custom'].includes(String(audienceMode))
+                ? (String(audienceMode) as 'affected' | 'subscription_active' | 'subscription_renewal_due' | 'custom')
+                : 'affected',
         };
 
         if (idx >= 0) {
@@ -438,6 +848,14 @@ router.put('/notifications/triggers', ...adminAuth, async (req: AuthRequest, res
                 enabled: t.enabled ?? true,
                 channels: (Array.isArray(t.channels) ? t.channels : ['sms']).filter((c: string) => ['sms', 'email'].includes(c)),
                 guardianIncluded: t.guardianIncluded ?? false,
+                templateKey: t.templateKey ? String(t.templateKey).toUpperCase().trim() : '',
+                delayMinutes: Number.isFinite(Number(t.delayMinutes)) ? Math.max(0, Number(t.delayMinutes)) : 0,
+                batchSize: Number.isFinite(Number(t.batchSize)) ? Math.max(0, Number(t.batchSize)) : 0,
+                retryEnabled: t.retryEnabled ?? true,
+                quietHoursMode: t.quietHoursMode === 'bypass' ? 'bypass' : 'respect',
+                audienceMode: ['affected', 'subscription_active', 'subscription_renewal_due', 'custom'].includes(String(t.audienceMode))
+                    ? String(t.audienceMode)
+                    : 'affected',
             }));
         }
         if (resultPublishAutoSend !== undefined) update.resultPublishAutoSend = !!resultPublishAutoSend;
@@ -462,76 +880,5 @@ router.put('/notifications/triggers', ...adminAuth, async (req: AuthRequest, res
 /* ────────────────────────────────────────────────────────────────
    Test-Send endpoints
    ──────────────────────────────────────────────────────────────── */
-
-// Meta: providers, templates, cost config, presets
-router.get('/notifications/test-send/meta', ...adminAuth, async (_req: Request, res: Response) => {
-    try {
-        const meta = await getTestSendMeta();
-        res.json(meta);
-    } catch (err) {
-        console.error('GET /notifications/test-send/meta error:', err);
-        res.status(500).json({ message: 'Server error' });
-    }
-});
-
-// Search students for recipient picker
-router.get('/notifications/test-send/search-students', ...adminAuth, async (req: Request, res: Response) => {
-    try {
-        const result = await searchStudentsForTestSend(String(req.query.q ?? ''));
-        res.json(result);
-    } catch (err) {
-        console.error('GET /notifications/test-send/search-students error:', err);
-        res.status(500).json({ message: 'Server error' });
-    }
-});
-
-// Preview: validate + render without sending
-router.post('/notifications/test-send/preview', ...adminAuth, async (req: AuthRequest, res: Response) => {
-    try {
-        const preview = await previewTestSend({ ...req.body, adminId: req.user!._id });
-        res.json(preview);
-    } catch (err) {
-        const message = err instanceof Error ? err.message : 'Preview failed';
-        res.status(400).json({ message });
-    }
-});
-
-// Send: actually dispatch or log-only
-router.post('/notifications/test-send/send', ...adminAuth, async (req: AuthRequest, res: Response) => {
-    try {
-        const result = await executeTestSend({ ...req.body, adminId: req.user!._id });
-        res.json(result);
-    } catch (err) {
-        const message = err instanceof Error ? err.message : 'Send failed';
-        res.status(400).json({ message });
-    }
-});
-
-// Recent test-send logs
-router.get('/notifications/test-send/logs', ...adminAuth, async (req: Request, res: Response) => {
-    try {
-        const result = await getTestSendLogs({
-            page: req.query.page ? parseInt(String(req.query.page), 10) : undefined,
-            limit: req.query.limit ? parseInt(String(req.query.limit), 10) : undefined,
-            channel: req.query.channel as string | undefined,
-            status: req.query.status as string | undefined,
-        });
-        res.json(result);
-    } catch (err) {
-        console.error('GET /notifications/test-send/logs error:', err);
-        res.status(500).json({ message: 'Server error' });
-    }
-});
-
-// Retry a failed test send
-router.post('/notifications/test-send/logs/:id/retry', ...adminAuth, async (req: AuthRequest, res: Response) => {
-    try {
-        const result = await retryTestSendLog(String(req.params.id), req.user!._id);
-        res.json(result);
-    } catch (err) {
-        const message = err instanceof Error ? err.message : 'Retry failed';
-        res.status(400).json({ message });
-    }
-});
 
 export default router;

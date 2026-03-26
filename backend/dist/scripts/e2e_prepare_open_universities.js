@@ -46,6 +46,7 @@ const UniversitySettings_1 = __importDefault(require("../models/UniversitySettin
 const User_1 = __importDefault(require("../models/User"));
 const universitySyncService_1 = require("../services/universitySyncService");
 const DAY_MS = 24 * 60 * 60 * 1000;
+const SHOULD_OVERRIDE_HOME_HERO = String(process.env.E2E_PREPARE_OVERRIDE_HOME_HERO || 'false').toLowerCase() === 'true';
 function nowPlusDays(days) {
     return new Date(Date.now() + days * DAY_MS);
 }
@@ -484,16 +485,18 @@ async function run() {
                     badgeText: index === 0 ? 'Top' : '',
                     enabled: true,
                 })),
-                hero: {
-                    ...homeDefaults.hero,
-                    pillText: 'CampusWay Universities QA',
-                    title: 'Open Universities Audit Dataset',
-                    subtitle: 'Cluster cards, featured universities, deadlines, and edge-case fixtures are active for QA.',
-                    showSearch: true,
-                    searchPlaceholder: 'Search universities, exams, news...',
-                    primaryCTA: { label: 'Explore Universities', url: '/universities' },
-                    secondaryCTA: { label: 'View Featured Clusters', url: '/universities' },
-                },
+                ...(SHOULD_OVERRIDE_HOME_HERO ? {
+                    hero: {
+                        ...homeDefaults.hero,
+                        pillText: 'CampusWay Universities QA',
+                        title: 'Open Universities Audit Dataset',
+                        subtitle: 'Cluster cards, featured universities, deadlines, and edge-case fixtures are active for QA.',
+                        showSearch: true,
+                        searchPlaceholder: 'Search universities, exams, news...',
+                        primaryCTA: { label: 'Explore Universities', url: '/universities' },
+                        secondaryCTA: { label: 'View Featured Clusters', url: '/universities' },
+                    },
+                } : {}),
             },
         }, { upsert: true, new: true, setDefaultsOnInsert: true });
         await UniversitySettings_1.default.findOneAndUpdate({}, {

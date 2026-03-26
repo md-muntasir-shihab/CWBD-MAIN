@@ -1,13 +1,6 @@
-import AdminGuardShell from '../components/admin/AdminGuardShell';
-import NotificationAutomationPanel from '../components/admin/NotificationAutomationPanel';
+import { Navigate } from 'react-router-dom';
+import { ADMIN_PATHS } from '../routes/adminPaths';
 
 export default function AdminSettingsNotificationsPage() {
-    return (
-        <AdminGuardShell
-            title="Notification Settings"
-            description="Configure automation triggers and template text for student notifications."
-        >
-            <NotificationAutomationPanel />
-        </AdminGuardShell>
-    );
+    return <Navigate to={ADMIN_PATHS.campaignsNotifications} replace />;
 }

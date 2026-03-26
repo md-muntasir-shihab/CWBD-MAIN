@@ -32,11 +32,17 @@ const EMPTY_FORM = {
     // SMS credentials
     apiEndpoint: '',
     apiKey: '',
+    twilioAccountSid: '',
+    twilioAuthToken: '',
+    twilioFromNumber: '',
+    webhookUrl: '',
     // Email credentials
     host: '',
     port: '587',
+    secure: false,
     username: '',
     password: '',
+    sendgridApiKey: '',
 };
 
 const fieldCls = 'w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200';
@@ -49,6 +55,11 @@ export default function ProvidersPanel({ showToast }: Props) {
     const [editing, setEditing] = useState<string | null>(null);
     const [creating, setCreating] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+    const isCustomProvider = form.provider === 'custom';
+    const isTwilioProvider = form.provider === 'twilio';
+    const isLocalBdSmsProvider = form.provider === 'local_bd_rest';
+    const isSmtpProvider = form.provider === 'smtp';
+    const isSendgridProvider = form.provider === 'sendgrid';
 
     const saveMut = useMutation({
         mutationFn: (v: { id?: string; data: Record<string, unknown>; proof: Awaited<ReturnType<typeof promptForSensitiveActionProof>> }) =>
@@ -110,9 +121,42 @@ export default function ProvidersPanel({ showToast }: Props) {
     }
 
     async function handleSave() {
-        const credentials: Record<string, string> = form.type === 'sms'
-            ? { apiEndpoint: form.apiEndpoint, apiKey: form.apiKey }
-            : { host: form.host, port: form.port, username: form.username, password: form.password };
+        let credentials: Record<string, string> = {};
+
+        if (form.type === 'sms') {
+            if (isLocalBdSmsProvider) {
+                credentials = {
+                    apiUrl: form.apiEndpoint.trim(),
+                    token: form.apiKey.trim(),
+                };
+            } else if (isTwilioProvider) {
+                credentials = {
+                    accountSid: form.twilioAccountSid.trim(),
+                    authToken: form.twilioAuthToken.trim(),
+                    fromNumber: (form.twilioFromNumber || form.senderConfig.smsSenderId).trim(),
+                };
+            } else if (isCustomProvider) {
+                credentials = {
+                    webhookUrl: form.webhookUrl.trim(),
+                };
+            }
+        } else if (isSmtpProvider) {
+            credentials = {
+                host: form.host.trim(),
+                port: form.port.trim(),
+                secure: String(Boolean(form.secure)),
+                user: form.username.trim(),
+                pass: form.password.trim(),
+            };
+        } else if (isSendgridProvider) {
+            credentials = {
+                apiKey: form.sendgridApiKey.trim(),
+            };
+        } else if (isCustomProvider) {
+            credentials = {
+                webhookUrl: form.webhookUrl.trim(),
+            };
+        }
 
         const payload = {
             type: form.type,
@@ -180,39 +224,127 @@ export default function ProvidersPanel({ showToast }: Props) {
                     {form.type === 'sms' && (
                         <div className="grid gap-4 sm:grid-cols-2">
                             <div>
-                                <label className={labelCls}>API Endpoint / Base URL</label>
-                                <input value={form.apiEndpoint} onChange={e => setForm(p => ({ ...p, apiEndpoint: e.target.value }))} className={fieldCls} placeholder="https://api.provider.com/sms" />
-                            </div>
-                            <div>
-                                <label className={labelCls}>API Key / Token</label>
-                                <input type="password" value={form.apiKey} onChange={e => setForm(p => ({ ...p, apiKey: e.target.value }))} className={fieldCls} placeholder={editing ? '(leave blank to keep current)' : 'API Key'} />
-                            </div>
+                            <label className={labelCls}>
+                                {isCustomProvider ? 'Webhook URL' : isTwilioProvider ? 'Account SID' : 'API Endpoint / Base URL'}
+                            </label>
+                            <input
+                                value={isCustomProvider ? form.webhookUrl : isTwilioProvider ? form.twilioAccountSid : form.apiEndpoint}
+                                onChange={e => setForm(p => ({
+                                    ...p,
+                                    ...(isCustomProvider
+                                        ? { webhookUrl: e.target.value }
+                                        : isTwilioProvider
+                                            ? { twilioAccountSid: e.target.value }
+                                            : { apiEndpoint: e.target.value }),
+                                }))}
+                                className={fieldCls}
+                                placeholder={
+                                    isCustomProvider
+                                        ? 'http://127.0.0.1:5055/mock-sms'
+                                        : isTwilioProvider
+                                            ? 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+                                            : 'https://api.provider.com/sms'
+                                }
+                            />
+                        </div>
+                        <div>
+                            <label className={labelCls}>
+                                {isCustomProvider ? 'Webhook Auth / Secret (Optional)' : isTwilioProvider ? 'Auth Token' : 'API Key / Token'}
+                            </label>
+                            <input
+                                type="password"
+                                value={isCustomProvider ? '' : isTwilioProvider ? form.twilioAuthToken : form.apiKey}
+                                onChange={e => setForm(p => ({
+                                    ...p,
+                                    ...(isTwilioProvider
+                                        ? { twilioAuthToken: e.target.value }
+                                        : { apiKey: e.target.value }),
+                                }))}
+                                className={fieldCls}
+                                placeholder={
+                                    editing
+                                        ? '(leave blank to keep current)'
+                                        : isCustomProvider
+                                            ? 'Optional'
+                                            : isTwilioProvider
+                                                ? 'Auth token'
+                                                : 'API Key'
+                                }
+                                disabled={isCustomProvider}
+                            />
+                        </div>
+                        {!isCustomProvider && (
                             <div>
                                 <label className={labelCls}>Sender ID / From Number</label>
-                                <input value={form.senderConfig.smsSenderId} onChange={e => setForm(p => ({ ...p, senderConfig: { ...p.senderConfig, smsSenderId: e.target.value } }))} className={fieldCls} placeholder="+8801XXXXXXXXX or CAMPUSWAY" />
+                                <input
+                                    value={isTwilioProvider ? form.twilioFromNumber : form.senderConfig.smsSenderId}
+                                    onChange={e => setForm(p => ({
+                                        ...p,
+                                        ...(isTwilioProvider
+                                            ? { twilioFromNumber: e.target.value }
+                                            : { senderConfig: { ...p.senderConfig, smsSenderId: e.target.value } }),
+                                    }))}
+                                    className={fieldCls}
+                                    placeholder="+8801XXXXXXXXX or CAMPUSWAY"
+                                />
                             </div>
-                        </div>
+                        )}
+                    </div>
                     )}
 
                     {/* Email Credentials */}
                     {form.type === 'email' && (
                         <div className="grid gap-4 sm:grid-cols-2">
-                            <div>
-                                <label className={labelCls}>SMTP Host</label>
-                                <input value={form.host} onChange={e => setForm(p => ({ ...p, host: e.target.value }))} className={fieldCls} placeholder="smtp.gmail.com" />
-                            </div>
-                            <div>
-                                <label className={labelCls}>Port</label>
-                                <input value={form.port} onChange={e => setForm(p => ({ ...p, port: e.target.value }))} className={fieldCls} placeholder="587" />
-                            </div>
-                            <div>
-                                <label className={labelCls}>Username / Email</label>
-                                <input value={form.username} onChange={e => setForm(p => ({ ...p, username: e.target.value }))} className={fieldCls} title="Username or Email" placeholder="Username or Email" />
-                            </div>
-                            <div>
-                                <label className={labelCls}>Password / API Key</label>
-                                <input type="password" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} className={fieldCls} placeholder={editing ? '(leave blank to keep current)' : 'Password'} />
-                            </div>
+                            {isCustomProvider ? (
+                                <div className="sm:col-span-2">
+                                    <label className={labelCls}>Webhook URL</label>
+                                    <input
+                                        value={form.webhookUrl}
+                                        onChange={e => setForm(p => ({ ...p, webhookUrl: e.target.value }))}
+                                        className={fieldCls}
+                                        placeholder="http://127.0.0.1:5055/mock-email"
+                                    />
+                                </div>
+                            ) : isSendgridProvider ? (
+                                <div className="sm:col-span-2">
+                                    <label className={labelCls}>SendGrid API Key</label>
+                                    <input
+                                        type="password"
+                                        value={form.sendgridApiKey}
+                                        onChange={e => setForm(p => ({ ...p, sendgridApiKey: e.target.value }))}
+                                        className={fieldCls}
+                                        placeholder={editing ? '(leave blank to keep current)' : 'SG.xxxxx'}
+                                    />
+                                </div>
+                            ) : (
+                                <>
+                                    <div>
+                                        <label className={labelCls}>SMTP Host</label>
+                                        <input value={form.host} onChange={e => setForm(p => ({ ...p, host: e.target.value }))} className={fieldCls} placeholder="smtp.gmail.com" />
+                                    </div>
+                                    <div>
+                                        <label className={labelCls}>Port</label>
+                                        <input value={form.port} onChange={e => setForm(p => ({ ...p, port: e.target.value }))} className={fieldCls} placeholder="587" />
+                                    </div>
+                                    <div>
+                                        <label className={labelCls}>Username / Email</label>
+                                        <input value={form.username} onChange={e => setForm(p => ({ ...p, username: e.target.value }))} className={fieldCls} title="Username or Email" placeholder="Username or Email" />
+                                    </div>
+                                    <div>
+                                        <label className={labelCls}>Password</label>
+                                        <input type="password" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} className={fieldCls} placeholder={editing ? '(leave blank to keep current)' : 'Password'} />
+                                    </div>
+                                    <div className="flex items-center gap-2 pt-6">
+                                        <input
+                                            id="smtp-secure"
+                                            type="checkbox"
+                                            checked={form.secure}
+                                            onChange={e => setForm(p => ({ ...p, secure: e.target.checked }))}
+                                        />
+                                        <label htmlFor="smtp-secure" className="text-sm text-slate-600 dark:text-slate-300">Use secure SMTP/TLS</label>
+                                    </div>
+                                </>
+                            )}
                             <div>
                                 <label className={labelCls}>From Name</label>
                                 <input value={form.senderConfig.fromName} onChange={e => setForm(p => ({ ...p, senderConfig: { ...p.senderConfig, fromName: e.target.value } }))} className={fieldCls} placeholder="CampusWay" />

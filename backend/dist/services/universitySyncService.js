@@ -8,6 +8,7 @@ exports.serializeExamCenters = serializeExamCenters;
 exports.ensureUniversityCategoryByName = ensureUniversityCategoryByName;
 exports.ensureUniversityClusterByName = ensureUniversityClusterByName;
 exports.syncUniversityCategorySharedConfig = syncUniversityCategorySharedConfig;
+exports.renameUniversityCategoryReferences = renameUniversityCategoryReferences;
 exports.syncUniversityClusterSharedConfig = syncUniversityClusterSharedConfig;
 exports.syncManualClusterMembership = syncManualClusterMembership;
 exports.reconcileUniversityClusterAssignments = reconcileUniversityClusterAssignments;
@@ -15,9 +16,11 @@ exports.backfillUniversityTaxonomyIfNeeded = backfillUniversityTaxonomyIfNeeded;
 exports.normalizeUniversityImportRow = normalizeUniversityImportRow;
 const mongoose_1 = __importDefault(require("mongoose"));
 const slugify_1 = __importDefault(require("slugify"));
+const HomeSettings_1 = __importDefault(require("../models/HomeSettings"));
 const University_1 = __importDefault(require("../models/University"));
 const UniversityCategory_1 = __importDefault(require("../models/UniversityCategory"));
 const UniversityCluster_1 = __importDefault(require("../models/UniversityCluster"));
+const UniversitySettings_1 = __importDefault(require("../models/UniversitySettings"));
 const universityCategories_1 = require("../utils/universityCategories");
 const BACKFILL_TTL_MS = 5 * 60 * 1000;
 let lastBackfillAt = 0;
@@ -294,6 +297,72 @@ async function syncUniversityCategorySharedConfig(categoryId, actorId) {
         synced: targetIds.length,
         skipped,
     };
+}
+async function renameUniversityCategoryReferences(categoryId, previousName, nextName) {
+    const previous = pickString(previousName);
+    const next = pickString(nextName);
+    if (!previous || !next || previous === next)
+        return;
+    const categoryObjectId = asNullableObjectId(categoryId);
+    const universityFilter = categoryObjectId
+        ? { $or: [{ categoryId: categoryObjectId }, { category: previous }] }
+        : { category: previous };
+    await University_1.default.updateMany(universityFilter, {
+        $set: {
+            category: next,
+            ...(categoryObjectId ? { categoryId: categoryObjectId } : {}),
+        },
+    });
+    const affectedClusters = await UniversityCluster_1.default.find({ categoryRules: previous });
+    for (const cluster of affectedClusters) {
+        const nextRules = Array.from(new Set((cluster.categoryRules || []).map((item) => (pickString(item) === previous ? next : pickString(item))).filter(Boolean)));
+        cluster.categoryRules = nextRules;
+        await cluster.save();
+    }
+    const homeSettings = await HomeSettings_1.default.findOne();
+    if (homeSettings) {
+        let touched = false;
+        if (pickString(homeSettings.universityDashboard?.defaultCategory) === previous) {
+            homeSettings.universityDashboard.defaultCategory = next;
+            touched = true;
+        }
+        if (pickString(homeSettings.universityPreview?.defaultActiveCategory) === previous) {
+            homeSettings.universityPreview.defaultActiveCategory = next;
+            touched = true;
+        }
+        if (Array.isArray(homeSettings.highlightedCategories)) {
+            const nextHighlighted = homeSettings.highlightedCategories.map((item) => {
+                if (pickString(item.category) !== previous)
+                    return item;
+                touched = true;
+                return { ...item, category: next };
+            });
+            homeSettings.highlightedCategories = nextHighlighted;
+        }
+        if (touched) {
+            await homeSettings.save();
+        }
+    }
+    const universitySettings = await UniversitySettings_1.default.findOne();
+    if (universitySettings) {
+        let touched = false;
+        if (pickString(universitySettings.defaultCategory) === previous) {
+            universitySettings.defaultCategory = next;
+            touched = true;
+        }
+        if (Array.isArray(universitySettings.highlightedCategories)) {
+            const nextHighlighted = universitySettings.highlightedCategories.map((item) => {
+                if (pickString(item) !== previous)
+                    return pickString(item);
+                touched = true;
+                return next;
+            });
+            universitySettings.highlightedCategories = Array.from(new Set(nextHighlighted.filter(Boolean)));
+        }
+        if (touched) {
+            await universitySettings.save();
+        }
+    }
 }
 async function syncUniversityClusterSharedConfig(clusterId, actorId) {
     const cluster = await UniversityCluster_1.default.findById(clusterId);

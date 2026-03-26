@@ -127,15 +127,6 @@ export async function fetchPublicContactSettings(): Promise<PublicSettingsContac
     }
 }
 
-function buildLegacyEmailFallback(payload: ContactMessagePayload): string {
-    const email = payload.email?.trim();
-    if (email) return email;
-
-    const numericPhone = (payload.phone || "").replace(/\D+/g, "");
-    const token = numericPhone || Date.now().toString(36);
-    return `contact-${token}@campusway.local`;
-}
-
 function normalizeContactSubmitResponse(raw: unknown): ContactMessageResponse {
     const payload = asRecord(raw);
     const ticketId = asOptionalString(payload.ticketId || payload.id);
@@ -151,11 +142,11 @@ async function submitLegacyContactMessage(
     const legacyPayload = {
         name: payload.name,
         phone: payload.phone,
-        email: buildLegacyEmailFallback(payload),
+        email: payload.email.trim(),
         subject: payload.subject,
         message: payload.message,
-        preferredContact: payload.preferredContact,
         consent: payload.consent,
+        ...(payload.topic ? { topic: payload.topic } : {}),
     };
     const legacyResponse = await api.post<unknown>("/contact", legacyPayload);
     preferLegacyContactSubmit = true;
@@ -186,13 +177,6 @@ export async function submitContactMessage(
             const response = await api.post<unknown>("/contact/messages", payload);
             return normalizeContactSubmitResponse(response.data);
         } catch (legacyError: unknown) {
-            if (
-                isAxiosError(legacyError) &&
-                legacyError.response?.status === 400 &&
-                !payload.email?.trim()
-            ) {
-                throw new Error("Email is required in this environment. Please add an email and retry.");
-            }
             throw legacyError;
         }
     }

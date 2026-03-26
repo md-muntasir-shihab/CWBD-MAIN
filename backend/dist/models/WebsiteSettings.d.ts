@@ -1,4 +1,54 @@
 import mongoose, { Document } from 'mongoose';
+export type StaticPageTone = 'neutral' | 'info' | 'success' | 'warning' | 'accent';
+export interface StaticPageSectionConfig {
+    title: string;
+    body: string;
+    bullets: string[];
+    iconKey: string;
+    tone: StaticPageTone;
+    enabled: boolean;
+    order: number;
+}
+export interface StaticFeatureCardConfig {
+    title: string;
+    description: string;
+    iconKey: string;
+    enabled: boolean;
+    order: number;
+}
+export interface FounderContactLinkConfig {
+    label: string;
+    url: string;
+}
+export interface FounderProfileConfig {
+    name: string;
+    title: string;
+    photoUrl: string;
+    shortBio: string;
+    contactLinks: FounderContactLinkConfig[];
+    enabled: boolean;
+    order: number;
+}
+export interface StaticPageConfig {
+    eyebrow: string;
+    title: string;
+    subtitle: string;
+    lastUpdatedLabel: string;
+    sections: StaticPageSectionConfig[];
+    backLinkLabel: string;
+    backLinkUrl: string;
+}
+export interface AboutStaticPageConfig extends StaticPageConfig {
+    featureCards: StaticFeatureCardConfig[];
+    founderProfiles: FounderProfileConfig[];
+}
+export interface WebsiteStaticPagesConfig {
+    about: AboutStaticPageConfig;
+    terms: StaticPageConfig;
+    privacy: StaticPageConfig;
+}
+export declare function createWebsiteStaticPagesDefaults(): WebsiteStaticPagesConfig;
+export declare function normalizeWebsiteStaticPages(value: unknown, current?: Partial<WebsiteStaticPagesConfig> | null): WebsiteStaticPagesConfig;
 export interface IWebsiteSettings extends Document {
     websiteName: string;
     logo: string;
@@ -41,6 +91,7 @@ export interface IWebsiteSettings extends Document {
     subscriptionPageSubtitle: string;
     subscriptionDefaultBannerUrl: string;
     subscriptionLoggedOutCtaMode: 'login' | 'contact';
+    staticPages: WebsiteStaticPagesConfig;
 }
 declare const _default: mongoose.Model<IWebsiteSettings, {}, {}, {}, mongoose.Document<unknown, {}, IWebsiteSettings, {}, {}> & IWebsiteSettings & Required<{
     _id: mongoose.Types.ObjectId;

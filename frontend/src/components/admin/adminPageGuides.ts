@@ -7,7 +7,88 @@ type AdminPageGuide = Omit<AdminGuideButtonProps, 'variant' | 'tone'>;
 type AdminPageGuideEntry = {
     prefixes: string[];
     guide: AdminPageGuide;
+    quickGuides?: AdminPageGuide[];
 };
+
+const HOME_CONTROL_QUICK_GUIDES: AdminPageGuide[] = [
+    { title: 'Show Search Box', content: 'Explains the hero search toggle and when visitors should see it.' },
+    { title: 'Show Next Deadline Card', content: 'Explains the quick deadline highlight card in the hero area.' },
+    { title: 'Section Visibility', content: 'Explains how each major home section can be enabled or hidden.' },
+    { title: 'Hero', content: 'Explains the top-of-page hero copy, CTAs, and supporting visuals.' },
+    { title: 'Subscription Banner', content: 'Explains the home upsell banner for plans and premium access.' },
+    { title: 'Stats Strip', content: 'Explains the metric strip shown near the top of the public home page.' },
+    { title: "What's Happening Now", content: 'Explains timeline and urgency widgets for current deadlines and activity.' },
+    { title: 'University Dashboard', content: 'Explains the quick-browse university dashboard controls.' },
+    { title: 'Closing + Week Widget', content: 'Explains the compact closing-soon and exams-this-week widgets.' },
+    { title: 'Live/Upcoming Exams', content: 'Explains how exam previews appear on the public home page.' },
+    { title: 'News Preview', content: 'Explains the home news teaser block and its item limits.' },
+    { title: 'Resources Preview', content: 'Explains the home study-resource teaser block and CTA behavior.' },
+    { title: 'Social Strip', content: 'Explains the community or social CTA strip near the lower home area.' },
+    { title: 'Scrollable Ads', content: 'Explains the rotating or scrollable ad slot on the home page.' },
+    { title: 'Footer', content: 'Explains the global footer visibility and shared footer content.' },
+];
+
+const SITE_SETTINGS_QUICK_GUIDES: AdminPageGuide[] = [
+    { title: 'Allow System Mode', content: 'Explains whether visitors can let CampusWay follow their device theme.' },
+    { title: 'Website Name', content: 'Explains the shared brand label used in public and student-facing UI.' },
+    { title: 'Contact Email', content: 'Explains the public support email shown across shared contact surfaces.' },
+    { title: 'Contact Phone', content: 'Explains the main phone or WhatsApp support line used publicly.' },
+    { title: 'Theme Defaults', content: 'Explains the default theme selection for new visitors and students.' },
+    { title: 'Switch Variant', content: 'Explains the visual style used by the shared theme switch.' },
+    { title: 'Animation Level', content: 'Explains how much motion the shared public UI should use.' },
+    { title: 'Social Links', content: 'Explains the shared social platform links and ordering.' },
+    { title: 'Pricing Display', content: 'Explains currency format and plan-price presentation rules.' },
+    { title: 'Subscription Page', content: 'Explains subscription page headline, subtitle, and guest CTA behavior.' },
+    { title: 'Static Pages', content: 'Explains the shared About, Terms, and Privacy content controls.' },
+];
+
+const QUESTION_BANK_IMPORT_QUICK_GUIDES: AdminPageGuide[] = [
+    { title: 'Download Template', content: 'Explains the supported file shape for bulk question import.' },
+    { title: 'Upload Import File', content: 'Explains where to upload the question spreadsheet for validation.' },
+    { title: 'Preview Import', content: 'Explains the validation preview before questions are committed.' },
+    { title: 'Mapping Review', content: 'Explains how uploaded columns map into canonical question fields.' },
+    { title: 'Import Mode', content: 'Explains whether rows create new questions or update matching ones.' },
+    { title: 'Commit Import', content: 'Explains the final action that writes validated rows into the bank.' },
+    { title: 'Cancel Import', content: 'Explains how to stop the current import session without saving.' },
+    { title: 'Validation Notes', content: 'Explains where row-level issues are shown before commit.' },
+];
+
+const FINANCE_DASHBOARD_QUICK_GUIDES: AdminPageGuide[] = [
+    { title: 'Reporting Month', content: 'Explains how the dashboard month filter changes finance summaries.' },
+    { title: 'P&L Report', content: 'Explains the profit-and-loss snapshot and how to read it.' },
+    { title: 'Cash Position', content: 'Explains the current available balance and ledger health.' },
+    { title: 'Pending Approvals', content: 'Explains which finance actions are still waiting for approval.' },
+];
+
+const SECURITY_CENTER_QUICK_GUIDES: AdminPageGuide[] = [
+    { title: 'Security Alerts', content: 'Explains the unread and critical alert counters for security review.' },
+    { title: 'Access Monitoring', content: 'Explains how recent sign-in and privilege posture is surfaced.' },
+    { title: 'Audit Logs', content: 'Explains the security-focused audit trail used for investigation.' },
+    { title: 'Session Health', content: 'Explains how live session posture and protection signals are reviewed.' },
+    { title: 'Authentication Settings', content: 'Explains the live login, admin route, and sign-in protection controls.' },
+    { title: 'Password Policies', content: 'Explains minimum password rules, reset posture, and password hardening.' },
+    { title: 'Two-Factor Policy', content: 'Explains when 2FA is optional, required, or enforced for elevated roles.' },
+    { title: 'Sessions & Devices', content: 'Explains how active sessions, revocation, and suspicious-device review work.' },
+    { title: 'Access Control', content: 'Explains role-sensitive protections, high-risk actions, and approval gates.' },
+    { title: 'API & Route Protection', content: 'Explains how protected routes and backend APIs are checked and denied.' },
+    { title: 'Verification Rules', content: 'Explains approval or proof requirements before sensitive settings can change.' },
+    { title: 'Upload Safeguards', content: 'Explains file validation, media constraints, and public asset safety checks.' },
+    { title: 'Alert Thresholds', content: 'Explains what creates a security alert and when escalation should happen.' },
+    { title: 'Backup Recovery', content: 'Explains backup-code or fallback recovery flows for locked-out privileged users.' },
+    { title: 'Approval Queue', content: 'Explains how pending security-sensitive actions are reviewed and resolved.' },
+    { title: 'Audit Evidence', content: 'Explains which changes should leave an auditable trail for later investigation.' },
+];
+
+const CONTACT_MESSAGES_QUICK_GUIDES: AdminPageGuide[] = [
+    { title: 'Refresh Contact Messages', content: 'Explains how to reload the latest public contact submissions.' },
+    { title: 'Search Inbox', content: 'Explains keyword filtering across contact submissions.' },
+    { title: 'Status Filter', content: 'Explains how to isolate unread, read, or replied contact items.' },
+    { title: 'Mark Read', content: 'Explains how to move a message out of the unread queue.' },
+    { title: 'Mark Replied', content: 'Explains how to mark a message after follow-up is completed.' },
+    { title: 'Delete Message', content: 'Explains how to remove a contact submission from the admin queue.' },
+    { title: 'Open Message', content: 'Explains how to inspect the full contact message details safely.' },
+    { title: 'Contact Source', content: 'Explains where public contact submissions originate and how they link back.' },
+];
 
 const PAGE_GUIDES: AdminPageGuideEntry[] = [
     {
@@ -45,6 +126,7 @@ const PAGE_GUIDES: AdminPageGuideEntry[] = [
             ],
             affected: 'Question-bank operators and all exam flows that rely on imported content.',
         },
+        quickGuides: QUESTION_BANK_IMPORT_QUICK_GUIDES,
     },
     {
         prefixes: [ADMIN_PATHS.questionBankSets],
@@ -100,6 +182,7 @@ const PAGE_GUIDES: AdminPageGuideEntry[] = [
             ],
             affected: 'Finance admins and payment-review operators.',
         },
+        quickGuides: FINANCE_DASHBOARD_QUICK_GUIDES,
     },
     {
         prefixes: [ADMIN_PATHS.financeTransactions],
@@ -315,6 +398,17 @@ const PAGE_GUIDES: AdminPageGuideEntry[] = [
         },
     },
     {
+        prefixes: [ADMIN_PATHS.campaignsContactCenter],
+        guide: {
+            title: 'Subscription Contact Center',
+            content: 'This screen is the canonical subscription-wise contact workspace for live audience filters, copy/export, personal outreach, presets, and logs.',
+            actions: [
+                { label: 'Filter once', description: 'Reuse the same live subscription audience across overview, members, export, outreach, and campaign handoff.' },
+            ],
+            affected: 'Campaign operators, moderators, support teams, and subscription-based communication workflows.',
+        },
+    },
+    {
         prefixes: [ADMIN_PATHS.campaignsList],
         guide: {
             title: 'Campaign List',
@@ -385,6 +479,7 @@ const PAGE_GUIDES: AdminPageGuideEntry[] = [
             affected: 'Public visitors and any student journey starting from the home page.',
             bestPractice: 'Change one section at a time, save, then verify the public home page reflects the update before editing the next block.',
         },
+        quickGuides: HOME_CONTROL_QUICK_GUIDES,
     },
     {
         prefixes: [ADMIN_PATHS.siteSettings],
@@ -399,6 +494,7 @@ const PAGE_GUIDES: AdminPageGuideEntry[] = [
             disabledNote: 'When disabled, the related mode or UI treatment stops appearing even if old data still exists in the database.',
             affected: 'Public visitors, students, and all branded surfaces using global settings.',
         },
+        quickGuides: SITE_SETTINGS_QUICK_GUIDES,
     },
     {
         prefixes: [ADMIN_PATHS.bannerManager, ADMIN_PATHS.campaignBanners],
@@ -510,6 +606,19 @@ const PAGE_GUIDES: AdminPageGuideEntry[] = [
         },
     },
     {
+        prefixes: [ADMIN_PATHS.contact],
+        guide: {
+            title: 'Contact Messages',
+            content: 'This screen manages public contact submissions and the admin follow-up queue.',
+            actions: [
+                { label: 'Refresh inbox', description: 'Pull in the latest public contact submissions before reviewing or responding.' },
+                { label: 'Update message state', description: 'Mark messages as read or replied to keep the support queue accurate.' },
+            ],
+            affected: 'Public visitors submitting contact forms and admins handling outreach follow-up.',
+        },
+        quickGuides: CONTACT_MESSAGES_QUICK_GUIDES,
+    },
+    {
         prefixes: [ADMIN_PATHS.supportCenter, ADMIN_PATHS.helpCenterAdmin, ADMIN_PATHS.contact, ADMIN_PATHS.notifications],
         guide: {
             title: 'Support and Communication',
@@ -524,12 +633,12 @@ const PAGE_GUIDES: AdminPageGuideEntry[] = [
         },
     },
     {
-        prefixes: [ADMIN_PATHS.campaignsDashboard, ADMIN_PATHS.notificationTestSend, ADMIN_PATHS.notificationTriggers],
+        prefixes: [ADMIN_PATHS.campaignsDashboard, ADMIN_PATHS.notificationTriggers],
         guide: {
             title: 'Campaign Platform',
-            content: 'This module controls notification campaigns, test sends, templates, trigger rules, and delivery logs.',
+            content: 'This module controls notification campaigns, templates, trigger rules, provider checks, and delivery logs.',
             actions: [
-                { label: 'Test send', description: 'Send a controlled message to verify provider, routing, and optional finance sync without launching a full campaign.' },
+                { label: 'Preview or provider check', description: 'Use campaign preview and provider-level checks to verify routing and delivery readiness without keeping a duplicate test-send console.' },
                 { label: 'Activate trigger or campaign', description: 'Allow new automated or manual sends to start from this configuration.' },
             ],
             enabledNote: 'Enabled triggers and campaign settings allow the configured sends to execute when their conditions match.',
@@ -590,6 +699,7 @@ const PAGE_GUIDES: AdminPageGuideEntry[] = [
             disabledNote: 'Disabled controls relax the linked protection or visibility, which can increase operational risk.',
             affected: 'Every admin role, high-risk actions, protected routes, and the audit or compliance trail.',
         },
+        quickGuides: SECURITY_CENTER_QUICK_GUIDES,
     },
     {
         prefixes: [ADMIN_PATHS.adminProfile],
@@ -607,12 +717,46 @@ const PAGE_GUIDES: AdminPageGuideEntry[] = [
 
 export function getAdminPageGuide(pathname: string): AdminPageGuide | null {
     const normalizedPath = pathname.split('?')[0];
-    const matches = PAGE_GUIDES.filter((entry) => entry.prefixes.some((prefix) => normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`)));
+    const matches = PAGE_GUIDES
+        .map((entry, index) => ({
+            entry,
+            index,
+            matchedPrefixLength: Math.max(
+                ...entry.prefixes
+                    .filter((prefix) => normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`))
+                    .map((prefix) => prefix.length),
+            ),
+        }))
+        .filter((entry) => Number.isFinite(entry.matchedPrefixLength));
     if (matches.length === 0) return null;
     matches.sort((a, b) => {
-        const aLength = Math.max(...a.prefixes.map((prefix) => prefix.length));
-        const bLength = Math.max(...b.prefixes.map((prefix) => prefix.length));
-        return bLength - aLength;
+        if (b.matchedPrefixLength !== a.matchedPrefixLength) {
+            return b.matchedPrefixLength - a.matchedPrefixLength;
+        }
+        return a.index - b.index;
     });
-    return matches[0].guide;
+    return matches[0].entry.guide;
+}
+
+export function getAdminPageQuickGuides(pathname: string): AdminPageGuide[] {
+    const normalizedPath = pathname.split('?')[0];
+    const matches = PAGE_GUIDES
+        .map((entry, index) => ({
+            entry,
+            index,
+            matchedPrefixLength: Math.max(
+                ...entry.prefixes
+                    .filter((prefix) => normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`))
+                    .map((prefix) => prefix.length),
+            ),
+        }))
+        .filter((entry) => Number.isFinite(entry.matchedPrefixLength));
+    if (matches.length === 0) return [];
+    matches.sort((a, b) => {
+        if (b.matchedPrefixLength !== a.matchedPrefixLength) {
+            return b.matchedPrefixLength - a.matchedPrefixLength;
+        }
+        return a.index - b.index;
+    });
+    return matches[0].entry.quickGuides || [];
 }

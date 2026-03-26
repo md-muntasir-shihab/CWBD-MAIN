@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { getResourceBySlug, trackAnalyticsEvent } from '../services/api';
 import { isExternalUrl, normalizeInternalOrExternalUrl } from '../utils/url';
+import { buildYouTubeEmbedUrl } from '../utils/youtube';
 
 type ResourceType = 'pdf' | 'link' | 'video' | 'audio' | 'image' | 'note';
 
@@ -116,8 +117,17 @@ export default function ResourceDetail() {
 
     const cfg = TYPE_CONFIG[resource.type];
     const Icon = cfg.icon;
-    const href = normalizeInternalOrExternalUrl(resource.fileUrl || resource.externalUrl || '');
-    const isExternal = isExternalUrl(href || '');
+    const primaryHref = normalizeInternalOrExternalUrl(
+        resource.type === 'video'
+            ? resource.externalUrl || resource.fileUrl || ''
+            : resource.fileUrl || resource.externalUrl || '',
+    );
+    const primaryIsExternal = isExternalUrl(primaryHref || '');
+    const secondaryFileHref =
+        resource.type === 'video' && resource.fileUrl
+            ? normalizeInternalOrExternalUrl(resource.fileUrl)
+            : '';
+    const youtubeEmbedUrl = resource.type === 'video' ? buildYouTubeEmbedUrl(resource.externalUrl) : null;
 
     return (
         <div className="page-container py-8 sm:py-12 max-w-5xl mx-auto">
@@ -189,10 +199,10 @@ export default function ResourceDetail() {
 
                         {/* CTA buttons */}
                         <div className="flex items-center gap-3 flex-wrap">
-                            {href ? (
-                                <a href={href}
-                                    target={isExternal ? '_blank' : undefined}
-                                    rel={isExternal ? 'noopener noreferrer' : undefined}
+                            {primaryHref ? (
+                                <a href={primaryHref}
+                                    target={primaryIsExternal ? '_blank' : undefined}
+                                    rel={primaryIsExternal ? 'noopener noreferrer' : undefined}
                                     onClick={() => handleAction(resource)}
                                     className="btn-primary gap-2 text-sm flex-1 sm:flex-none justify-center"
                                 >
@@ -207,11 +217,35 @@ export default function ResourceDetail() {
                                     <AlertCircle className="w-4 h-4" /> Unavailable
                                 </button>
                             )}
+                            {secondaryFileHref && secondaryFileHref !== primaryHref ? (
+                                <a
+                                    href={secondaryFileHref}
+                                    onClick={() => handleAction(resource)}
+                                    className="btn-outline gap-2 text-sm flex-1 sm:flex-none justify-center"
+                                >
+                                    <Download className="w-4 h-4" />
+                                    Open Attachment
+                                </a>
+                            ) : null}
                             <button onClick={handleShare} className="btn-ghost gap-2 text-sm border border-card-border dark:border-dark-border px-4 py-2 rounded-xl">
                                 <Share2 className="w-4 h-4" /> Share
                             </button>
                         </div>
                     </div>
+
+                    {youtubeEmbedUrl ? (
+                        <div className="card overflow-hidden">
+                            <div className="aspect-video w-full bg-slate-950">
+                                <iframe
+                                    src={youtubeEmbedUrl}
+                                    title={resource.title}
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                    allowFullScreen
+                                    className="h-full w-full"
+                                />
+                            </div>
+                        </div>
+                    ) : null}
 
                     {/* Thumbnail */}
                     {resource.thumbnailUrl && (

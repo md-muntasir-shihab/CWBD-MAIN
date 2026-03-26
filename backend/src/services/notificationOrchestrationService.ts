@@ -29,6 +29,7 @@ import {
     SendResult,
 } from './notificationProviderService';
 import { nextTxnCode } from './financeCenterService';
+import { resolveSubscriptionContactUserIds } from './subscriptionContactCenterService';
 
 /* ================================================================
    Types
@@ -56,9 +57,12 @@ export interface CampaignSendOptions {
     audienceGroupId?: string;
     audienceFilters?: Record<string, unknown>;
     manualStudentIds?: string[];
+    includeUserIds?: string[];
+    excludeUserIds?: string[];
     guardianTargeted?: boolean;
     recipientMode?: 'student' | 'guardian' | 'both';
     scheduledAtUTC?: Date;
+    quietHoursMode?: 'respect' | 'bypass';
     adminId: string;
     triggerKey?: string;
     testSend?: boolean;
@@ -98,6 +102,30 @@ async function getSettings(): Promise<INotificationSettings> {
     return settings;
 }
 
+async function resolveActorObjectId(actorId: string): Promise<mongoose.Types.ObjectId> {
+    if (mongoose.Types.ObjectId.isValid(actorId)) {
+        return new mongoose.Types.ObjectId(actorId);
+    }
+
+    const admin = await User.findOne({ role: { $in: ['superadmin', 'admin'] } })
+        .select('_id')
+        .sort({ createdAt: 1 })
+        .lean();
+    if (admin?._id) {
+        return new mongoose.Types.ObjectId(String(admin._id));
+    }
+
+    const fallback = await User.findOne({ role: { $in: ['moderator', 'support_agent', 'finance_agent', 'editor', 'viewer'] } })
+        .select('_id')
+        .sort({ createdAt: 1 })
+        .lean();
+    if (fallback?._id) {
+        return new mongoose.Types.ObjectId(String(fallback._id));
+    }
+
+    throw new Error('No admin actor is available for notification job ownership');
+}
+
 /* ================================================================
    Audience resolution
    ================================================================ */
@@ -108,6 +136,8 @@ export async function resolveAudience(
         groupId?: string;
         filters?: Record<string, unknown>;
         manualStudentIds?: string[];
+        includeUserIds?: string[];
+        excludeUserIds?: string[];
     },
 ): Promise<RecipientInfo[]> {
     let userIds: mongoose.Types.ObjectId[] = [];
@@ -133,6 +163,27 @@ export async function resolveAudience(
             .select('user_id')
             .lean();
         userIds = profiles.map((p) => p.user_id as mongoose.Types.ObjectId);
+    }
+
+    const includeIds = (opts.includeUserIds ?? [])
+        .filter((id) => mongoose.Types.ObjectId.isValid(id))
+        .map((id) => new mongoose.Types.ObjectId(id));
+    if (includeIds.length > 0) {
+        const seen = new Set(userIds.map((id) => String(id)));
+        for (const includeId of includeIds) {
+            if (!seen.has(String(includeId))) {
+                userIds.push(includeId);
+            }
+        }
+    }
+
+    const excludeIdSet = new Set(
+        (opts.excludeUserIds ?? [])
+            .filter((id) => mongoose.Types.ObjectId.isValid(id))
+            .map((id) => String(id)),
+    );
+    if (excludeIdSet.size > 0) {
+        userIds = userIds.filter((id) => !excludeIdSet.has(String(id)));
     }
 
     if (!userIds.length) return [];
@@ -167,60 +218,19 @@ export async function resolveAudience(
 async function resolveDynamicGroupUserIds(
     rules: Record<string, unknown>,
 ): Promise<mongoose.Types.ObjectId[]> {
-    const planCodes = Array.isArray(rules.planCodes)
-        ? rules.planCodes.map((value) => String(value || '').trim().toLowerCase()).filter(Boolean)
-        : [];
-    const filter: Record<string, unknown> = { status: { $ne: 'deleted' } };
-    if (Array.isArray(rules.batches) && rules.batches.length)
-        filter.hsc_batch = { $in: rules.batches };
-    if (Array.isArray(rules.sscBatches) && rules.sscBatches.length)
-        filter.ssc_batch = { $in: rules.sscBatches };
-    if (Array.isArray(rules.departments) && rules.departments.length)
-        filter.department = { $in: rules.departments };
-    if (Array.isArray(rules.statuses) && rules.statuses.length)
-        filter.status = { $in: rules.statuses };
-    const profiles = await StudentProfile.find(filter).select('user_id').lean();
-    const userIds = profiles.map((p) => p.user_id as mongoose.Types.ObjectId);
-    return filterUserIdsByActivePlanCodes(userIds, planCodes);
+    return resolveFilterUserIds(rules);
 }
 
 async function resolveFilterUserIds(
     filters: Record<string, unknown>,
 ): Promise<mongoose.Types.ObjectId[]> {
-    const planCodes = Array.isArray(filters.planCodes)
-        ? filters.planCodes.map((value) => String(value || '').trim().toLowerCase()).filter(Boolean)
-        : [];
-    const filter: Record<string, unknown> = { status: { $ne: 'deleted' } };
-    if (filters.batches) filter.hsc_batch = { $in: filters.batches };
-    if (filters.sscBatches) filter.ssc_batch = { $in: filters.sscBatches };
-    if (filters.departments) filter.department = { $in: filters.departments };
-    if (filters.statuses) filter.status = { $in: filters.statuses };
-    if (Array.isArray(filters.groupIds) && filters.groupIds.length > 0) {
-        filter.groupIds = {
-            $in: filters.groupIds
-                .map((id) => String(id || '').trim())
-                .filter((id) => mongoose.Types.ObjectId.isValid(id))
-                .map((id) => new mongoose.Types.ObjectId(id)),
-        };
-    }
-    const scoreRange = typeof filters.profileScoreRange === 'object' && filters.profileScoreRange !== null
-        ? filters.profileScoreRange as Record<string, unknown>
-        : null;
-    if (scoreRange && (scoreRange.min !== undefined || scoreRange.max !== undefined)) {
-        filter.points = {};
-        if (scoreRange.min !== undefined && Number.isFinite(Number(scoreRange.min))) {
-            (filter.points as Record<string, unknown>).$gte = Number(scoreRange.min);
-        }
-        if (scoreRange.max !== undefined && Number.isFinite(Number(scoreRange.max))) {
-            (filter.points as Record<string, unknown>).$lte = Number(scoreRange.max);
-        }
-    }
-    if (Array.isArray(filters.institutionNames) && filters.institutionNames.length > 0) {
-        filter.institution_name = { $in: filters.institutionNames };
-    }
-    const profiles = await StudentProfile.find(filter).select('user_id').lean();
-    const userIds = profiles.map((p) => p.user_id as mongoose.Types.ObjectId);
-    return filterUserIdsByActivePlanCodes(userIds, planCodes);
+    const mappedFilters: Record<string, unknown> = {
+        ...filters,
+        accountStatuses: Array.isArray(filters.accountStatuses)
+            ? filters.accountStatuses
+            : (Array.isArray(filters.statuses) ? filters.statuses : undefined),
+    };
+    return resolveSubscriptionContactUserIds(mappedFilters);
 }
 
 async function filterUserIdsByActivePlanCodes(
@@ -482,6 +492,7 @@ async function syncCostToFinance(
     const totalCost = count * costPerMessage;
     if (totalCost <= 0) return;
     const txnCode = await nextTxnCode();
+    const actorObjectId = await resolveActorObjectId(adminId);
     await FinanceTransaction.create({
         txnCode,
         direction: 'expense',
@@ -496,7 +507,7 @@ async function syncCostToFinance(
         sourceType,
         sourceId: jobId,
         paidAtUTC: new Date(),
-        createdByAdminId: new mongoose.Types.ObjectId(adminId),
+        createdByAdminId: actorObjectId,
     });
 }
 
@@ -549,6 +560,8 @@ function buildCampaignOptionsFromJob(job: StoredNotificationJobShape): CampaignS
         ...((job.targetStudentIds ?? []).map((studentId) => String(studentId))),
     ]));
 
+    const storedFilters = parseStoredAudienceFilters(job.targetFilterJson);
+
     return {
         campaignName: String(job.campaignName || job.templateKey || 'Queued Notification'),
         channels: job.channel === 'both' ? ['sms', 'email'] : [job.channel],
@@ -558,8 +571,10 @@ function buildCampaignOptionsFromJob(job: StoredNotificationJobShape): CampaignS
         vars: job.payloadOverrides,
         audienceType: deriveAudienceTypeFromJob(job),
         audienceGroupId: job.targetGroupId ? String(job.targetGroupId) : undefined,
-        audienceFilters: parseStoredAudienceFilters(job.targetFilterJson),
+        audienceFilters: storedFilters,
         manualStudentIds: manualStudentIds.length > 0 ? manualStudentIds : undefined,
+        includeUserIds: Array.isArray(storedFilters?.includeUserIds) ? storedFilters.includeUserIds as string[] : undefined,
+        excludeUserIds: Array.isArray(storedFilters?.excludeUserIds) ? storedFilters.excludeUserIds as string[] : undefined,
         guardianTargeted: Boolean(job.guardianTargeted),
         recipientMode: normalizeRecipientMode(job.recipientMode),
         scheduledAtUTC: job.scheduledAtUTC ?? undefined,
@@ -628,6 +643,8 @@ async function resolveAudienceForCampaign(opts: CampaignSendOptions): Promise<Re
         groupId: opts.audienceGroupId,
         filters: opts.audienceFilters,
         manualStudentIds: opts.manualStudentIds,
+        includeUserIds: opts.includeUserIds,
+        excludeUserIds: opts.excludeUserIds,
     });
     return opts.testSend ? recipients.slice(0, 1) : recipients;
 }
@@ -658,6 +675,7 @@ async function createNotificationJobRecord(
         errorMessage?: string;
     },
 ) {
+    const actorObjectId = await resolveActorObjectId(opts.adminId);
     const manualStudentObjectIds = (opts.manualStudentIds ?? [])
         .filter((id) => mongoose.Types.ObjectId.isValid(id))
         .map((id) => new mongoose.Types.ObjectId(id));
@@ -673,7 +691,13 @@ async function createNotificationJobRecord(
             ? new mongoose.Types.ObjectId(opts.audienceGroupId)
             : undefined,
         targetStudentIds: manualStudentObjectIds.length > 0 ? manualStudentObjectIds : undefined,
-        targetFilterJson: opts.audienceFilters ? JSON.stringify(opts.audienceFilters) : undefined,
+        targetFilterJson: (opts.audienceFilters || opts.includeUserIds?.length || opts.excludeUserIds?.length)
+            ? JSON.stringify({
+                ...(opts.audienceFilters || {}),
+                ...(opts.includeUserIds?.length ? { includeUserIds: opts.includeUserIds } : {}),
+                ...(opts.excludeUserIds?.length ? { excludeUserIds: opts.excludeUserIds } : {}),
+            })
+            : undefined,
         audienceType: opts.audienceType,
         audienceRef: opts.audienceGroupId,
         templateKey: (opts.templateKey || 'CUSTOM').toUpperCase(),
@@ -693,7 +717,7 @@ async function createNotificationJobRecord(
         originEntityId: String(opts.originEntityId || '').trim(),
         originAction: String(opts.originAction || '').trim(),
         quietHoursApplied: Boolean(state.quietHoursApplied),
-        createdByAdminId: new mongoose.Types.ObjectId(opts.adminId),
+        createdByAdminId: actorObjectId,
         errorMessage: state.errorMessage,
         isTestSend: Boolean(opts.testSend),
         lastAttemptedAtUTC: state.status === 'processing' ? new Date() : undefined,
@@ -716,6 +740,7 @@ async function finalizeNotificationJob(
         emailCost: number;
     },
 ): Promise<void> {
+    const actorObjectId = await resolveActorObjectId(opts.adminId);
     const actualCost = stats.smsSentCount * stats.smsCost + stats.emailSentCount * stats.emailCost;
     const totalAttempts = stats.sent + stats.failed;
     const finalStatus =
@@ -755,7 +780,7 @@ async function finalizeNotificationJob(
     }
 
     await AuditLog.create({
-        actor_id: new mongoose.Types.ObjectId(opts.adminId),
+        actor_id: actorObjectId,
         action: opts.testSend ? 'notification_test_send' : 'notification_campaign_sent',
         target_id: jobId,
         target_type: 'NotificationJob',
@@ -900,7 +925,7 @@ export async function executeCampaign(
         recipientMode: normalizeRecipientMode(opts.recipientMode),
     };
 
-    const quietHoursState = !normalizedOptions.testSend && !normalizedOptions.scheduledAtUTC
+    const quietHoursState = !normalizedOptions.testSend && normalizedOptions.quietHoursMode !== 'bypass' && !normalizedOptions.scheduledAtUTC
         ? getQuietHoursState(settings)
         : { active: false };
 
@@ -1116,12 +1141,23 @@ export async function triggerAutoSend(
     return executeCampaign({
         campaignName: `Auto: ${triggerKey}`,
         channels: trigger.channels,
-        templateKey: triggerKey,
+        templateKey: String(trigger.templateKey || triggerKey).toUpperCase(),
         vars,
-        audienceType: 'manual',
-        manualStudentIds: studentIds,
+        audienceType: trigger.audienceMode === 'subscription_active' || trigger.audienceMode === 'subscription_renewal_due' ? 'filter' : 'manual',
+        audienceFilters: trigger.audienceMode === 'subscription_active'
+            ? { bucket: 'active' }
+            : trigger.audienceMode === 'subscription_renewal_due'
+                ? { bucket: 'renewal_due' }
+                : undefined,
+        manualStudentIds: trigger.audienceMode === 'subscription_active' || trigger.audienceMode === 'subscription_renewal_due'
+            ? undefined
+            : studentIds,
         guardianTargeted: trigger.guardianIncluded,
         recipientMode: trigger.guardianIncluded ? 'both' : 'student',
+        scheduledAtUTC: Number(trigger.delayMinutes || 0) > 0
+            ? new Date(Date.now() + Number(trigger.delayMinutes || 0) * 60_000)
+            : undefined,
+        quietHoursMode: trigger.quietHoursMode === 'bypass' ? 'bypass' : 'respect',
         adminId,
         triggerKey,
     });

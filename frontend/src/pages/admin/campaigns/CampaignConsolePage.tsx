@@ -1,34 +1,36 @@
-import { useMemo, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import AdminGuardShell from '../../../components/admin/AdminGuardShell';
 import AdminGuideButton, { type AdminGuideButtonProps } from '../../../components/admin/AdminGuideButton';
 import ProvidersPanel from './ProvidersPanel';
+import NotificationOperationsPanel from './NotificationOperationsPanel';
 import SmartTriggersPanel from './SmartTriggersPanel';
-import ExportCopyPanel from './ExportCopyPanel';
 import { ADMIN_PATHS } from '../../../routes/adminPaths';
 import {
   listCampaigns, getCampaign, previewCampaign, sendCampaign, retryCampaign,
   getDeliveryLogs, listTemplates, createTemplate, updateTemplate,
-  getNotificationSettings, updateNotificationSettings,
+  getNotificationSettings, updateNotificationSettings, getCampaignDashboardSummary,
   type CampaignListItem, type CampaignDetail, type CampaignPreview,
-  type DeliveryLog, type NotificationTemplate, type NotificationSettings,
+  type DeliveryLog, type NotificationTemplate, type NotificationSettings, type CampaignDashboardSummary,
 } from '../../../api/adminNotificationCampaignApi';
 import { getStudentGroups } from '../../../api/adminStudentApi';
 
-type Tab = 'dashboard' | 'campaigns' | 'new' | 'templates' | 'logs' | 'settings' | 'providers' | 'triggers' | 'export';
+type Tab = 'dashboard' | 'campaigns' | 'new' | 'audiences' | 'contact' | 'templates' | 'providers' | 'triggers' | 'notifications' | 'logs' | 'settings';
 type InlineGuide = Omit<AdminGuideButtonProps, 'variant' | 'tone'>;
 
 const CAMPAIGN_TAB_TO_PATH: Record<Tab, string> = {
   dashboard: ADMIN_PATHS.campaignsDashboard,
   campaigns: ADMIN_PATHS.campaignsList,
   new: ADMIN_PATHS.campaignsNew,
+  audiences: ADMIN_PATHS.campaignsAudiences,
+  contact: ADMIN_PATHS.campaignsContactCenter,
   templates: ADMIN_PATHS.campaignsTemplates,
+  providers: ADMIN_PATHS.campaignsProviders,
+  triggers: ADMIN_PATHS.campaignsTriggers,
+  notifications: ADMIN_PATHS.campaignsNotifications,
   logs: ADMIN_PATHS.campaignsLogs,
   settings: ADMIN_PATHS.campaignsSettings,
-  providers: ADMIN_PATHS.campaignsSettings + '#providers',
-  triggers: ADMIN_PATHS.campaignsSettings + '#triggers',
-  export: ADMIN_PATHS.campaignsSettings + '#export',
 };
 
 const CAMPAIGN_GUIDES: Record<string, InlineGuide> = {
@@ -46,6 +48,16 @@ const CAMPAIGN_GUIDES: Record<string, InlineGuide> = {
     title: 'New Campaign',
     content: 'Build and send a new campaign using the current audience, template, and schedule settings.',
     affected: 'Notification recipients and campaign delivery workflows.',
+  },
+  contact: {
+    title: 'Subscription Contact Center',
+    content: 'Use the canonical subscription-wise copy, export, outreach, and saved-audience workspace.',
+    affected: 'Subscription contacts, outreach operations, and export workflows.',
+  },
+  audiences: {
+    title: 'Audiences',
+    content: 'Open the live audience workspace to filter, review, save, and reuse recipients before launching outreach.',
+    affected: 'Campaign audience selection and saved segment reuse.',
   },
   templates: {
     title: 'Templates',
@@ -72,10 +84,10 @@ const CAMPAIGN_GUIDES: Record<string, InlineGuide> = {
     content: 'Manage automatic trigger rules used by the campaign system.',
     affected: 'Automated campaign delivery.',
   },
-  export: {
-    title: 'Export / Copy',
-    content: 'Prepare export-ready audience or campaign copy data for reuse and reporting.',
-    affected: 'Campaign reporting and external handoff workflows.',
+  notifications: {
+    title: 'Notifications',
+    content: 'Review targeted send rules, recent failures, and notification-only workflows without leaving Campaign Hub.',
+    affected: 'Targeted notification operations and send review.',
   },
   createCampaign: {
     title: 'New Campaign',
@@ -99,22 +111,39 @@ const CAMPAIGN_GUIDES: Record<string, InlineGuide> = {
   },
 };
 
-function getTabFromPath(pathname: string, hash?: string): Tab {
+const CAMPAIGN_VIEW_BUTTONS: Array<{ tab: Tab; label: string }> = [
+  { tab: 'dashboard', label: 'Overview' },
+  { tab: 'campaigns', label: 'Campaigns' },
+  { tab: 'new', label: 'New Campaign' },
+  { tab: 'contact', label: 'Subscription Contact Center' },
+  { tab: 'providers', label: 'Providers' },
+  { tab: 'triggers', label: 'Smart Triggers' },
+  { tab: 'notifications', label: 'Notifications' },
+  { tab: 'logs', label: 'Delivery Logs' },
+  { tab: 'settings', label: 'Settings' },
+];
+
+function getTabFromPath(pathname: string, search?: string, hash?: string): Tab {
   const normalized = String(pathname || '').trim();
-  // Check hash-based sub-tabs first
+  const params = new URLSearchParams(search || '');
+  const view = params.get('view');
+  if (view && ['dashboard', 'campaigns', 'new', 'audiences', 'contact', 'templates', 'providers', 'triggers', 'notifications', 'logs', 'settings'].includes(view)) {
+    return view as Tab;
+  }
   const h = String(hash || '').replace('#', '').toLowerCase();
   if (h === 'providers') return 'providers';
   if (h === 'triggers' || h === 'smart_triggers') return 'triggers';
-  if (h === 'export' || h === 'export_copy') return 'export';
+  if (h === 'export' || h === 'export_copy') return 'contact';
+  if (normalized === ADMIN_PATHS.campaignsContactCenter) return 'contact';
   const match = (Object.entries(CAMPAIGN_TAB_TO_PATH) as Array<[Tab, string]>)
-    .find(([, p]) => normalized === p.split('#')[0] && !p.includes('#'));
+    .find(([, p]) => normalized === p.split('?')[0].split('#')[0] && !p.includes('?') && !p.includes('#'));
   return match?.[0] ?? 'dashboard';
 }
 
 export default function CampaignConsolePage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const tab = getTabFromPath(location.pathname, location.hash);
+  const tab = getTabFromPath(location.pathname, location.search, location.hash);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' }>({ show: false, message: '', type: 'success' });
   const qc = useQueryClient();
@@ -124,32 +153,16 @@ export default function CampaignConsolePage() {
     setTimeout(() => setToast(p => ({ ...p, show: false })), 3000);
   };
 
-  const TABS: { key: Tab; label: string }[] = [
-    { key: 'dashboard', label: 'Dashboard' },
-    { key: 'campaigns', label: 'All Campaigns' },
-    { key: 'new', label: 'New Campaign' },
-    { key: 'templates', label: 'Templates' },
-    { key: 'logs', label: 'Delivery Logs' },
-    { key: 'settings', label: 'Settings' },
-    { key: 'providers', label: 'Providers' },
-    { key: 'triggers', label: 'Smart Triggers' },
-    { key: 'export', label: 'Export / Copy' },
-  ];
-
   const navigateToTab = (nextTab: Tab) => {
     if (nextTab !== 'campaigns') setSelectedCampaignId(null);
     const rawPath = CAMPAIGN_TAB_TO_PATH[nextTab];
-    const [pathname, hash] = rawPath.split('#');
-    if (hash) {
-      // Hash-based sub-tab: navigate to settings path with hash
-      navigate({ pathname, hash: '#' + hash });
-    } else if (location.pathname !== pathname) {
-      navigate(pathname);
-    }
+    const [pathnameAndQuery, hash] = rawPath.split('#');
+    const [pathname, search] = pathnameAndQuery.split('?');
+    navigate({ pathname, search: search ? `?${search}` : '', hash: hash ? '#' + hash : '' });
   };
 
-  return (
-    <AdminGuardShell
+    return (
+        <AdminGuardShell
       title="Communication Hub"
       description="Unified messaging center — campaigns, smart triggers, providers, audience export, and delivery logs."
       requiredModule="notifications"
@@ -159,30 +172,18 @@ export default function CampaignConsolePage() {
           {toast.message}
         </div>
       )}
-        <div className="mb-6 border-b border-slate-200 pb-3 dark:border-slate-700">
-          <div className="flex flex-wrap gap-1.5">
-            {TABS.map(t => (
-            <div key={t.key} className="flex items-center gap-1">
-              <button
-                onClick={() => navigateToTab(t.key)}
-                className={`rounded-lg px-3.5 py-2 text-sm font-medium transition-all ${tab === t.key ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'}`}
-              >
-                {t.label}
-              </button>
-              <AdminGuideButton {...CAMPAIGN_GUIDES[t.key]} tone="indigo" />
-            </div>
-            ))}
-          </div>
-        </div>
+      <CampaignViewNav activeTab={tab} onNavigate={navigateToTab} />
       {tab === 'dashboard' && <DashboardPanel onNavigate={navigateToTab} />}
       {tab === 'campaigns' && <CampaignsListPanel onView={id => { setSelectedCampaignId(id); }} onRetry={id => retryCampaign(id).then(() => { showToast('Retry initiated'); qc.invalidateQueries({ queryKey: ['campaigns'] }); }).catch(() => showToast('Retry failed', 'error'))} />}
       {tab === 'new' && <NewCampaignPanel showToast={showToast} onSent={() => { navigateToTab('campaigns'); qc.invalidateQueries({ queryKey: ['campaigns'] }); }} />}
+      {tab === 'audiences' && <Navigate to={`${ADMIN_PATHS.campaignsContactCenter}?tab=members`} replace />}
+      {tab === 'contact' && <Navigate to={`${ADMIN_PATHS.campaignsContactCenter}?tab=${(location.hash === '#export' || location.hash === '#export_copy') ? 'export' : 'overview'}`} replace />}
       {tab === 'templates' && <TemplatesPanel showToast={showToast} />}
-      {tab === 'logs' && <LogsPanel />}
-      {tab === 'settings' && <SettingsPanel showToast={showToast} />}
       {tab === 'providers' && <ProvidersPanel showToast={showToast} />}
       {tab === 'triggers' && <SmartTriggersPanel showToast={showToast} />}
-      {tab === 'export' && <ExportCopyPanel showToast={showToast} />}
+      {tab === 'notifications' && <NotificationOperationsPanel onNavigate={navigateToTab} showToast={showToast} />}
+      {tab === 'logs' && <LogsPanel />}
+      {tab === 'settings' && <SettingsPanel showToast={showToast} />}
       {selectedCampaignId && <CampaignDetailModal id={selectedCampaignId} onClose={() => setSelectedCampaignId(null)} />}
     </AdminGuardShell>
   );
@@ -190,25 +191,105 @@ export default function CampaignConsolePage() {
 
 /* ─── Dashboard Panel ─────────────────────────────── */
 function DashboardPanel({ onNavigate }: { onNavigate: (t: Tab) => void }) {
-  const { data } = useQuery({ queryKey: ['campaigns', { page: 1, limit: 5 }], queryFn: () => listCampaigns({ page: 1, limit: 5 }) });
-  const campaigns = (data?.items ?? []) as CampaignListItem[];
+  const { data, isLoading } = useQuery({ queryKey: ['campaign-dashboard-summary'], queryFn: getCampaignDashboardSummary });
+  const summary = data as CampaignDashboardSummary | undefined;
+  const campaignsQuery = useQuery({ queryKey: ['campaigns', { page: 1, limit: 5 }], queryFn: () => listCampaigns({ page: 1, limit: 5 }) });
+  const campaigns = (campaignsQuery.data?.items ?? []) as CampaignListItem[];
+  const statCards = [
+    { label: 'Total Campaigns', value: summary?.totals.totalCampaigns ?? 0, color: 'from-indigo-500 to-indigo-600' },
+    { label: 'Scheduled Queue', value: summary?.totals.scheduledCount ?? 0, color: 'from-sky-500 to-cyan-600' },
+    { label: 'Failed Today', value: summary?.totals.failedToday ?? 0, color: 'from-rose-500 to-red-600' },
+    { label: 'Active Triggers', value: summary?.totals.activeTriggers ?? 0, color: 'from-amber-500 to-orange-600' },
+    { label: 'Active Subscribers', value: summary?.audience.activeCount ?? 0, color: 'from-emerald-500 to-emerald-600' },
+    { label: 'Renewal Due', value: summary?.audience.renewalDueCount ?? 0, color: 'from-fuchsia-500 to-pink-600' },
+  ];
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          { label: 'Total Campaigns', value: data?.total ?? campaigns.length, color: 'from-indigo-500 to-indigo-600' },
-          { label: 'Sent Today', value: campaigns.filter(c => c.status === 'completed' && new Date(c.createdAt).toDateString() === new Date().toDateString()).length, color: 'from-emerald-500 to-emerald-600' },
-          { label: 'Failed', value: campaigns.filter(c => c.status === 'failed').length, color: 'from-red-500 to-red-600' },
-          { label: 'Pending', value: campaigns.filter(c => c.status === 'pending').length, color: 'from-amber-500 to-amber-600' },
-        ].map(s => (
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+        {statCards.map(s => (
           <div key={s.label} className="rounded-2xl bg-white p-5 shadow-sm dark:bg-slate-900">
             <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{s.label}</p>
             <p className={`mt-1 text-2xl font-bold bg-gradient-to-r ${s.color} bg-clip-text text-transparent`}>{s.value}</p>
           </div>
         ))}
       </div>
-      <div className="flex gap-3">
+      <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
+        <div className="rounded-2xl bg-white p-5 shadow-sm dark:bg-slate-900">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Queue and delivery health</h3>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Current orchestration state across campaigns, schedules, triggers, and provider delivery.</p>
+            </div>
+            <AdminGuideButton title="Dashboard Health" content="These cards summarize the live campaign queue, provider stability, and subscription audience readiness from the same communication backend." affected="Campaign operators, provider managers, and trigger owners." tone="indigo" />
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Processing</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{summary?.totals.processingCount ?? 0}</p>
+              <p className="mt-1 text-xs text-slate-500">Queued: {summary?.totals.queuedCount ?? 0} | Completed: {summary?.totals.completedCount ?? 0}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+              <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Providers</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-white">{summary?.totals.activeProviders ?? 0}</p>
+              <p className="mt-1 text-xs text-slate-500">Failed providers: {summary?.totals.failedProviders ?? 0}</p>
+            </div>
+          </div>
+          <div className="mt-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+            <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+              <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Upcoming scheduled jobs</h4>
+            </div>
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              {(summary?.upcomingJobs ?? []).length === 0 ? (
+                <div className="px-4 py-6 text-sm text-slate-500">{isLoading ? 'Loading...' : 'No scheduled jobs queued right now.'}</div>
+              ) : (
+                (summary?.upcomingJobs ?? []).map((job, index) => (
+                  <div key={`${job._id || index}`} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+                    <div>
+                      <div className="font-medium text-slate-800 dark:text-slate-100">{String(job.campaignName || 'Untitled schedule')}</div>
+                      <div className="text-xs text-slate-500">{String(job.channel || 'sms')} | {Number(job.totalTargets || 0)} targets</div>
+                    </div>
+                    <div className="text-xs text-slate-500">{job.scheduledAtUTC ? new Date(String(job.scheduledAtUTC)).toLocaleString() : '-'}</div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="space-y-4">
+          <div className="rounded-2xl bg-white p-5 shadow-sm dark:bg-slate-900">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Provider health</h3>
+            <div className="mt-4 space-y-3">
+              {(summary?.providerHealth ?? []).slice(0, 4).map((provider) => (
+                <div key={provider.id} className="rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium text-slate-800 dark:text-slate-100">{provider.name}</div>
+                      <div className="text-xs text-slate-500">{provider.type} | {provider.provider}</div>
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${provider.failureRate >= 50 ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'}`}>
+                      {provider.failureRate}% fail
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-2xl bg-white p-5 shadow-sm dark:bg-slate-900">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Recent failures</h3>
+            <div className="mt-4 space-y-3">
+              {(summary?.recentFailures ?? []).slice(0, 4).map((failure, index) => (
+                <div key={`${failure._id || index}`} className="rounded-2xl border border-slate-200 p-3 text-xs dark:border-slate-800">
+                  <div className="font-medium text-slate-800 dark:text-slate-100">{String(failure.providerUsed || 'Unknown provider')}</div>
+                  <div className="mt-1 text-slate-500">{String(failure.originModule || 'campaign')} | {failure.createdAt ? new Date(String(failure.createdAt)).toLocaleString() : '-'}</div>
+                </div>
+              ))}
+              {(summary?.recentFailures ?? []).length === 0 && <div className="text-sm text-slate-500">No recent failures in the last 7 days.</div>}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-3">
         <div className="flex items-center gap-1">
           <button onClick={() => onNavigate('new')} className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700">
             + New Campaign
@@ -221,6 +302,12 @@ function DashboardPanel({ onNavigate }: { onNavigate: (t: Tab) => void }) {
           </button>
           <AdminGuideButton {...CAMPAIGN_GUIDES.viewAll} tone="indigo" />
         </div>
+        <button onClick={() => onNavigate('contact')} className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800">
+          Subscription Contact Center
+        </button>
+        <button onClick={() => onNavigate('triggers')} className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800">
+          Manage Triggers
+        </button>
       </div>
       {campaigns.length > 0 && (
         <div className="rounded-2xl bg-white shadow-sm dark:bg-slate-900">
@@ -322,15 +409,45 @@ function CampaignsListPanel({ onView, onRetry }: { onView: (id: string) => void;
 
 /* ─── New Campaign Panel (Wizard) ─────────────────── */
 function NewCampaignPanel({ showToast, onSent }: { showToast: (m: string, t?: 'success' | 'error') => void; onSent: () => void }) {
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const location = useLocation();
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [form, setForm] = useState({
     campaignName: '', channelType: 'sms' as 'sms' | 'email' | 'both',
     audienceType: 'all' as 'all' | 'group' | 'filter' | 'manual',
     audienceRef: '', guardianTargeted: false,
     templateId: '', customBody: '', subject: '',
+    audienceFilters: {} as Record<string, unknown>,
+    includeUserIdsText: '',
+    excludeUserIdsText: '',
+    scheduleMode: 'now' as 'now' | 'scheduled',
+    scheduledAtUTC: '',
   });
   const [preview, setPreview] = useState<CampaignPreview | null>(null);
   const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    const state = (location.state ?? {}) as {
+      prefillAudienceFilters?: Record<string, unknown>;
+      prefillCampaignName?: string;
+      prefillSelectedUserIds?: string[];
+    };
+    if (!state.prefillAudienceFilters && !state.prefillCampaignName && !state.prefillSelectedUserIds?.length) return;
+    setForm((current) => ({
+      ...current,
+      campaignName: state.prefillCampaignName || current.campaignName,
+      audienceType: state.prefillAudienceFilters ? 'filter' : current.audienceType,
+      audienceFilters: state.prefillAudienceFilters
+        ? {
+          ...state.prefillAudienceFilters,
+          ...(state.prefillSelectedUserIds?.length
+            ? { selectedUserIds: state.prefillSelectedUserIds }
+            : {}),
+        }
+        : current.audienceFilters,
+      audienceRef: state.prefillAudienceFilters ? '' : current.audienceRef,
+      includeUserIdsText: current.includeUserIdsText,
+    }));
+  }, [location.state]);
 
   const { data: groupsData } = useQuery({ queryKey: ['student-groups'], queryFn: () => getStudentGroups() });
   const groups = (
@@ -345,6 +462,12 @@ function NewCampaignPanel({ showToast, onSent }: { showToast: (m: string, t?: 's
   const templates = (templatesData?.items ?? []) as NotificationTemplate[];
 
   const filteredTemplates = useMemo(() => templates.filter(t => form.channelType === 'both' || t.channel === form.channelType), [templates, form.channelType]);
+  const includeUserIds = useMemo(() => form.includeUserIdsText.split(/[\s,]+/).filter(Boolean), [form.includeUserIdsText]);
+  const excludeUserIds = useMemo(() => form.excludeUserIdsText.split(/[\s,]+/).filter(Boolean), [form.excludeUserIdsText]);
+  const lockedSelectedUserIds = useMemo(() => {
+    const raw = form.audienceFilters?.selectedUserIds;
+    return Array.isArray(raw) ? raw.map(value => String(value)).filter(Boolean) : [];
+  }, [form.audienceFilters]);
 
   const handlePreview = async () => {
     try {
@@ -352,13 +475,16 @@ function NewCampaignPanel({ showToast, onSent }: { showToast: (m: string, t?: 's
         channelType: form.channelType,
         audienceType: form.audienceType,
         audienceRef: form.audienceRef || undefined,
+        audienceFilters: form.audienceType === 'filter' ? form.audienceFilters : undefined,
+        includeUserIds,
+        excludeUserIds,
         guardianTargeted: form.guardianTargeted,
         templateKey: form.templateId || undefined,
         customBody: form.customBody || undefined,
         subject: form.subject || undefined,
       });
       setPreview(res);
-      setStep(3);
+      setStep(4);
     } catch {
       showToast('Preview failed', 'error');
     }
@@ -372,10 +498,14 @@ function NewCampaignPanel({ showToast, onSent }: { showToast: (m: string, t?: 's
         channelType: form.channelType,
         audienceType: form.audienceType,
         audienceRef: form.audienceRef || undefined,
+        audienceFilters: form.audienceType === 'filter' ? form.audienceFilters : undefined,
+        includeUserIds,
+        excludeUserIds,
         guardianTargeted: form.guardianTargeted,
         templateKey: form.templateId || undefined,
         customBody: form.customBody || undefined,
         subject: form.subject || undefined,
+        scheduledAtUTC: form.scheduleMode === 'scheduled' && form.scheduledAtUTC ? form.scheduledAtUTC : undefined,
       });
       showToast('Campaign sent successfully!');
       onSent();
@@ -393,15 +523,15 @@ function NewCampaignPanel({ showToast, onSent }: { showToast: (m: string, t?: 's
     <div className="mx-auto max-w-2xl space-y-6">
       {/* Step indicator */}
       <div className="flex items-center justify-center gap-4">
-        {[1, 2, 3].map(s => (
+        {[1, 2, 3, 4].map(s => (
           <div key={s} className="flex items-center gap-2">
             <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${step >= s ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400'}`}>
               {s}
             </div>
             <span className={`text-sm ${step >= s ? 'font-medium text-slate-800 dark:text-white' : 'text-slate-400'}`}>
-              {s === 1 ? 'Audience' : s === 2 ? 'Content' : 'Review & Send'}
+              {s === 1 ? 'Audience' : s === 2 ? 'Content' : s === 3 ? 'Delivery' : 'Review & Send'}
             </span>
-            {s < 3 && <div className="h-px w-8 bg-slate-300 dark:bg-slate-600" />}
+            {s < 4 && <div className="h-px w-8 bg-slate-300 dark:bg-slate-600" />}
           </div>
         ))}
       </div>
@@ -440,6 +570,22 @@ function NewCampaignPanel({ showToast, onSent }: { showToast: (m: string, t?: 's
               </select>
             </div>
           )}
+          {form.audienceType === 'filter' && (
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-700 dark:border-indigo-900/40 dark:bg-indigo-950/40 dark:text-indigo-200">
+              This campaign was prefilled from Subscription Contact Center. It will use the same live audience filters during preview and send.
+              {lockedSelectedUserIds.length > 0 ? ` Selected rows stay locked to ${lockedSelectedUserIds.length} member${lockedSelectedUserIds.length === 1 ? '' : 's'} unless you change the filter.` : ''}
+            </div>
+          )}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className={labelClass}>Manual include user IDs</label>
+              <textarea value={form.includeUserIdsText} onChange={e => setForm(p => ({ ...p, includeUserIdsText: e.target.value }))} className={fieldClass + ' min-h-[100px]'} placeholder="Optional override. Comma or newline separated user IDs." />
+            </div>
+            <div>
+              <label className={labelClass}>Manual exclude user IDs</label>
+              <textarea value={form.excludeUserIdsText} onChange={e => setForm(p => ({ ...p, excludeUserIdsText: e.target.value }))} className={fieldClass + ' min-h-[100px]'} placeholder="Optional removal list. Comma or newline separated user IDs." />
+            </div>
+          </div>
           <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
             <input type="checkbox" checked={form.guardianTargeted} onChange={e => setForm(p => ({ ...p, guardianTargeted: e.target.checked }))} className="rounded border-slate-300" />
             Also send to guardians
@@ -479,15 +625,46 @@ function NewCampaignPanel({ showToast, onSent }: { showToast: (m: string, t?: 's
             <button onClick={() => setStep(1)} className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300">
               ← Back
             </button>
-            <button onClick={handlePreview} disabled={!form.templateId && !form.customBody} className="flex-1 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+            <button onClick={() => setStep(3)} disabled={!form.templateId && !form.customBody} className="flex-1 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
               Preview & Estimate →
             </button>
           </div>
         </div>
       )}
 
-      {/* Step 3: Review & Send */}
+      {/* Step 3: Delivery */}
       {step === 3 && (
+        <div className="space-y-4 rounded-2xl bg-white p-6 shadow-sm dark:bg-slate-900">
+          <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Delivery Options</h3>
+          <div>
+            <label className={labelClass}>Send timing</label>
+            <select value={form.scheduleMode} onChange={e => setForm(p => ({ ...p, scheduleMode: e.target.value as 'now' | 'scheduled' }))} className={fieldClass}>
+              <option value="now">Send now</option>
+              <option value="scheduled">Schedule for later</option>
+            </select>
+          </div>
+          {form.scheduleMode === 'scheduled' && (
+            <div>
+              <label className={labelClass}>Scheduled date and time</label>
+              <input type="datetime-local" value={form.scheduledAtUTC} onChange={e => setForm(p => ({ ...p, scheduledAtUTC: e.target.value }))} className={fieldClass} />
+            </div>
+          )}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+            Retry, quiet hours, and queue defaults still come from Communication Hub settings and Smart Triggers. This step controls when this campaign enters the queue.
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => setStep(3)} className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300">
+              ← Back
+            </button>
+            <button onClick={handlePreview} className="flex-1 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700">
+              Preview & Estimate
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 4: Review & Send */}
+      {step === 4 && (
         <div className="space-y-4 rounded-2xl bg-white p-6 shadow-sm dark:bg-slate-900">
           <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Review & Send</h3>
           <div className="grid gap-4 sm:grid-cols-3">
@@ -518,8 +695,12 @@ function NewCampaignPanel({ showToast, onSent }: { showToast: (m: string, t?: 's
             <ul className="mt-2 space-y-1 text-xs text-slate-500 dark:text-slate-400">
               <li>Campaign: <strong>{form.campaignName}</strong></li>
               <li>Audience: <strong>{form.audienceType}</strong></li>
+              <li>Selected rows locked from Contact Center: <strong>{lockedSelectedUserIds.length}</strong></li>
               <li>Guardian targeted: <strong>{form.guardianTargeted ? 'Yes' : 'No'}</strong></li>
               <li>Content: <strong>{form.templateId ? 'Template' : 'Custom'}</strong></li>
+              <li>Manual include IDs: <strong>{includeUserIds.length}</strong></li>
+              <li>Manual exclude IDs: <strong>{excludeUserIds.length}</strong></li>
+              <li>Schedule: <strong>{form.scheduleMode === 'scheduled' && form.scheduledAtUTC ? new Date(form.scheduledAtUTC).toLocaleString() : 'Send now'}</strong></li>
             </ul>
           </div>
           <div className="flex gap-3">
@@ -527,7 +708,7 @@ function NewCampaignPanel({ showToast, onSent }: { showToast: (m: string, t?: 's
               ← Back
             </button>
             <button onClick={handleSend} disabled={sending} className="flex-1 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50">
-              {sending ? 'Sending...' : '🚀 Send Campaign'}
+              {sending ? 'Sending...' : 'Launch Campaign'}
             </button>
           </div>
         </div>
@@ -618,6 +799,33 @@ function TemplatesPanel({ showToast }: { showToast: (m: string, t?: 'success' | 
 }
 
 /* ─── Delivery Logs Panel ─────────────────────────── */
+function CampaignViewNav({ activeTab, onNavigate }: { activeTab: Tab; onNavigate: (tab: Tab) => void }) {
+  return (
+    <div className="mb-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-sm dark:border-slate-800 dark:bg-slate-900/95">
+      <div className="flex min-w-max items-center gap-2">
+        {CAMPAIGN_VIEW_BUTTONS.map((item) => {
+          const isActive = activeTab === item.tab;
+          return (
+            <button
+              key={item.tab}
+              type="button"
+              onClick={() => onNavigate(item.tab)}
+              aria-pressed={isActive}
+              className={`rounded-xl px-4 py-2.5 text-sm font-medium transition ${
+                isActive
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+              }`}
+            >
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function LogsPanel() {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');

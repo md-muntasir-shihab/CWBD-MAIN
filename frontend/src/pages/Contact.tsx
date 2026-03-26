@@ -2,7 +2,7 @@ import { type ComponentType, type FormEvent, useEffect, useMemo, useState } from
 import { isAxiosError } from "axios";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
     AlertCircle,
     CheckCircle2,
@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { usePublicContactSettings, useSubmitContactMessage } from "../hooks/useContactQueries";
 import { mockPublicContactSettings } from "../mocks/contactMock";
-import type { ContactMessagePayload, PreferredContactMethod, PublicSettingsContactResponse } from "../types/contact";
+import type { ContactMessagePayload, PublicSettingsContactResponse } from "../types/contact";
 
 const isMockMode = String(import.meta.env.VITE_USE_MOCK_API || "false").toLowerCase() === "true";
 
@@ -37,7 +37,6 @@ type ContactFormState = {
     email: string;
     subject: string;
     message: string;
-    preferredContact: PreferredContactMethod;
     consent: boolean;
 };
 
@@ -67,16 +66,8 @@ const formInitialState: ContactFormState = {
     email: "",
     subject: "",
     message: "",
-    preferredContact: "whatsapp",
     consent: false,
 };
-
-const preferredContactOptions: Array<{ value: PreferredContactMethod; label: string }> = [
-    { value: "whatsapp", label: "WhatsApp" },
-    { value: "phone", label: "Phone Call" },
-    { value: "email", label: "Email" },
-    { value: "messenger", label: "Messenger" },
-];
 
 const socialPlatformDefs: Array<{
     id: string;
@@ -145,26 +136,41 @@ function validateForm(form: ContactFormState): ContactFormErrors {
     const errors: ContactFormErrors = {};
     if (!form.name.trim()) errors.name = "Full name is required.";
     if (!form.phone.trim()) errors.phone = "Phone is required.";
+    if (!form.email.trim()) {
+        errors.email = "Email is required.";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+        errors.email = "Enter a valid email address.";
+    }
     if (!form.subject.trim()) errors.subject = "Subject is required.";
     if (!form.message.trim()) {
         errors.message = "Message is required.";
     } else if (form.message.trim().length < 20) {
         errors.message = "Message must be at least 20 characters.";
     }
-    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-        errors.email = "Enter a valid email address.";
-    }
     if (!form.consent) errors.consent = "Consent is required.";
     return errors;
 }
 
+function topicToSubject(topic: string): string {
+    if (!topic) return "";
+    const normalized = topic.trim().toLowerCase();
+    if (normalized === "password-reset") return "Password reset help";
+    return normalized
+        .split(/[-_\s]+/)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+}
+
 export default function ContactPage() {
+    const [searchParams] = useSearchParams();
     const settingsQuery = usePublicContactSettings();
     const submitMutation = useSubmitContactMessage();
     const [form, setForm] = useState<ContactFormState>(formInitialState);
     const [errors, setErrors] = useState<ContactFormErrors>({});
     const [isDesktop, setIsDesktop] = useState(false);
     const [submitResult, setSubmitResult] = useState<{ ticketId?: string } | null>(null);
+    const topic = (searchParams.get("topic") || "").trim().toLowerCase();
+    const isPasswordResetTopic = topic === "password-reset";
 
     useEffect(() => {
         const media = window.matchMedia("(min-width: 1024px)");
@@ -173,6 +179,27 @@ export default function ContactPage() {
         media.addEventListener("change", sync);
         return () => media.removeEventListener("change", sync);
     }, []);
+
+    useEffect(() => {
+        const prefilledEmail = searchParams.get("email")?.trim() || "";
+        const prefilledPhone = searchParams.get("phone")?.trim() || "";
+        const prefilledSubject = searchParams.get("subject")?.trim() || topicToSubject(searchParams.get("topic") || "");
+        const prefilledMessage = searchParams.get("message")?.trim() || (
+            (searchParams.get("topic") || "").trim().toLowerCase() === "password-reset"
+                ? `I need help resetting the password for ${prefilledEmail || "my student account"}.`
+                : ""
+        );
+
+        if (!prefilledEmail && !prefilledPhone && !prefilledSubject && !prefilledMessage) return;
+
+        setForm((prev) => ({
+            ...prev,
+            email: prev.email || prefilledEmail,
+            phone: prev.phone || prefilledPhone,
+            subject: prev.subject || prefilledSubject,
+            message: prev.message || prefilledMessage,
+        }));
+    }, [searchParams]);
 
     const settings = settingsQuery.data || (isMockMode ? mockPublicContactSettings : EMPTY_SETTINGS);
 
@@ -244,7 +271,7 @@ export default function ContactPage() {
     }, [settings]);
 
     const footerNote =
-        settings.footer?.shortNote?.trim() || "By contacting us, you agree to CampusWay terms and privacy policy.";
+        settings.footer?.shortNote?.trim() || "By contacting us, you agree to CampusWay About, Terms, and Privacy pages.";
 
     const onFieldChange = <K extends keyof ContactFormState>(key: K, value: ContactFormState[K]) => {
         setForm((prev) => ({ ...prev, [key]: value }));
@@ -267,20 +294,17 @@ export default function ContactPage() {
         const payload: ContactMessagePayload = {
             name: form.name.trim(),
             phone: form.phone.trim(),
-            email: form.email.trim() || undefined,
+            email: form.email.trim(),
             subject: form.subject.trim(),
             message: form.message.trim(),
-            preferredContact: form.preferredContact,
             consent: form.consent,
+            ...(topic ? { topic } : {}),
         };
 
         try {
             const response = await submitMutation.mutateAsync(payload);
             setSubmitResult({ ticketId: response.ticketId });
-            setForm((prev) => ({
-                ...formInitialState,
-                preferredContact: prev.preferredContact,
-            }));
+            setForm(formInitialState);
             toast.success("Message sent successfully.");
         } catch (error: unknown) {
             const message = isAxiosError<{ message?: string }>(error)
@@ -302,6 +326,14 @@ export default function ContactPage() {
                 <p className="mt-2 max-w-2xl text-sm text-text-muted dark:text-dark-text/70 sm:text-base">
                     {settings.siteDescription || "Reach us for admission, exam, and account support."}
                 </p>
+                {isPasswordResetTopic ? (
+                    <div className="mt-4 rounded-2xl border border-indigo-500/20 bg-indigo-500/10 px-4 py-3 text-left">
+                        <p className="text-sm font-semibold text-slate-900 dark:text-white">Password reset request for admin support</p>
+                        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                            This form is prefilled for account recovery. Submit it with the student email and phone number so the admin team can verify ownership before helping with password access.
+                        </p>
+                    </div>
+                ) : null}
                 <div className="mt-4 inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-success/30 bg-success/10 px-3 py-2 text-sm font-medium text-success dark:bg-success/15">
                     <ShieldCheck className="h-4 w-4" />
                     Average response time: within 24 hours.
@@ -477,7 +509,7 @@ export default function ContactPage() {
                     <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                         <div>
                             <label htmlFor="contact-email" className="mb-1 block text-sm font-medium text-text dark:text-dark-text">
-                                Email (optional)
+                                Email <span className="text-danger">*</span>
                             </label>
                             <input
                                 id="contact-email"
@@ -520,35 +552,6 @@ export default function ContactPage() {
                             <span className="text-xs text-text-muted dark:text-dark-text/55">{form.message.trim().length} chars</span>
                         </div>
                     </div>
-
-                    <fieldset>
-                        <legend className="mb-2 text-sm font-medium text-text dark:text-dark-text">Preferred contact method</legend>
-                        <div className="grid grid-cols-2 gap-2">
-                            {preferredContactOptions.map((option) => {
-                                const active = form.preferredContact === option.value;
-                                return (
-                                    <label
-                                        key={option.value}
-                                        className={`flex min-h-[44px] cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm ${
-                                            active
-                                                ? "border-primary bg-primary/10 text-primary"
-                                                : "border-card-border text-text dark:text-dark-text"
-                                        }`}
-                                    >
-                                        <input
-                                            type="radio"
-                                            name="preferredContact"
-                                            value={option.value}
-                                            checked={active}
-                                            onChange={() => onFieldChange("preferredContact", option.value)}
-                                            className="h-4 w-4 accent-primary"
-                                        />
-                                        {option.label}
-                                    </label>
-                                );
-                            })}
-                        </div>
-                    </fieldset>
 
                     <div>
                         <label className="flex cursor-pointer items-start gap-2 text-sm text-text dark:text-dark-text">
@@ -599,6 +602,10 @@ export default function ContactPage() {
             <motion.section {...sectionMotion(5)} className="pb-2 text-center">
                 <p className="text-sm text-text-muted dark:text-dark-text/65">{footerNote}</p>
                 <p className="mt-1 text-xs text-text-muted dark:text-dark-text/55">
+                    <Link to="/about" className="hover:text-primary">
+                        About
+                    </Link>{" "}
+                    ·{" "}
                     <Link to="/terms" className="hover:text-primary">
                         Terms
                     </Link>{" "}

@@ -4,8 +4,8 @@ export declare const UserModel: import("mongoose").Model<{
     role: "admin" | "moderator" | "editor" | "student" | "chairman";
     emailVerified: boolean;
     phoneVerified: boolean;
-    passwordHash: string;
     profileScore: number;
+    passwordHash: string;
     email?: string | null | undefined;
     phone?: string | null | undefined;
     department?: string | null | undefined;
@@ -24,8 +24,8 @@ export declare const UserModel: import("mongoose").Model<{
     role: "admin" | "moderator" | "editor" | "student" | "chairman";
     emailVerified: boolean;
     phoneVerified: boolean;
-    passwordHash: string;
     profileScore: number;
+    passwordHash: string;
     email?: string | null | undefined;
     phone?: string | null | undefined;
     department?: string | null | undefined;
@@ -48,8 +48,8 @@ export declare const UserModel: import("mongoose").Model<{
     role: "admin" | "moderator" | "editor" | "student" | "chairman";
     emailVerified: boolean;
     phoneVerified: boolean;
-    passwordHash: string;
     profileScore: number;
+    passwordHash: string;
     email?: string | null | undefined;
     phone?: string | null | undefined;
     department?: string | null | undefined;
@@ -76,8 +76,8 @@ export declare const UserModel: import("mongoose").Model<{
     role: "admin" | "moderator" | "editor" | "student" | "chairman";
     emailVerified: boolean;
     phoneVerified: boolean;
-    passwordHash: string;
     profileScore: number;
+    passwordHash: string;
     email?: string | null | undefined;
     phone?: string | null | undefined;
     department?: string | null | undefined;
@@ -96,8 +96,8 @@ export declare const UserModel: import("mongoose").Model<{
     role: "admin" | "moderator" | "editor" | "student" | "chairman";
     emailVerified: boolean;
     phoneVerified: boolean;
-    passwordHash: string;
     profileScore: number;
+    passwordHash: string;
     email?: string | null | undefined;
     phone?: string | null | undefined;
     department?: string | null | undefined;
@@ -120,8 +120,8 @@ export declare const UserModel: import("mongoose").Model<{
     role: "admin" | "moderator" | "editor" | "student" | "chairman";
     emailVerified: boolean;
     phoneVerified: boolean;
-    passwordHash: string;
     profileScore: number;
+    passwordHash: string;
     email?: string | null | undefined;
     phone?: string | null | undefined;
     department?: string | null | undefined;

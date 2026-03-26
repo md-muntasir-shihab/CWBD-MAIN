@@ -45,6 +45,16 @@ const TriggerToggleSchema = new mongoose_1.Schema({
     enabled: { type: Boolean, default: true },
     channels: [{ type: String, enum: ['sms', 'email'] }],
     guardianIncluded: { type: Boolean, default: false },
+    templateKey: { type: String, trim: true, uppercase: true, default: '' },
+    delayMinutes: { type: Number, default: 0, min: 0, max: 10080 },
+    batchSize: { type: Number, default: 0, min: 0, max: 10000 },
+    retryEnabled: { type: Boolean, default: true },
+    quietHoursMode: { type: String, enum: ['respect', 'bypass'], default: 'respect' },
+    audienceMode: {
+        type: String,
+        enum: ['affected', 'subscription_active', 'subscription_renewal_due', 'custom'],
+        default: 'affected',
+    },
 }, { _id: false });
 const NotificationSettingsSchema = new mongoose_1.Schema({
     dailySmsLimit: { type: Number, default: 500 },
@@ -60,8 +70,6 @@ const NotificationSettingsSchema = new mongoose_1.Schema({
     resultPublishAutoSend: { type: Boolean, default: false },
     resultPublishChannels: [{ type: String, enum: ['sms', 'email'] }],
     resultPublishGuardianIncluded: { type: Boolean, default: false },
-    testSendPhoneNumber: { type: String, trim: true },
-    testSendEmail: { type: String, trim: true, lowercase: true },
     autoSyncCostToFinance: { type: Boolean, default: true },
 }, { timestamps: true });
 exports.default = mongoose_1.default.model('NotificationSettings', NotificationSettingsSchema);

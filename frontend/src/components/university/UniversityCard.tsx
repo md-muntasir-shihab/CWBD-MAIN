@@ -30,7 +30,7 @@ export const DEFAULT_UNIVERSITY_CARD_CONFIG: HomeUniversityCardConfig = {
     showExamDates: true,
     showExamCenters: true,
     cardDensity: 'comfortable',
-    defaultSort: 'nearest_deadline',
+    defaultSort: 'alphabetical',
 };
 
 export type UniversityCardActionVariant = 'default' | 'deadline' | 'exam';

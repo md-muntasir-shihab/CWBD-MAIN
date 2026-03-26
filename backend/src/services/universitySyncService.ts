@@ -1,8 +1,10 @@
 import mongoose from 'mongoose';
 import slugify from 'slugify';
+import HomeSettings from '../models/HomeSettings';
 import University, { type IExamCenter } from '../models/University';
 import UniversityCategory from '../models/UniversityCategory';
 import UniversityCluster from '../models/UniversityCluster';
+import UniversitySettings from '../models/UniversitySettings';
 import { DEFAULT_UNIVERSITY_CATEGORY, normalizeUniversityCategory } from '../utils/universityCategories';
 
 type SharedSyncConfig = {
@@ -339,6 +341,89 @@ export async function syncUniversityCategorySharedConfig(
         synced: targetIds.length,
         skipped,
     };
+}
+
+export async function renameUniversityCategoryReferences(
+    categoryId: string,
+    previousName: string,
+    nextName: string,
+): Promise<void> {
+    const previous = pickString(previousName);
+    const next = pickString(nextName);
+    if (!previous || !next || previous === next) return;
+
+    const categoryObjectId = asNullableObjectId(categoryId);
+    const universityFilter: Record<string, unknown> = categoryObjectId
+        ? { $or: [{ categoryId: categoryObjectId }, { category: previous }] }
+        : { category: previous };
+
+    await University.updateMany(
+        universityFilter,
+        {
+            $set: {
+                category: next,
+                ...(categoryObjectId ? { categoryId: categoryObjectId } : {}),
+            },
+        },
+    );
+
+    const affectedClusters = await UniversityCluster.find({ categoryRules: previous });
+    for (const cluster of affectedClusters) {
+        const nextRules = Array.from(
+            new Set((cluster.categoryRules || []).map((item) => (pickString(item) === previous ? next : pickString(item))).filter(Boolean)),
+        );
+        cluster.categoryRules = nextRules;
+        await cluster.save();
+    }
+
+    const homeSettings = await HomeSettings.findOne();
+    if (homeSettings) {
+        let touched = false;
+
+        if (pickString(homeSettings.universityDashboard?.defaultCategory) === previous) {
+            homeSettings.universityDashboard.defaultCategory = next;
+            touched = true;
+        }
+        if (pickString(homeSettings.universityPreview?.defaultActiveCategory) === previous) {
+            homeSettings.universityPreview.defaultActiveCategory = next;
+            touched = true;
+        }
+        if (Array.isArray(homeSettings.highlightedCategories)) {
+            const nextHighlighted = homeSettings.highlightedCategories.map((item) => {
+                if (pickString(item.category) !== previous) return item;
+                touched = true;
+                return { ...item, category: next };
+            });
+            homeSettings.highlightedCategories = nextHighlighted;
+        }
+
+        if (touched) {
+            await homeSettings.save();
+        }
+    }
+
+    const universitySettings = await UniversitySettings.findOne();
+    if (universitySettings) {
+        let touched = false;
+
+        if (pickString(universitySettings.defaultCategory) === previous) {
+            universitySettings.defaultCategory = next;
+            touched = true;
+        }
+
+        if (Array.isArray(universitySettings.highlightedCategories)) {
+            const nextHighlighted = universitySettings.highlightedCategories.map((item) => {
+                if (pickString(item) !== previous) return pickString(item);
+                touched = true;
+                return next;
+            });
+            universitySettings.highlightedCategories = Array.from(new Set(nextHighlighted.filter(Boolean)));
+        }
+
+        if (touched) {
+            await universitySettings.save();
+        }
+    }
 }
 
 export async function syncUniversityClusterSharedConfig(

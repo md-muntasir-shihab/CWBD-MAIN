@@ -20,6 +20,9 @@ import {
     Settings,
 } from 'lucide-react';
 import { adminGetResources, adminCreateResource, adminUpdateResource, adminDeleteResource, adminToggleResourcePublish, adminToggleResourceFeatured } from '../../services/api';
+import AdminFileUploadField from './AdminFileUploadField';
+import AdminImageUploadField from './AdminImageUploadField';
+import { buildYouTubeEmbedUrl } from '../../utils/youtube';
 
 type ResourceType = 'pdf' | 'link' | 'video' | 'audio' | 'image' | 'note';
 
@@ -251,6 +254,12 @@ export default function ResourcesPanel() {
         });
     }, [resources, search]);
 
+    const youtubeEmbedUrl = useMemo(
+        () => (form.type === 'video' ? buildYouTubeEmbedUrl(form.externalUrl) : null),
+        [form.externalUrl, form.type],
+    );
+    const showUploadedFileField = form.type !== 'link' && form.type !== 'note';
+
     return (
         <div className="space-y-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -292,9 +301,14 @@ export default function ResourcesPanel() {
             </div>
 
             {showForm && (
-                <div className="bg-slate-900/60 backdrop-blur-md rounded-2xl border border-indigo-500/10 p-6 space-y-4 shadow-xl animate-in fade-in zoom-in-95 duration-200">
+                <div className="bg-slate-900/60 backdrop-blur-md rounded-2xl border border-indigo-500/10 p-6 space-y-5 shadow-xl animate-in fade-in zoom-in-95 duration-200">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                        <h3 className="font-bold text-white text-lg">{editing ? 'Edit Resource' : 'Create Resource'}</h3>
+                        <div>
+                            <h3 className="font-bold text-white text-lg">{editing ? 'Edit Resource' : 'Create Resource'}</h3>
+                            <p className="mt-1 text-xs text-slate-400">
+                                Upload files directly or keep using external links. YouTube video links will render as embeds on the public detail page.
+                            </p>
+                        </div>
                         <div className="flex gap-4">
                             <label className="flex items-center gap-2 cursor-pointer group">
                                 <input
@@ -418,24 +432,37 @@ export default function ResourcesPanel() {
                             />
                         </div>
 
-                        <div className="md:col-span-2">
-                            <label className="text-xs text-slate-400 block mb-1.5 ml-1">Thumbnail URL</label>
-                            <input
+                        <div className="md:col-span-2 xl:col-span-4 grid gap-4 xl:grid-cols-2">
+                            <AdminImageUploadField
+                                label="Thumbnail"
                                 value={form.thumbnailUrl}
-                                onChange={(event) => setForm((prev) => ({ ...prev, thumbnailUrl: event.target.value }))}
-                                placeholder="https://.../image.jpg"
-                                className="w-full bg-slate-950/65 border border-indigo-500/10 rounded-xl px-4 py-2 text-sm text-white outline-none"
+                                onChange={(nextValue) => setForm((prev) => ({ ...prev, thumbnailUrl: nextValue }))}
+                                helper="Upload a cover thumbnail instead of pasting an image URL manually."
+                                previewAlt={form.title || 'Resource thumbnail'}
+                                category="admin_upload"
+                                emptyTitle="No thumbnail uploaded"
+                                emptyDescription="Upload an image cover for resource cards and previews."
+                                panelClassName="border-indigo-500/10 bg-slate-950/20"
                             />
-                        </div>
-
-                        <div className="md:col-span-2">
-                            <label className="text-xs text-slate-400 block mb-1.5 ml-1">File URL</label>
-                            <input
-                                value={form.fileUrl}
-                                onChange={(event) => setForm((prev) => ({ ...prev, fileUrl: event.target.value }))}
-                                placeholder="e.g. /uploads/doc.pdf"
-                                className="w-full bg-slate-950/65 border border-indigo-500/10 rounded-xl px-4 py-2 text-sm text-white outline-none"
-                            />
+                            {showUploadedFileField ? (
+                                <AdminFileUploadField
+                                    label="Uploaded File"
+                                    value={form.fileUrl}
+                                    onChange={(nextValue) => setForm((prev) => ({ ...prev, fileUrl: nextValue }))}
+                                    helper={form.type === 'video'
+                                        ? 'Upload MP4 or WebM for direct hosted playback, or use a YouTube URL below.'
+                                        : 'Upload PDF, Excel, CSV, image, or supported media and keep the saved URL in the existing file field.'}
+                                    emptyTitle="No file uploaded"
+                                    emptyDescription="Use this for PDF, Excel, CSV, MP4, WebM, or other supported resource files."
+                                />
+                            ) : (
+                                <div className="rounded-2xl border border-indigo-500/10 bg-slate-950/30 p-4 text-sm text-slate-400">
+                                    <p className="font-semibold text-slate-200">Hosted file upload not needed for this type</p>
+                                    <p className="mt-2 text-xs leading-6 text-slate-400">
+                                        Link and note resources can keep using the external URL and description fields below.
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         <div className="md:col-span-2 xl:col-span-2">
@@ -443,11 +470,51 @@ export default function ResourcesPanel() {
                             <input
                                 value={form.externalUrl}
                                 onChange={(event) => setForm((prev) => ({ ...prev, externalUrl: event.target.value }))}
-                                placeholder="https://..."
+                                placeholder={form.type === 'video' ? 'YouTube watch/share/shorts URL or external video link' : 'https://...'}
                                 className="w-full bg-slate-950/65 border border-indigo-500/10 rounded-xl px-4 py-2 text-sm text-white outline-none"
                             />
+                            <p className="mt-2 text-[11px] text-slate-500">
+                                {form.type === 'video'
+                                    ? 'Paste a YouTube URL to show an embedded preview on the public detail page.'
+                                    : 'Keep this field for direct external resources when you do not want to upload a file.'}
+                            </p>
                         </div>
                     </div>
+
+                    {form.type === 'video' ? (
+                        <div className="rounded-2xl border border-indigo-500/10 bg-slate-950/35 p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-sm font-semibold text-white">Video Source Preview</p>
+                                    <p className="mt-1 text-xs text-slate-400">
+                                        {youtubeEmbedUrl
+                                            ? 'Recognized YouTube link. This will render as an embedded video.'
+                                            : form.externalUrl.trim()
+                                                ? 'External video link saved as a normal outbound URL.'
+                                                : 'Add a YouTube URL or upload a video file.'}
+                                    </p>
+                                </div>
+                                {youtubeEmbedUrl ? (
+                                    <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-300">
+                                        YouTube Embed Enabled
+                                    </span>
+                                ) : null}
+                            </div>
+                            {youtubeEmbedUrl ? (
+                                <div className="mt-4 overflow-hidden rounded-2xl border border-indigo-500/10 bg-slate-950/70">
+                                    <div className="aspect-video">
+                                        <iframe
+                                            src={youtubeEmbedUrl}
+                                            title="YouTube preview"
+                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                            allowFullScreen
+                                            className="h-full w-full"
+                                        />
+                                    </div>
+                                </div>
+                            ) : null}
+                        </div>
+                    ) : null}
 
                     <div>
                         <label className="text-xs text-slate-400 block mb-1.5 ml-1">Description</label>

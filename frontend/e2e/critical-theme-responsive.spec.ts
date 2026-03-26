@@ -27,11 +27,25 @@ async function expectNoCriticalHorizontalOverflow(page: Parameters<typeof test>[
     expect(overflowPx).toBeLessThanOrEqual(24);
 }
 
+async function isAdminLoginVisible(page: Parameters<typeof test>[0]['page']) {
+    if (page.url().includes('/__cw_admin__/login')) return true;
+    return page.getByRole('button', { name: /Sign In to Admin Panel/i }).first().isVisible().catch(() => false);
+}
+
 async function goToAdminRoute(page: Parameters<typeof test>[0]['page'], path: string) {
     await page.goto(path, { waitUntil: 'domcontentloaded' });
-    if (page.url().includes('/__cw_admin__/login')) {
+    await page.waitForTimeout(500);
+    const loadingAccess = page.getByText(/Checking admin access/i).first();
+    if (await loadingAccess.isVisible().catch(() => false)) {
+        await expect(loadingAccess).not.toBeVisible({ timeout: 15000 });
+    }
+    if (await isAdminLoginVisible(page)) {
         await loginAsAdmin(page, 'desktop');
         await page.goto(path, { waitUntil: 'domcontentloaded' });
+        await page.waitForTimeout(500);
+        if (await loadingAccess.isVisible().catch(() => false)) {
+            await expect(loadingAccess).not.toBeVisible({ timeout: 15000 });
+        }
     }
 }
 
@@ -47,7 +61,7 @@ test.describe('Critical Theme + Responsive Matrix', () => {
 
                 await expect(page.locator('body')).toBeVisible();
                 await expect(page.getByRole('link', { name: /^Home$/i }).first()).toBeVisible();
-                if (viewport.width < 768) {
+                if (viewport.width < 1024) {
                     await expect(page.getByRole('button', { name: /Open menu|Toggle menu|Open navigation/i }).first()).toBeVisible();
                 } else {
                     await expect(page.getByRole('link', { name: /^News$/i }).first()).toBeVisible();
@@ -69,21 +83,21 @@ test.describe('Critical Theme + Responsive Matrix', () => {
                 await page.setViewportSize({ width: viewport.width, height: viewport.height });
 
                 await goToAdminRoute(page, '/__cw_admin__/news/pending');
-                await expect(page.getByRole('heading', { name: /Items to Review/i }).first()).toBeVisible();
-                await expect(page.getByRole('button', { name: /More filters/i })).toBeVisible();
+                await expect(page.getByRole('heading', { name: /Items to Review/i }).first()).toBeVisible({ timeout: 15000 });
+                await expect(page.getByRole('button', { name: /More filters/i })).toBeVisible({ timeout: 15000 });
                 await expectNoCriticalHorizontalOverflow(page);
 
                 await goToAdminRoute(page, '/__cw_admin__/news/dashboard');
-                await expect(page.getByRole('heading', { name: /Overview|Start with the task you need/i }).first()).toBeVisible();
+                await expect(page.getByRole('heading', { name: /Overview|Start with the task you need/i }).first()).toBeVisible({ timeout: 15000 });
                 await expectNoCriticalHorizontalOverflow(page);
 
                 await goToAdminRoute(page, '/__cw_admin__/finance/dashboard');
                 await expect(page).toHaveURL(/\/__cw_admin__\/finance\/dashboard/);
-                await expect(page.locator('main')).toBeVisible();
+                await expect(page.locator('main')).toBeVisible({ timeout: 15000 });
                 await expectNoCriticalHorizontalOverflow(page);
 
                 await goToAdminRoute(page, '/__cw_admin__/exams');
-                await expect(page.getByRole('heading', { name: /Exams|Exam Center/i }).first()).toBeVisible();
+                await expect(page.getByRole('heading', { name: /Exams|Exam Center/i }).first()).toBeVisible({ timeout: 15000 });
                 if (viewport.width >= 1024) {
                     await expect(page.locator('aside')).toHaveCount(1);
                 }

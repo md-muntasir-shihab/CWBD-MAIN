@@ -164,6 +164,20 @@ interface NewsV2SettingsConfig {
     };
 }
 
+function publicNewsDiagnosticsEnabled(): boolean {
+    return process.env.ENABLE_PUBLIC_NEWS_DIAGNOSTICS === 'true' || process.env.NODE_ENV === 'test';
+}
+
+function ensurePublicNewsDiagnosticsEnabled(req: Request, res: Response): boolean {
+    if (publicNewsDiagnosticsEnabled()) return true;
+    if (req.method === 'POST') {
+        res.status(404).json({ message: 'Not found' });
+        return false;
+    }
+    res.status(404).send('Not found');
+    return false;
+}
+
 interface RssIngestStats {
     fetchedCount: number;
     createdCount: number;
@@ -3994,6 +4008,7 @@ function getNewsDiagnosticArticles(host: string): Array<{
 
 export async function getPublicNewsV2DiagnosticFeed(req: Request, res: Response): Promise<void> {
     try {
+        if (!ensurePublicNewsDiagnosticsEnabled(req, res)) return;
         const host = `${req.protocol}://${req.get('host') || 'localhost'}`;
         const articles = getNewsDiagnosticArticles(host);
         const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -4024,6 +4039,7 @@ export async function getPublicNewsV2DiagnosticFeed(req: Request, res: Response)
 
 export async function getPublicNewsV2DiagnosticArticle(req: Request, res: Response): Promise<void> {
     try {
+        if (!ensurePublicNewsDiagnosticsEnabled(req, res)) return;
         const slug = String(req.params.slug || '').trim() as NewsDiagnosticArticleKey;
         const host = `${req.protocol}://${req.get('host') || 'localhost'}`;
         const article = getNewsDiagnosticArticles(host).find((item) => item.key === slug);
@@ -4052,6 +4068,7 @@ export async function getPublicNewsV2DiagnosticArticle(req: Request, res: Respon
 
 export async function getPublicNewsV2DiagnosticDelivery(req: Request, res: Response): Promise<void> {
     try {
+        if (!ensurePublicNewsDiagnosticsEnabled(req, res)) return;
         const channel = String(req.params.channel || '').trim().toLowerCase();
         if (channel !== 'sms' && channel !== 'email') {
             res.status(404).json({ message: 'Diagnostic delivery channel not found' });

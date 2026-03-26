@@ -9,7 +9,6 @@ import {
     User, Rss, Layers, Archive, Sparkles, Copy, Upload, Link2,
     Send, FileText, History, Database,
     UserPlus, Import, Target, MessageSquare, TrendingDown,
-    FlaskConical,
     KeyRound,
     Zap,
     HelpCircle,
@@ -106,7 +105,7 @@ export const ADMIN_PATHS = {
     adminProfile: adminUi('settings/admin-profile'),
     settingsCenter: adminUi('settings'),
     newsSettings: adminUi('settings/news'),
-    // Notification Test Send
+    // Legacy Notification Test Send redirect
     notificationTestSend: adminUi('notifications/test-send'),
     // Notification Triggers
     notificationTriggers: adminUi('notifications/triggers'),
@@ -114,7 +113,12 @@ export const ADMIN_PATHS = {
     campaignsDashboard: adminUi('campaigns'),
     campaignsList: adminUi('campaigns/list'),
     campaignsNew: adminUi('campaigns/new'),
+    campaignsAudiences: `${adminUi('campaigns/contact-center')}?tab=members`,
+    campaignsContactCenter: adminUi('campaigns/contact-center'),
     campaignsTemplates: adminUi('campaigns/templates'),
+    campaignsProviders: `${adminUi('campaigns')}?view=providers`,
+    campaignsTriggers: `${adminUi('campaigns')}?view=triggers`,
+    campaignsNotifications: `${adminUi('campaigns')}?view=notifications`,
     campaignsSettings: adminUi('campaigns/settings'),
     campaignsLogs: adminUi('campaigns/logs'),
     // Data Hub
@@ -188,7 +192,7 @@ export const ADMIN_MENU_ITEMS: AdminMenuItem[] = [
     {
         key: 'news',
         label: 'News Management',
-        path: adminUi('news/pending'),
+        path: adminUi('news/dashboard'),
         icon: Newspaper,
         module: 'news',
         matchPrefixes: [adminUi('news'), adminUi('settings/news')],
@@ -267,7 +271,6 @@ export const ADMIN_MENU_ITEMS: AdminMenuItem[] = [
             { key: 'stu-create', label: 'Create Student', path: ADMIN_PATHS.studentMgmtCreate, icon: UserPlus },
             { key: 'stu-import', label: 'Import / Export', path: ADMIN_PATHS.studentMgmtImportExport, icon: Import },
             { key: 'stu-groups', label: 'Groups', path: ADMIN_PATHS.studentMgmtGroups, icon: ClipboardList },
-            { key: 'stu-audiences', label: 'Audiences', path: ADMIN_PATHS.studentMgmtAudiences, icon: Target },
             { key: 'stu-crm', label: 'CRM Timeline', path: ADMIN_PATHS.studentMgmtCrmTimeline, icon: MessageSquare },
             { key: 'stu-weak', label: 'Weak Topics', path: ADMIN_PATHS.studentMgmtWeakTopics, icon: TrendingDown },
             { key: 'stu-profile-requests', label: 'Profile Requests', path: ADMIN_PATHS.studentMgmtProfileRequests, icon: ClipboardList },
@@ -332,27 +335,16 @@ export const ADMIN_MENU_ITEMS: AdminMenuItem[] = [
         matchPrefixes: [adminUi('campaigns'), adminUi('notifications/test-send'), adminUi('notifications/triggers')],
         children: [
             { key: 'cmp-dash', label: 'Dashboard', path: ADMIN_PATHS.campaignsDashboard, icon: LayoutDashboard },
-            { key: 'cmp-list', label: 'All Campaigns', path: ADMIN_PATHS.campaignsList, icon: ScrollText },
+            { key: 'cmp-list', label: 'Campaigns', path: ADMIN_PATHS.campaignsList, icon: ScrollText },
             { key: 'cmp-new', label: 'New Campaign', path: ADMIN_PATHS.campaignsNew, icon: Send },
+            { key: 'cmp-audiences', label: 'Audiences', path: ADMIN_PATHS.campaignsAudiences, icon: Target },
+            { key: 'cmp-contact-center', label: 'Subscription Contact Center', path: ADMIN_PATHS.campaignsContactCenter, icon: Users },
             { key: 'cmp-templates', label: 'Templates', path: ADMIN_PATHS.campaignsTemplates, icon: FileText },
-            { key: 'cmp-test-send', label: 'Test Send', path: ADMIN_PATHS.notificationTestSend, icon: FlaskConical },
-            { key: 'cmp-triggers', label: 'Auto Triggers', path: ADMIN_PATHS.notificationTriggers, icon: Zap },
+            { key: 'cmp-providers', label: 'Providers', path: ADMIN_PATHS.campaignsProviders, icon: Link2 },
+            { key: 'cmp-triggers', label: 'Smart Triggers', path: ADMIN_PATHS.campaignsTriggers, icon: Zap },
+            { key: 'cmp-notifications', label: 'Notifications', path: ADMIN_PATHS.campaignsNotifications, icon: Bell },
             { key: 'cmp-logs', label: 'Delivery Logs', path: ADMIN_PATHS.campaignsLogs, icon: ScrollText },
             { key: 'cmp-settings', label: 'Settings', path: ADMIN_PATHS.campaignsSettings, icon: Settings },
-        ],
-    },
-
-    // 10c. Data Hub
-    {
-        key: 'dataHub',
-        label: 'Data Hub',
-        path: ADMIN_PATHS.dataHub,
-        icon: Database,
-        module: 'reports_analytics',
-        matchPrefixes: [adminUi('data-hub')],
-        children: [
-            { key: 'dh-export', label: 'Export Center', path: ADMIN_PATHS.dataHub, icon: Upload },
-            { key: 'dh-history', label: 'History', path: ADMIN_PATHS.dataHubHistory, icon: History },
         ],
     },
 
@@ -448,15 +440,23 @@ export function routeFromDashboardActionTab(tabId: string): string {
         case 'home-control':
             return ADMIN_PATHS.homeControl;
         case 'news':
-            return adminUi('news/pending');
+            return adminUi('news/dashboard');
         case 'exams':
             return ADMIN_PATHS.exams;
         case 'question-bank':
             return ADMIN_PATHS.questionBank;
         case 'student-management':
             return ADMIN_PATHS.studentMgmtList;
+        case 'subscriptions':
+            return ADMIN_PATHS.subscriptionPlans;
+        case 'resources':
+            return ADMIN_PATHS.resources;
+        case 'campaigns':
+            return ADMIN_PATHS.campaignsDashboard;
         case 'finance':
             return ADMIN_PATHS.financeDashboard;
+        case 'team-access':
+            return ADMIN_PATHS.teamMembers;
         case 'support-tickets':
             return ADMIN_PATHS.supportCenter;
         case 'security':

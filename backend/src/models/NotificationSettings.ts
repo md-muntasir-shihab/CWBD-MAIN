@@ -12,6 +12,12 @@ export interface ITriggerToggle {
     enabled: boolean;
     channels: ('sms' | 'email')[];
     guardianIncluded: boolean;
+    templateKey?: string;
+    delayMinutes?: number;
+    batchSize?: number;
+    retryEnabled?: boolean;
+    quietHoursMode?: 'respect' | 'bypass';
+    audienceMode?: 'affected' | 'subscription_active' | 'subscription_renewal_due' | 'custom';
 }
 
 export interface INotificationSettings extends Document {
@@ -40,10 +46,6 @@ export interface INotificationSettings extends Document {
     resultPublishChannels: ('sms' | 'email')[];
     resultPublishGuardianIncluded: boolean;
 
-    /* ---- test-send ---- */
-    testSendPhoneNumber?: string;
-    testSendEmail?: string;
-
     /* ---- finance sync toggle ---- */
     autoSyncCostToFinance: boolean;
 
@@ -67,6 +69,16 @@ const TriggerToggleSchema = new Schema<ITriggerToggle>(
         enabled: { type: Boolean, default: true },
         channels: [{ type: String, enum: ['sms', 'email'] }],
         guardianIncluded: { type: Boolean, default: false },
+        templateKey: { type: String, trim: true, uppercase: true, default: '' },
+        delayMinutes: { type: Number, default: 0, min: 0, max: 10080 },
+        batchSize: { type: Number, default: 0, min: 0, max: 10000 },
+        retryEnabled: { type: Boolean, default: true },
+        quietHoursMode: { type: String, enum: ['respect', 'bypass'], default: 'respect' },
+        audienceMode: {
+            type: String,
+            enum: ['affected', 'subscription_active', 'subscription_renewal_due', 'custom'],
+            default: 'affected',
+        },
     },
     { _id: false },
 );
@@ -91,9 +103,6 @@ const NotificationSettingsSchema = new Schema<INotificationSettings>(
         resultPublishAutoSend: { type: Boolean, default: false },
         resultPublishChannels: [{ type: String, enum: ['sms', 'email'] }],
         resultPublishGuardianIncluded: { type: Boolean, default: false },
-
-        testSendPhoneNumber: { type: String, trim: true },
-        testSendEmail: { type: String, trim: true, lowercase: true },
 
         autoSyncCostToFinance: { type: Boolean, default: true },
     },

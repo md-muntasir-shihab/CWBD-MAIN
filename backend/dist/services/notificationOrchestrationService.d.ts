@@ -30,9 +30,12 @@ export interface CampaignSendOptions {
     audienceGroupId?: string;
     audienceFilters?: Record<string, unknown>;
     manualStudentIds?: string[];
+    includeUserIds?: string[];
+    excludeUserIds?: string[];
     guardianTargeted?: boolean;
     recipientMode?: 'student' | 'guardian' | 'both';
     scheduledAtUTC?: Date;
+    quietHoursMode?: 'respect' | 'bypass';
     adminId: string;
     triggerKey?: string;
     testSend?: boolean;
@@ -57,6 +60,8 @@ export declare function resolveAudience(audienceType: CampaignSendOptions['audie
     groupId?: string;
     filters?: Record<string, unknown>;
     manualStudentIds?: string[];
+    includeUserIds?: string[];
+    excludeUserIds?: string[];
 }): Promise<RecipientInfo[]>;
 export declare function previewAndEstimate(opts: CampaignSendOptions): Promise<PreviewEstimate>;
 export declare function executeCampaign(opts: CampaignSendOptions): Promise<{

@@ -134,6 +134,7 @@ async function adminUpdateUniversityCategory(req, res) {
             res.status(404).json({ message: 'Category not found.' });
             return;
         }
+        const previousName = String(category.name || '').trim();
         if (payload.name !== undefined) {
             const nextName = String(payload.name || '').trim();
             if (!nextName) {
@@ -164,6 +165,7 @@ async function adminUpdateUniversityCategory(req, res) {
         }
         category.updatedBy = asObjectId(req.user?._id);
         await category.save();
+        await (0, universitySyncService_1.renameUniversityCategoryReferences)(String(category._id), previousName, String(category.name || '').trim());
         (0, homeStream_1.broadcastHomeStreamEvent)({
             type: 'category-updated',
             meta: { action: 'update', categoryId: String(category._id) },

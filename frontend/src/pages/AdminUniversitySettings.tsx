@@ -156,6 +156,31 @@ export default function AdminUniversitySettingsPage() {
         () => new Map(universityOptions.map((item) => [item.slug, item.label])),
         [universityOptions],
     );
+    const summaryCards = [
+        {
+            title: 'Categories',
+            value: String(local.categoryOrder.length),
+            detail: local.defaultCategory === 'all' ? 'Default: All' : `Default: ${local.defaultCategory}`,
+        },
+        {
+            title: 'Highlighted',
+            value: String(local.highlightedCategories.length),
+            detail: local.highlightedCategories.length > 0 ? 'Shown on home/university filters' : 'No highlighted categories',
+        },
+        {
+            title: 'Featured',
+            value: String(local.featuredUniversitySlugs.length),
+            detail: `${local.maxFeaturedItems} max visible`,
+        },
+        {
+            title: 'Cluster Filters',
+            value: local.enableClusterFilterOnHome || local.enableClusterFilterOnUniversities ? 'Visible' : 'Hidden',
+            detail: [
+                local.enableClusterFilterOnHome ? 'Home on' : 'Home off',
+                local.enableClusterFilterOnUniversities ? 'Universities on' : 'Universities off',
+            ].join(' • '),
+        },
+    ];
 
     function addSlug(rawSlug?: string) {
         const s = String(rawSlug ?? slugInput).trim().toLowerCase().replace(/\s+/g, '-');
@@ -260,6 +285,32 @@ export default function AdminUniversitySettingsPage() {
                         </button>
                     </div>
                 </div>
+
+                <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    {summaryCards.map((card) => (
+                        <div key={card.title} className="card-flat border border-primary/10 p-4">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-text-muted">{card.title}</p>
+                            <p className="mt-2 text-2xl font-semibold cw-text">{card.value}</p>
+                            <p className="mt-1 text-xs cw-muted">{card.detail}</p>
+                        </div>
+                    ))}
+                </section>
+
+                <section className="card-flat border border-primary/10 p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <h2 className="text-base font-semibold cw-text">Display Rules</h2>
+                            <p className="mt-1 text-sm cw-muted">
+                                These settings only control ordering, defaults, filters, and fallbacks. They do not rename routes or remove universities.
+                            </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2 text-xs">
+                            <span className="rounded-full border border-card-border bg-surface/60 px-3 py-1 cw-muted">Home categories</span>
+                            <span className="rounded-full border border-card-border bg-surface/60 px-3 py-1 cw-muted">Featured row</span>
+                            <span className="rounded-full border border-card-border bg-surface/60 px-3 py-1 cw-muted">Fallback logo</span>
+                        </div>
+                    </div>
+                </section>
 
                 {/* Category Order */}
                 <section className="card-flat p-5 space-y-4">

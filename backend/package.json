@@ -28,6 +28,7 @@
         "e2e:db-evidence": "tsx src/scripts/e2e_db_evidence.ts",
         "e2e:db-snapshot": "tsx src/scripts/e2e_db_snapshot.ts",
         "e2e:db-snapshot:restore": "tsx src/scripts/e2e_db_snapshot.ts --restore",
+        "release:cleanup-public-surface": "tsx src/scripts/release-cleanup-public-surface.ts",
         "seed:content": "tsx src/scripts/seed-content-pipeline.ts",
         "seed:default-users": "tsx src/scripts/seed-default-users.ts",
         "e2e:restore": "tsx src/scripts/e2e_restore.ts",

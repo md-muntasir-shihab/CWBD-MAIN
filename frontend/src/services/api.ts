@@ -6,9 +6,10 @@ const ADMIN_PATH = RAW_ADMIN_PATH.replace(/^\/+|\/+$/g, '') || 'campusway-secure
 const BROWSER_FP_KEY = 'campusway-browser-fingerprint';
 const AUTH_SESSION_HINT_KEY = 'campusway-auth-session-hint';
 const API_BASE_FROM_ENV = String(import.meta.env.VITE_API_BASE_URL || '').trim();
-const API_BASE_URL = API_BASE_FROM_ENV || '/api';
 const API_PROXY_TARGET = String(import.meta.env.VITE_API_PROXY_TARGET || '').trim();
 const IS_PROD_BUILD = Boolean(import.meta.env.PROD);
+const USE_DEV_PROXY = Boolean(import.meta.env.DEV && API_PROXY_TARGET);
+const API_BASE_URL = USE_DEV_PROXY ? '/api' : (API_BASE_FROM_ENV || '/api');
 
 if (IS_PROD_BUILD && !API_BASE_FROM_ENV) {
     throw new Error('VITE_API_BASE_URL is required in production builds.');
@@ -16,6 +17,10 @@ if (IS_PROD_BUILD && !API_BASE_FROM_ENV) {
 
 if (import.meta.env.DEV && !API_BASE_FROM_ENV && !API_PROXY_TARGET) {
     console.warn('[CampusWay] Neither VITE_API_BASE_URL nor VITE_API_PROXY_TARGET is configured. Falling back to /api.');
+}
+
+if (USE_DEV_PROXY && API_BASE_FROM_ENV) {
+    console.info('[CampusWay] Development proxy detected. Using same-origin /api for browser auth and cookie-safe requests.');
 }
 
 function resolveApiUrl(pathAfterApi: string): string {
@@ -700,6 +705,62 @@ export interface SubscriptionAssignmentPayload {
     notes?: string;
 }
 
+export type StaticPageTone = 'neutral' | 'info' | 'success' | 'warning' | 'accent';
+
+export interface ApiStaticPageSection {
+    title: string;
+    body: string;
+    bullets: string[];
+    iconKey: string;
+    tone: StaticPageTone;
+    enabled: boolean;
+    order: number;
+}
+
+export interface ApiStaticFeatureCard {
+    title: string;
+    description: string;
+    iconKey: string;
+    enabled: boolean;
+    order: number;
+}
+
+export interface ApiFounderContactLink {
+    label: string;
+    url: string;
+}
+
+export interface ApiFounderProfile {
+    name: string;
+    title: string;
+    photoUrl: string;
+    shortBio: string;
+    contactLinks: ApiFounderContactLink[];
+    enabled: boolean;
+    order: number;
+}
+
+export interface ApiStaticPageConfig {
+    eyebrow: string;
+    title: string;
+    subtitle: string;
+    lastUpdatedLabel: string;
+    sections: ApiStaticPageSection[];
+    backLinkLabel: string;
+    backLinkUrl: string;
+}
+
+export interface ApiAboutStaticPageConfig extends ApiStaticPageConfig {
+    featureCards: ApiStaticFeatureCard[];
+    founderProfiles: ApiFounderProfile[];
+}
+
+export interface WebsiteStaticPagesConfig {
+    about: ApiAboutStaticPageConfig;
+    terms: ApiStaticPageConfig;
+    privacy: ApiStaticPageConfig;
+}
+
 export interface ApiWebsiteSettings {
     websiteName: string;
     siteName?: string;
@@ -745,6 +806,7 @@ export interface ApiWebsiteSettings {
     subscriptionPageSubtitle?: string;
     subscriptionDefaultBannerUrl?: string;
     subscriptionLoggedOutCtaMode?: 'login' | 'contact';
+    staticPages?: WebsiteStaticPagesConfig;
 }
 
 export interface PublicSocialLinkItem {
@@ -765,7 +827,13 @@ export interface AdminDashboardSummary {
     questionBank: { totalQuestions: number };
     students: { totalActive: number; pendingPayment: number; suspended: number };
     payments: { pendingApprovals: number; paidToday: number };
-    supportCenter: { unreadMessages: number };
+    financeCenter: { pendingApprovals: number; paidToday: number };
+    subscriptions: { activeSubscribers: number; renewalDue: number; activePlans: number };
+    resources: { publicResources: number; featuredResources: number };
+    campaigns: { totalCampaigns: number; queuedOrProcessing: number; failedToday: number };
+    supportCenter: { unreadMessages: number; unreadTickets: number; unreadContactMessages: number };
+    teamAccess: { activeStaff: number; pendingInvites: number; activeRoles: number };
+    security: { unreadAlerts: number; criticalAlerts: number; db: 'connected' | 'down' };
     systemStatus: { db: 'connected' | 'down'; timeUTC: string };
 }
 
@@ -3057,8 +3125,15 @@ export const adminCreateUniversity = (data: Partial<ApiUniversity>) =>
     api.post(`/${ADMIN_PATH}/universities`, data);
 export const adminUpdateUniversity = (id: string, data: Partial<ApiUniversity>) =>
     api.put(`/${ADMIN_PATH}/universities/${id}`, data);
-export const adminDeleteUniversity = (id: string) =>
-    api.delete(`/${ADMIN_PATH}/universities/${id}`);
+export const adminDeleteUniversity = async (id: string, proof?: SensitiveActionProof) =>
+    api.delete(`/${ADMIN_PATH}/universities/${id}`, {
+        headers: await resolveSensitiveActionHeaders({
+            actionLabel: 'delete university record',
+            defaultReason: 'Delete university record',
+            requireOtpHint: true,
+            proof,
+        }),
+    });
 
 export type AdminBulkTargetOptions = {
     ids?: string[];
@@ -3125,8 +3200,15 @@ export const adminSyncUniversityCategoryConfig = (id: string, data: Partial<Admi
     api.post<{ category: AdminUniversityCategoryItem; syncResult: { synced: number; skipped: number }; message: string }>(`/${ADMIN_PATH}/university-categories/${id}/sync-config`, data);
 export const adminToggleUniversityCategory = (id: string) =>
     api.patch<{ category: AdminUniversityCategoryItem; message: string }>(`/${ADMIN_PATH}/university-categories/${id}/toggle`);
-export const adminDeleteUniversityCategory = (id: string) =>
-    api.delete<{ message: string }>(`/${ADMIN_PATH}/university-categories/${id}`);
+export const adminDeleteUniversityCategory = async (id: string, proof?: SensitiveActionProof) =>
+    api.delete<{ message: string }>(`/${ADMIN_PATH}/university-categories/${id}`, {
+        headers: await resolveSensitiveActionHeaders({
+            actionLabel: 'archive university category',
+            defaultReason: 'Archive university category',
+            requireOtpHint: true,
+            proof,
+        }),
+    });
 
 export const adminExportUniversitiesSheet = async (
     params: Record<string, string | number> = {},
@@ -3221,8 +3303,15 @@ export const adminResolveUniversityClusterMembers = (id: string) =>
     }>(`/${ADMIN_PATH}/university-clusters/${id}/members/resolve`);
 export const adminSyncUniversityClusterDates = (id: string, dates?: Record<string, unknown>) =>
     api.patch<{ synced: number; skipped: number; message: string }>(`/${ADMIN_PATH}/university-clusters/${id}/sync-dates`, dates ? { dates } : {});
-export const adminDeleteUniversityCluster = (id: string) =>
-    api.delete(`/${ADMIN_PATH}/university-clusters/${id}`);
+export const adminDeleteUniversityCluster = async (id: string, proof?: SensitiveActionProof) =>
+    api.delete(`/${ADMIN_PATH}/university-clusters/${id}`, {
+        headers: await resolveSensitiveActionHeaders({
+            actionLabel: 'deactivate university cluster',
+            defaultReason: 'Deactivate university cluster',
+            requireOtpHint: true,
+            proof,
+        }),
+    });
 
 export interface FeaturedUniversityCluster {
     _id: string;

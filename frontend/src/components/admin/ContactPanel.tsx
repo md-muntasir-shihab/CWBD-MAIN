@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Mail, RefreshCw, Search, Trash2 } from 'lucide-react';
-import AdminGuideButton, { type AdminGuideButtonProps } from './AdminGuideButton';
+import { Copy, Mail, RefreshCw, Search, Trash2 } from 'lucide-react';
 import {
     adminDeleteContactMessage,
     adminGetContactMessages,
@@ -22,14 +21,6 @@ type Msg = {
 };
 
 type FilterMode = 'all' | 'unread' | 'replied';
-type InlineGuide = Omit<AdminGuideButtonProps, 'variant' | 'tone'>;
-
-const CONTACT_GUIDES: Record<'refresh' | 'markRead' | 'markReplied' | 'delete', InlineGuide> = {
-    refresh: { title: 'Refresh Contact Messages', content: 'Reload the latest contact submissions from the backend.', affected: 'Current admin review only.' },
-    markRead: { title: 'Mark Read / Unread', content: 'Toggle whether this contact message remains unread for admins.', affected: 'Admin unread state and review priority.' },
-    markReplied: { title: 'Mark Replied / Unreplied', content: 'Toggle whether this contact message is considered replied.', affected: 'Admin workflow tracking for contact follow-up.' },
-    delete: { title: 'Delete Contact Message', content: 'Delete this stored contact submission after confirmation.', affected: 'The selected contact message record.' },
-};
 
 export default function ContactPanel() {
     const [searchParams] = useSearchParams();
@@ -96,6 +87,20 @@ export default function ContactPanel() {
         }
     };
 
+    const copyValue = async (label: string, value?: string) => {
+        const nextValue = String(value || '').trim();
+        if (!nextValue) {
+            toast.error(`No ${label.toLowerCase()} available`);
+            return;
+        }
+        try {
+            await navigator.clipboard.writeText(nextValue);
+            toast.success(`${label} copied`);
+        } catch {
+            toast.error(`Failed to copy ${label.toLowerCase()}`);
+        }
+    };
+
     return (
         <div className="space-y-4">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
@@ -103,7 +108,7 @@ export default function ContactPanel() {
                     <div>
                         <h2 className="text-xl font-bold">Contact Messages</h2>
                         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                            Review public contact submissions and track their response state.
+                            Review public contact submissions, copy sender details quickly, and track reply state from one inbox.
                         </p>
                     </div>
                     <button
@@ -113,7 +118,6 @@ export default function ContactPanel() {
                         <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                         Refresh
                     </button>
-                    <AdminGuideButton {...CONTACT_GUIDES.refresh} tone="indigo" />
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -170,22 +174,32 @@ export default function ContactPanel() {
                                     <div className="min-w-0 flex-1">
                                         <div className="flex flex-wrap items-center gap-2">
                                             <h4 className="text-base font-bold">{message.subject || 'No Subject'}</h4>
-                                            {!message.isRead && (
+                                            {!message.isRead ? (
                                                 <span className="rounded-full bg-rose-500 px-2 py-0.5 text-[11px] font-semibold text-white">New</span>
-                                            )}
-                                            {message.isReplied && (
+                                            ) : null}
+                                            {message.isReplied ? (
                                                 <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-200">
                                                     Replied
                                                 </span>
-                                            )}
+                                            ) : null}
                                         </div>
-                                        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                                            {message.name} • {message.email}
-                                        </p>
-                                        {message.phone && (
-                                            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{message.phone}</p>
-                                        )}
+                                        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                                            <InfoField label="Name" value={message.name} onCopy={() => void copyValue('Name', message.name)} />
+                                            <InfoField label="Email" value={message.email} onCopy={() => void copyValue('Email', message.email)} />
+                                            <InfoField label="Phone" value={message.phone || 'Not provided'} onCopy={message.phone ? () => void copyValue('Phone', message.phone) : undefined} />
+                                            <InfoField label="Subject" value={message.subject || 'No subject'} onCopy={() => void copyValue('Subject', message.subject || 'No subject')} />
+                                        </div>
                                         <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">{message.message}</p>
+                                        <div className="mt-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => void copyValue('Message', message.message)}
+                                                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                                            >
+                                                <Copy className="h-3.5 w-3.5" />
+                                                Copy message
+                                            </button>
+                                        </div>
                                     </div>
                                     <div className="text-right text-xs text-slate-500 dark:text-slate-400">
                                         <p>{message.createdAt ? new Date(message.createdAt).toLocaleString() : 'Unknown date'}</p>
@@ -193,40 +207,60 @@ export default function ContactPanel() {
                                 </div>
 
                                 <div className="mt-4 flex flex-wrap gap-2">
-                                    <div className="flex items-center gap-1">
-                                        <button
-                                            onClick={() => void patchMessage(message._id, { isRead: !message.isRead })}
-                                            className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
-                                        >
-                                            {message.isRead ? 'Mark unread' : 'Mark read'}
-                                        </button>
-                                        <AdminGuideButton {...CONTACT_GUIDES.markRead} tone="indigo" />
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                        <button
-                                            onClick={() => void patchMessage(message._id, { isReplied: !message.isReplied, isRead: true })}
-                                            className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
-                                        >
-                                            {message.isReplied ? 'Mark unreplied' : 'Mark replied'}
-                                        </button>
-                                        <AdminGuideButton {...CONTACT_GUIDES.markReplied} tone="indigo" />
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                        <button
-                                            onClick={() => void onDelete(message._id)}
-                                            className="inline-flex items-center gap-2 rounded-xl border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 dark:border-rose-500/20 dark:hover:bg-rose-500/10"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                            Delete
-                                        </button>
-                                        <AdminGuideButton {...CONTACT_GUIDES.delete} tone="indigo" />
-                                    </div>
+                                    <button
+                                        onClick={() => void patchMessage(message._id, { isRead: !message.isRead })}
+                                        className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                                    >
+                                        {message.isRead ? 'Mark unread' : 'Mark read'}
+                                    </button>
+                                    <button
+                                        onClick={() => void patchMessage(message._id, { isReplied: !message.isReplied, isRead: true })}
+                                        className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                                    >
+                                        {message.isReplied ? 'Mark unreplied' : 'Mark replied'}
+                                    </button>
+                                    <button
+                                        onClick={() => void onDelete(message._id)}
+                                        className="inline-flex items-center gap-2 rounded-xl border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 dark:border-rose-500/20 dark:hover:bg-rose-500/10"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                        Delete
+                                    </button>
                                 </div>
                             </div>
                         );
                     })}
                 </div>
             )}
+        </div>
+    );
+}
+
+function InfoField({
+    label,
+    value,
+    onCopy,
+}: {
+    label: string;
+    value: string;
+    onCopy?: () => void;
+}) {
+    return (
+        <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/60">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{label}</p>
+            <div className="mt-2 flex items-start justify-between gap-3">
+                <p className="min-w-0 break-all text-sm text-slate-700 dark:text-slate-200">{value}</p>
+                {onCopy ? (
+                    <button
+                        type="button"
+                        onClick={onCopy}
+                        className="shrink-0 rounded-lg border border-slate-200 p-1.5 text-slate-500 transition hover:bg-white dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900"
+                        title={`Copy ${label}`}
+                    >
+                        <Copy className="h-3.5 w-3.5" />
+                    </button>
+                ) : null}
+            </div>
         </div>
     );
 }

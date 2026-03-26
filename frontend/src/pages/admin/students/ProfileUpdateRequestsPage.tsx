@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { CheckCircle2, Clock3, RefreshCw, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -8,6 +9,7 @@ import {
     adminRejectProfileUpdateRequest,
     type AdminProfileUpdateRequestItem,
 } from '../../../services/api';
+import { adminUi } from '../../../lib/appRoutes';
 
 type RequestStatus = 'pending' | 'approved' | 'rejected';
 
@@ -136,6 +138,14 @@ export default function ProfileUpdateRequestsPage() {
                                                 {item.student_id.email}
                                             </p>
                                         )}
+                                        {item.student_id && typeof item.student_id !== 'string' ? (
+                                            <Link
+                                                to={adminUi(`student-management/students/${String(item.student_id._id || '')}`)}
+                                                className="mt-2 inline-flex rounded-full border border-indigo-200 px-3 py-1 text-xs font-semibold text-indigo-600 transition hover:border-indigo-300 hover:bg-indigo-50 dark:border-indigo-500/30 dark:text-indigo-300 dark:hover:bg-indigo-500/10"
+                                            >
+                                                Open student profile
+                                            </Link>
+                                        ) : null}
                                     </div>
                                     {item.status === 'pending' && (
                                         <div className="flex flex-wrap gap-2">

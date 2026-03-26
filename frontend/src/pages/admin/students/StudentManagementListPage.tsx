@@ -5,6 +5,7 @@ import {
   Search, Filter, Users, UserCheck, UserX, CreditCard,
   ChevronLeft, ChevronRight,
   RefreshCcw, AlertTriangle,
+  Eye,
 } from 'lucide-react';
 import { getStudentsList, getStudentMetrics, getStudentGroups, suspendStudent, activateStudent } from '../../../api/adminStudentApi';
 import { adminUi } from '../../../lib/appRoutes';
@@ -38,6 +39,7 @@ export default function StudentManagementListPage() {
   const [sortOrder, setSortOrder] = useState('desc');
   const [showFilters, setShowFilters] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
+  const [expiringDays, setExpiringDays] = useState('');
   const limit = 25;
 
   const { data: metrics } = useQuery({
@@ -54,11 +56,12 @@ export default function StudentManagementListPage() {
   const allGroups: { _id: string; name: string }[] = groupsData?.data ?? groupsData ?? [];
 
   const { data: listData, isLoading, refetch } = useQuery({
-    queryKey: ['students-list', page, search, statusFilter, subFilter, departmentFilter, groupFilter, sortBy, sortOrder],
+    queryKey: ['students-list', page, search, statusFilter, subFilter, departmentFilter, groupFilter, sortBy, sortOrder, expiringDays],
     queryFn: () => getStudentsList({
       page, limit, q: search || undefined,
       status: statusFilter || undefined,
       subscriptionStatus: subFilter || undefined,
+      expiringDays: expiringDays ? Number(expiringDays) : undefined,
       department: departmentFilter || undefined,
       group: groupFilter || undefined,
       sortBy, sortOrder: sortOrder as 'asc' | 'desc',
@@ -74,6 +77,36 @@ export default function StudentManagementListPage() {
 
   const toggleSelect = (id: string) => setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   const toggleAll = () => setSelected(prev => prev.length === students.length ? [] : students.map(s => s._id));
+  const applyQuickFilter = (mode: 'all' | 'suspended' | 'expired' | 'expiring' | 'needs_review') => {
+    setPage(1);
+    if (mode === 'all') {
+      setStatusFilter('');
+      setSubFilter('');
+      setExpiringDays('');
+      return;
+    }
+    if (mode === 'suspended') {
+      setStatusFilter('suspended');
+      setSubFilter('');
+      setExpiringDays('');
+      return;
+    }
+    if (mode === 'expired') {
+      setStatusFilter('');
+      setSubFilter('expired');
+      setExpiringDays('');
+      return;
+    }
+    if (mode === 'expiring') {
+      setStatusFilter('');
+      setSubFilter('active');
+      setExpiringDays('7');
+      return;
+    }
+    setStatusFilter('blocked');
+    setSubFilter('');
+    setExpiringDays('');
+  };
 
   const inputCls = 'rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-white focus:border-indigo-500 focus:outline-none';
   const m = metrics;
@@ -92,6 +125,36 @@ export default function StudentManagementListPage() {
 
       {/* Search & Filters */}
       <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+        <div className="mb-3 flex flex-wrap gap-2">
+          {[
+            { key: 'all', label: 'All Students' },
+            { key: 'suspended', label: 'Suspended' },
+            { key: 'expired', label: 'Expired Subs' },
+            { key: 'expiring', label: 'Expiring 7d' },
+            { key: 'needs_review', label: 'Needs Review' },
+          ].map((item) => {
+            const active =
+              (item.key === 'all' && !statusFilter && !subFilter && !expiringDays) ||
+              (item.key === 'suspended' && statusFilter === 'suspended') ||
+              (item.key === 'expired' && subFilter === 'expired') ||
+              (item.key === 'expiring' && subFilter === 'active' && expiringDays === '7') ||
+              (item.key === 'needs_review' && statusFilter === 'blocked');
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => applyQuickFilter(item.key as 'all' | 'suspended' | 'expired' | 'expiring' | 'needs_review')}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                  active
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'border border-slate-200 bg-slate-50 text-slate-600 hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                }`}
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[220px]">
             <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
@@ -128,6 +191,11 @@ export default function StudentManagementListPage() {
             <select aria-label="Filter by group" title="Filter by group" className={inputCls} value={groupFilter} onChange={e => { setGroupFilter(e.target.value); setPage(1); }}>
               <option value="">All Groups</option>
               {allGroups.map(g => <option key={g._id} value={g._id}>{g.name}</option>)}
+            </select>
+            <select aria-label="Filter by expiring timeline" title="Filter by expiring timeline" className={inputCls} value={expiringDays} onChange={e => { setExpiringDays(e.target.value); setPage(1); }}>
+              <option value="">Any expiry</option>
+              <option value="7">Expiring in 7 days</option>
+              <option value="30">Expiring in 30 days</option>
             </select>
             <select aria-label="Sort by" title="Sort by" className={inputCls} value={sortBy} onChange={e => setSortBy(e.target.value)}>
               <option value="createdAt">Sort: Join Date</option>
@@ -217,14 +285,32 @@ export default function StudentManagementListPage() {
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-400">{new Date(s.createdAt).toLocaleDateString()}</td>
                       <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => navigate(adminUi(`student-management/students/${s._id}`))}
+                            title="Open profile"
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-300"
+                          >
+                            <Eye size={13} />
+                            View
+                          </button>
                           {s.status === 'active' ? (
-                            <button onClick={() => suspendMut.mutate(s._id)} title="Suspend" className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20">
-                              <UserX size={14} />
+                            <button
+                              onClick={() => suspendMut.mutate(s._id)}
+                              title="Suspend"
+                              className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:border-rose-500/20 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                            >
+                              <UserX size={13} />
+                              Suspend
                             </button>
                           ) : (
-                            <button onClick={() => activateMut.mutate(s._id)} title="Activate" className="rounded p-1 text-slate-400 hover:bg-green-50 hover:text-green-500 dark:hover:bg-green-900/20">
-                              <UserCheck size={14} />
+                            <button
+                              onClick={() => activateMut.mutate(s._id)}
+                              title="Activate"
+                              className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 px-2 py-1 text-xs font-semibold text-emerald-600 hover:bg-emerald-50 dark:border-emerald-500/20 dark:text-emerald-300 dark:hover:bg-emerald-500/10"
+                            >
+                              <UserCheck size={13} />
+                              Activate
                             </button>
                           )}
                         </div>

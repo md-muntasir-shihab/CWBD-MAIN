@@ -25,6 +25,7 @@ export async function submitContactMessage(req: AuthRequest, res: Response): Pro
         const phone = String(body.phone || '').trim();
         const subject = String(body.subject || '').trim();
         const message = String(body.message || '').trim();
+        const topic = String(body.topic || '').trim().toLowerCase();
 
         if (!name || !email || !subject || !message) {
             res.status(400).json({ message: 'Missing required fields' });
@@ -45,8 +46,8 @@ export async function submitContactMessage(req: AuthRequest, res: Response): Pro
             ip: getClientIp(req),
             userAgent: getDeviceInfo(req),
             metadata: {
-                preferredContact: body.preferredContact,
                 consent: body.consent,
+                ...(topic ? { topic } : {}),
             },
         });
 

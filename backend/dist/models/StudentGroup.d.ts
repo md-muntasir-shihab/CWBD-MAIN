@@ -30,6 +30,14 @@ export interface IStudentGroup extends Document {
         departments?: string[];
         statuses?: string[];
         planCodes?: string[];
+        planIds?: string[];
+        groupIds?: string[];
+        bucket?: string;
+        hasPhone?: boolean;
+        hasEmail?: boolean;
+        hasGuardian?: boolean;
+        paymentDue?: boolean;
+        renewalThresholdDays?: number;
         profileScoreRange?: {
             min?: number;
             max?: number;

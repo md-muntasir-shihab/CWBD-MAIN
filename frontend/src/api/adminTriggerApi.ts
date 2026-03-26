@@ -8,6 +8,12 @@ export interface TriggerConfig {
   enabled: boolean;
   channels: ('sms' | 'email')[];
   guardianIncluded: boolean;
+  templateKey?: string;
+  delayMinutes?: number;
+  batchSize?: number;
+  retryEnabled?: boolean;
+  quietHoursMode?: 'respect' | 'bypass';
+  audienceMode?: 'affected' | 'subscription_active' | 'subscription_renewal_due' | 'custom';
 }
 
 export interface TriggersResponse {

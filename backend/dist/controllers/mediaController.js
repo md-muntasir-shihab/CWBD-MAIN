@@ -22,6 +22,11 @@ const ALLOWED_MIME_TYPES = new Set([
     'image/webp',
     'image/gif',
     'application/pdf',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/csv',
+    'video/mp4',
+    'video/webm',
 ]);
 const SECURE_CATEGORIES = new Set(['profile_photo', 'student_document', 'payment_proof', 'support_attachment', 'exam_upload', 'admin_upload']);
 // Configure multer storage
@@ -36,10 +41,10 @@ const storage = multer_1.default.diskStorage({
         cb(null, file.fieldname + '-' + uniqueSuffix + ext);
     }
 });
-// Create the upload middleware (limit 10MB)
+// Create the upload middleware (limit 25MB)
 exports.uploadMiddleware = (0, multer_1.default)({
     storage,
-    limits: { fileSize: 10 * 1024 * 1024 },
+    limits: { fileSize: 25 * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
         if (!ALLOWED_MIME_TYPES.has(String(file.mimetype || '').toLowerCase())) {
             cb(new Error('Unsupported file type'));

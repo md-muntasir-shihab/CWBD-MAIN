@@ -4,7 +4,7 @@ import { adminUi } from '../../../lib/appRoutes';
 import AdminGuideButton from '../AdminGuideButton';
 import { getAdminPageGuide } from '../adminPageGuides';
 import {
-    UserCog, UserPlus, Import, ClipboardList, Target,
+    UserCog, UserPlus, Import, ClipboardList,
     MessageSquare, TrendingDown, Bell, Settings, CheckSquare,
 } from 'lucide-react';
 
@@ -13,7 +13,6 @@ const TABS = [
     { to: adminUi('student-management/create'), label: 'Create Student', icon: UserPlus },
     { to: adminUi('student-management/import-export'), label: 'Import / Export', icon: Import },
     { to: adminUi('student-management/groups'), label: 'Groups', icon: ClipboardList },
-    { to: adminUi('student-management/audiences'), label: 'Audiences', icon: Target },
     { to: adminUi('student-management/crm-timeline'), label: 'CRM Timeline', icon: MessageSquare },
     { to: adminUi('student-management/weak-topics'), label: 'Weak Topics', icon: TrendingDown },
     { to: adminUi('student-management/profile-requests'), label: 'Profile Requests', icon: CheckSquare },

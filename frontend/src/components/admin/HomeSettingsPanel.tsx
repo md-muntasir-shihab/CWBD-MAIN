@@ -561,6 +561,7 @@ function mergeDefined<T>(base: T, patch: unknown): T {
 function SectionReorderPanel() {
     const queryClient = useQueryClient();
     const [sections, setSections] = useState<HomeConfigSection[]>([]);
+    const [savedSections, setSavedSections] = useState<HomeConfigSection[]>([]);
     const [dragIdx, setDragIdx] = useState<number | null>(null);
 
     const configQuery = useQuery({
@@ -570,7 +571,9 @@ function SectionReorderPanel() {
 
     useEffect(() => {
         if (configQuery.data?.sections?.length) {
-            setSections([...configQuery.data.sections].sort((a, b) => a.order - b.order));
+            const normalized = [...configQuery.data.sections].sort((a, b) => a.order - b.order);
+            setSections(normalized);
+            setSavedSections(normalized);
         }
     }, [configQuery.data]);
 
@@ -579,13 +582,25 @@ function SectionReorderPanel() {
             const reordered = updated.map((s, i) => ({ ...s, order: i }));
             return (await adminUpdateHomeConfig({ sections: reordered })).data;
         },
-        onSuccess: () => {
+        onSuccess: (_data, updated) => {
             toast.success('Section order saved');
             queryClient.invalidateQueries({ queryKey: ['admin-home-config'] });
             queryClient.invalidateQueries({ queryKey: ['home'] });
+            setSavedSections(updated.map((section, index) => ({ ...section, order: index })));
         },
         onError: () => toast.error('Failed to save section order'),
     });
+
+    const hasUnsavedChanges = useMemo(() => {
+        const serialize = (items: HomeConfigSection[]) => JSON.stringify(
+            items.map((item, index) => ({
+                id: item.id,
+                isActive: item.isActive,
+                order: index,
+            })),
+        );
+        return serialize(sections) !== serialize(savedSections);
+    }, [savedSections, sections]);
 
     const move = (idx: number, dir: -1 | 1) => {
         const target = idx + dir;
@@ -612,17 +627,43 @@ function SectionReorderPanel() {
             <div className="flex items-center justify-between mb-4">
                 <div>
                     <h3 className="text-sm font-bold text-white">Home Section Order</h3>
-                    <p className="text-[11px] text-slate-500 mt-0.5">Drag or use arrows to reorder sections. Toggle to enable/disable.</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Drag or use arrows to reorder sections. Toggle to enable, hide, or restore them.</p>
                 </div>
-                <button
-                    type="button"
-                    onClick={() => saveMut.mutate(sections)}
-                    disabled={saveMut.isPending}
-                    className="bg-gradient-to-r from-indigo-600 to-cyan-600 text-white text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 disabled:opacity-60"
-                >
-                    {saveMut.isPending ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                    Save Order
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setSections(savedSections.map((section) => ({ ...section })))}
+                        disabled={saveMut.isPending || !hasUnsavedChanges}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700/70 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:border-slate-500 hover:text-white disabled:opacity-40"
+                    >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        Reset
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => saveMut.mutate(sections)}
+                        disabled={saveMut.isPending || !hasUnsavedChanges}
+                        className="bg-gradient-to-r from-indigo-600 to-cyan-600 text-white text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 disabled:opacity-60"
+                    >
+                        {saveMut.isPending ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                        {hasUnsavedChanges ? 'Save Changes' : 'Saved'}
+                    </button>
+                </div>
+            </div>
+            <div className={`mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-[11px] ${
+                hasUnsavedChanges
+                    ? 'border-amber-500/20 bg-amber-500/10 text-amber-200'
+                    : 'border-emerald-500/15 bg-emerald-500/10 text-emerald-200'
+            }`}>
+                <span className="inline-flex items-center gap-2 font-medium">
+                    {hasUnsavedChanges ? <AlertTriangle className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    {hasUnsavedChanges
+                        ? 'You have unsaved section visibility or order changes.'
+                        : 'Public home order is in sync with the saved admin configuration.'}
+                </span>
+                <span className="text-[10px] uppercase tracking-[0.18em] opacity-80">
+                    Save to update the live home layout
+                </span>
             </div>
             <div className="space-y-1.5">
                 {sections.map((section, idx) => (

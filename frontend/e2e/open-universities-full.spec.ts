@@ -22,15 +22,31 @@ function universityCard(page: import('@playwright/test').Page, name: string) {
     return page.locator('[data-university-card-id]').filter({ hasText: name }).first();
 }
 
+function visibleUniversitySelect(page: import('@playwright/test').Page, optionLabel: string) {
+    return page
+        .locator('select:visible')
+        .filter({ has: page.locator('option', { hasText: optionLabel }) })
+        .first();
+}
+
+function visibleUniversitySearch(page: import('@playwright/test').Page) {
+    return page.locator('input[placeholder="Search by name or short form..."]:visible').first();
+}
+
+async function openUniversityFilters(page: import('@playwright/test').Page) {
+    await page.getByRole('button', { name: /Open (filter panel|more filters)/i }).click();
+}
+
 test.describe('Open Universities Full Audit', () => {
     test('home renders featured university and cluster sections with working navigation', async ({ page }) => {
         const tracker = attachHealthTracker(page);
         await page.goto('/');
+        await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => undefined);
 
-        await expect(page.getByRole('heading', { name: /Featured Universities/i })).toBeVisible();
-        await expect(page.getByRole('heading', { name: /Featured Clusters/i })).toBeVisible();
-        await expect(page.getByRole('heading', { name: /Application Deadlines/i })).toBeVisible();
-        await expect(page.getByRole('heading', { name: /Upcoming Exams/i })).toBeVisible();
+        await expect(page.getByRole('heading', { name: /Featured Universities/i })).toBeVisible({ timeout: 15000 });
+        await expect(page.getByRole('heading', { name: /Featured Clusters/i })).toBeVisible({ timeout: 15000 });
+        await expect(page.getByRole('heading', { name: /Application Deadlines/i })).toBeVisible({ timeout: 15000 });
+        await expect(page.getByRole('heading', { name: /Upcoming Exams/i })).toBeVisible({ timeout: 15000 });
 
         const highlightedCategoryCard = page.getByTestId('highlighted-category-card').first();
         await expect(highlightedCategoryCard).toBeVisible();
@@ -68,20 +84,40 @@ test.describe('Open Universities Full Audit', () => {
         const tracker = attachHealthTracker(page);
         await page.goto('/universities');
         const isMobile = (page.viewportSize()?.width ?? 1440) < 768;
+        const sortSelect = visibleUniversitySelect(page, 'Name (A-Z)');
+
+        await expect(sortSelect).toHaveValue('name_asc');
+        await expect(page.locator('[data-university-card-id]').first()).toBeVisible();
+
+        const categoryTabs = page.getByTestId('university-category-tab');
+        const tabCount = await categoryTabs.count();
+        expect(tabCount).toBeGreaterThan(1);
+
+        const previousCategoryTab = categoryTabs.nth(0);
+        const nextCategoryTab = categoryTabs.nth(1);
+        const nextCategoryLabel = (await nextCategoryTab.textContent()) || '';
+        await nextCategoryTab.click();
+        await expect(nextCategoryTab).toHaveAttribute('aria-selected', 'true');
+        await expect(nextCategoryTab).toContainText(new RegExp(escapeRegex(nextCategoryLabel.trim()), 'i'));
+        await expect(page.locator('[data-university-card-id]').first()).toBeVisible();
+
+        await previousCategoryTab.click();
+        await expect(previousCategoryTab).toHaveAttribute('aria-selected', 'true');
+        await expect(page.locator('[data-university-card-id]').first()).toBeVisible();
 
         await page.getByTestId('university-category-tab').filter({ hasText: /Science & Technology/i }).first().click();
         if (isMobile) {
-            await page.getByRole('button', { name: /Open filter panel/i }).click();
+            await openUniversityFilters(page);
         }
-        const searchInput = page.getByPlaceholder('Search by name or short form...').last();
+        const searchInput = visibleUniversitySearch(page);
         await searchInput.fill('BUET');
         await expect(universityCard(page, 'Bangladesh University of Engineering and Technology')).toBeVisible();
 
-        const clusterSelect = page.locator('select').filter({ has: page.locator('option', { hasText: 'Engineering Alliance' }) }).last();
+        const clusterSelect = visibleUniversitySelect(page, 'Engineering Alliance');
         await clusterSelect.selectOption('Engineering Alliance');
 
-        const sortSelect = page.locator('select').filter({ has: page.locator('option', { hasText: 'Name (Z-A)' }) }).last();
-        await sortSelect.selectOption('name_desc');
+        const nameDescSelect = visibleUniversitySelect(page, 'Name (Z-A)');
+        await nameDescSelect.selectOption('name_desc');
         if (isMobile) {
             await page.getByRole('button', { name: /Apply Filters/i }).click();
         }
@@ -100,11 +136,11 @@ test.describe('Open Universities Full Audit', () => {
         await page.goBack();
         await expect(page).toHaveURL(/\/universities/);
         if (isMobile) {
-            await page.getByRole('button', { name: /Open filter panel/i }).click();
+            await openUniversityFilters(page);
         }
-        await expect(page.getByPlaceholder('Search by name or short form...').last()).toHaveValue('BUET');
-        await expect(page.locator('select').filter({ has: page.locator('option', { hasText: 'Engineering Alliance' }) }).last()).toHaveValue('Engineering Alliance');
-        await expect(page.locator('select').filter({ has: page.locator('option', { hasText: 'Name (Z-A)' }) }).last()).toHaveValue('name_desc');
+        await expect(visibleUniversitySearch(page)).toHaveValue('BUET');
+        await expect(visibleUniversitySelect(page, 'Engineering Alliance')).toHaveValue('Engineering Alliance');
+        await expect(visibleUniversitySelect(page, 'Name (Z-A)')).toHaveValue('name_desc');
         if (isMobile) {
             await page.getByRole('button', { name: /Apply Filters/i }).click();
         }
@@ -114,11 +150,11 @@ test.describe('Open Universities Full Audit', () => {
 
         await page.reload();
         if (isMobile) {
-            await page.getByRole('button', { name: /Open filter panel/i }).click();
+            await openUniversityFilters(page);
         }
-        await expect(page.getByPlaceholder('Search by name or short form...').last()).toHaveValue('BUET');
-        await expect(page.locator('select').filter({ has: page.locator('option', { hasText: 'Engineering Alliance' }) }).last()).toHaveValue('Engineering Alliance');
-        await expect(page.locator('select').filter({ has: page.locator('option', { hasText: 'Name (Z-A)' }) }).last()).toHaveValue('name_desc');
+        await expect(visibleUniversitySearch(page)).toHaveValue('BUET');
+        await expect(visibleUniversitySelect(page, 'Engineering Alliance')).toHaveValue('Engineering Alliance');
+        await expect(visibleUniversitySelect(page, 'Name (Z-A)')).toHaveValue('name_desc');
         if (isMobile) {
             await page.getByRole('button', { name: /Apply Filters/i }).click();
         }

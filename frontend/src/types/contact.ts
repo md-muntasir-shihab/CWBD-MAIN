@@ -1,5 +1,3 @@
-export type PreferredContactMethod = "whatsapp" | "phone" | "email" | "messenger";
-
 export interface ContactCustomLink {
     name: string;
     iconUrl: string;
@@ -32,11 +30,11 @@ export interface PublicSettingsContactResponse {
 export interface ContactMessagePayload {
     name: string;
     phone: string;
-    email?: string;
+    email: string;
     subject: string;
     message: string;
-    preferredContact: PreferredContactMethod;
     consent: boolean;
+    topic?: string;
 }
 
 export interface ContactMessageResponse {

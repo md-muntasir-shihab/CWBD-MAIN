@@ -4,17 +4,22 @@ import {
     BookOpen,
     Clock3,
     CreditCard,
+    FolderOpen,
     GraduationCap,
     HelpCircle,
     Home,
+    KeyRound,
+    Megaphone,
     RefreshCw,
-    Server,
     ShieldCheck,
+    Sparkles,
     TriangleAlert,
     UserSquare2,
     Users,
 } from 'lucide-react';
 import { adminGetDashboardSummary, type AdminDashboardSummary } from '../../services/api';
+import { useModuleAccess } from '../../hooks/useModuleAccess';
+import AdminGuideButton from './AdminGuideButton';
 
 interface DashboardHomeProps {
     universities: any[];
@@ -31,6 +36,7 @@ type SummaryCard = {
     icon: ComponentType<{ className?: string }>;
     actionLabel: string;
     actionTab: string;
+    module: string;
 };
 
 function valueText(value: number): string {
@@ -39,6 +45,7 @@ function valueText(value: number): string {
 }
 
 export default function DashboardHome({ universities, exams, users, onTabChange }: DashboardHomeProps) {
+    const { hasAnyAccess } = useModuleAccess();
     const summaryQuery = useQuery({
         queryKey: ['admin-dashboard-summary'],
         queryFn: async () => (await adminGetDashboardSummary()).data as AdminDashboardSummary,
@@ -77,8 +84,38 @@ export default function DashboardHome({ universities, exams, users, onTabChange 
             pendingApprovals: 0,
             paidToday: 0,
         },
+        financeCenter: {
+            pendingApprovals: 0,
+            paidToday: 0,
+        },
+        subscriptions: {
+            activeSubscribers: 0,
+            renewalDue: 0,
+            activePlans: 0,
+        },
+        resources: {
+            publicResources: 0,
+            featuredResources: 0,
+        },
+        campaigns: {
+            totalCampaigns: 0,
+            queuedOrProcessing: 0,
+            failedToday: 0,
+        },
         supportCenter: {
             unreadMessages: 0,
+            unreadTickets: 0,
+            unreadContactMessages: 0,
+        },
+        teamAccess: {
+            activeStaff: 0,
+            pendingInvites: 0,
+            activeRoles: 0,
+        },
+        security: {
+            unreadAlerts: 0,
+            criticalAlerts: 0,
+            db: 'down',
         },
         systemStatus: {
             db: 'down',
@@ -86,7 +123,29 @@ export default function DashboardHome({ universities, exams, users, onTabChange 
         },
     };
 
-    const summary = summaryQuery.data || fallbackSummary;
+    const summary = useMemo<AdminDashboardSummary>(() => {
+        const incoming = summaryQuery.data;
+        if (!incoming) return fallbackSummary;
+        return {
+            ...fallbackSummary,
+            ...incoming,
+            universities: { ...fallbackSummary.universities, ...incoming.universities },
+            home: { ...fallbackSummary.home, ...incoming.home },
+            news: { ...fallbackSummary.news, ...incoming.news },
+            exams: { ...fallbackSummary.exams, ...incoming.exams },
+            questionBank: { ...fallbackSummary.questionBank, ...incoming.questionBank },
+            students: { ...fallbackSummary.students, ...incoming.students },
+            payments: { ...fallbackSummary.payments, ...incoming.payments },
+            financeCenter: { ...fallbackSummary.financeCenter, ...incoming.financeCenter },
+            subscriptions: { ...fallbackSummary.subscriptions, ...incoming.subscriptions },
+            resources: { ...fallbackSummary.resources, ...incoming.resources },
+            campaigns: { ...fallbackSummary.campaigns, ...incoming.campaigns },
+            supportCenter: { ...fallbackSummary.supportCenter, ...incoming.supportCenter },
+            teamAccess: { ...fallbackSummary.teamAccess, ...incoming.teamAccess },
+            security: { ...fallbackSummary.security, ...incoming.security },
+            systemStatus: { ...fallbackSummary.systemStatus, ...incoming.systemStatus },
+        };
+    }, [fallbackSummary, summaryQuery.data]);
     const usingFallbackSummary = summaryQuery.isError && !summaryQuery.data;
 
     const cards = useMemo<SummaryCard[]>(() => {
@@ -99,24 +158,27 @@ export default function DashboardHome({ universities, exams, users, onTabChange 
                 icon: GraduationCap,
                 actionLabel: 'Open Universities',
                 actionTab: 'universities',
+                module: 'universities',
             },
             {
-                key: 'home',
-                title: 'Home Highlights',
-                description: `${valueText(summary.home.highlightedCategories)} highlighted categories`,
+                key: 'website-control',
+                title: 'Website Control',
+                description: `${valueText(summary.home.highlightedCategories)} highlighted categories, ${valueText(summary.home.enabledSections)} enabled sections`,
                 value: valueText(summary.home.featuredUniversities),
                 icon: Home,
-                actionLabel: 'Open Home Control',
+                actionLabel: 'Open Website Control',
                 actionTab: 'home-control',
+                module: 'home_control',
             },
             {
                 key: 'news',
-                title: 'News',
+                title: 'News Management',
                 description: `${valueText(summary.news.pendingReview)} items waiting for review`,
                 value: valueText(summary.news.publishedToday),
                 icon: BookOpen,
                 actionLabel: 'Open Review Queue',
                 actionTab: 'news',
+                module: 'news',
             },
             {
                 key: 'exams',
@@ -126,6 +188,7 @@ export default function DashboardHome({ universities, exams, users, onTabChange 
                 icon: Clock3,
                 actionLabel: 'Open Exams',
                 actionTab: 'exams',
+                module: 'exams',
             },
             {
                 key: 'question-bank',
@@ -135,45 +198,91 @@ export default function DashboardHome({ universities, exams, users, onTabChange 
                 icon: UserSquare2,
                 actionLabel: 'Open Question Bank',
                 actionTab: 'question-bank',
+                module: 'question_bank',
             },
             {
                 key: 'students',
-                title: 'Students',
+                title: 'Student Management',
                 description: `${valueText(summary.students.pendingPayment)} pending payment, ${valueText(summary.students.suspended)} suspended`,
                 value: valueText(summary.students.totalActive),
                 icon: Users,
                 actionLabel: 'Open Student Management',
                 actionTab: 'student-management',
+                module: 'students_groups',
             },
             {
-                key: 'payments',
-                title: 'Payments',
-                description: `${valueText(summary.payments.pendingApprovals)} pending approvals`,
-                value: valueText(summary.payments.paidToday),
+                key: 'subscriptions',
+                title: 'Subscription & Payments',
+                description: `${valueText(summary.subscriptions.renewalDue)} renewal due, ${valueText(summary.subscriptions.activePlans)} active plans`,
+                value: valueText(summary.subscriptions.activeSubscribers),
                 icon: CreditCard,
-                actionLabel: 'Open Finance',
-                actionTab: 'finance',
+                actionLabel: 'Open Subscriptions',
+                actionTab: 'subscriptions',
+                module: 'subscription_plans',
+            },
+            {
+                key: 'resources',
+                title: 'Resources',
+                description: `${valueText(summary.resources.featuredResources)} featured resources`,
+                value: valueText(summary.resources.publicResources),
+                icon: FolderOpen,
+                actionLabel: 'Open Resources',
+                actionTab: 'resources',
+                module: 'resources',
             },
             {
                 key: 'support',
-                title: 'Support Center',
-                description: 'Unread/in-progress tickets',
+                title: 'Support & Communication',
+                description: `${valueText(summary.supportCenter.unreadTickets)} ticket unread, ${valueText(summary.supportCenter.unreadContactMessages)} contact unread`,
                 value: valueText(summary.supportCenter.unreadMessages),
                 icon: HelpCircle,
                 actionLabel: 'Open Support',
                 actionTab: 'support-tickets',
+                module: 'support_center',
             },
             {
-                key: 'system',
-                title: 'System Status',
-                description: summary.systemStatus.db === 'connected' ? 'Database connected' : 'Database unavailable',
-                value: summary.systemStatus.db === 'connected' ? 'OK' : 'DOWN',
-                icon: Server,
+                key: 'campaigns',
+                title: 'Campaigns Hub',
+                description: `${valueText(summary.campaigns.queuedOrProcessing)} queued/processing, ${valueText(summary.campaigns.failedToday)} failed today`,
+                value: valueText(summary.campaigns.totalCampaigns),
+                icon: Megaphone,
+                actionLabel: 'Open Campaigns Hub',
+                actionTab: 'campaigns',
+                module: 'notifications',
+            },
+            {
+                key: 'finance',
+                title: 'Finance Center',
+                description: `${valueText(summary.financeCenter.pendingApprovals)} pending approvals`,
+                value: valueText(summary.financeCenter.paidToday),
+                icon: Sparkles,
+                actionLabel: 'Open Finance Center',
+                actionTab: 'finance',
+                module: 'finance_center',
+            },
+            {
+                key: 'team-access',
+                title: 'Team & Access Control',
+                description: `${valueText(summary.teamAccess.pendingInvites)} pending invites, ${valueText(summary.teamAccess.activeRoles)} active roles`,
+                value: valueText(summary.teamAccess.activeStaff),
+                icon: KeyRound,
+                actionLabel: 'Open Team Access',
+                actionTab: 'team-access',
+                module: 'team_access_control',
+            },
+            {
+                key: 'security',
+                title: 'Security & Logs',
+                description: `${valueText(summary.security.unreadAlerts)} unread alerts, DB ${summary.security.db.toUpperCase()}`,
+                value: valueText(summary.security.criticalAlerts),
+                icon: ShieldCheck,
                 actionLabel: 'Open Security Center',
                 actionTab: 'security',
+                module: 'security_logs',
             },
         ];
     }, [summary]);
+    const visibleCards = useMemo(() => cards.filter((card) => hasAnyAccess(card.module)), [cards, hasAnyAccess]);
 
     return (
         <div className="space-y-5">
@@ -193,7 +302,7 @@ export default function DashboardHome({ universities, exams, users, onTabChange 
             </div>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                {cards.map((card) => (
+                {visibleCards.map((card) => (
                     <article key={card.key} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-indigo-500/15 dark:bg-slate-900/60">
                         <div className="flex items-start justify-between gap-3">
                             <div>
@@ -205,13 +314,21 @@ export default function DashboardHome({ universities, exams, users, onTabChange 
                             </span>
                         </div>
                         <p className="mt-2 min-h-[2.2rem] text-xs text-slate-500 dark:text-slate-400">{card.description}</p>
-                        <button
-                            type="button"
-                            onClick={() => onTabChange(card.actionTab)}
-                            className="mt-3 inline-flex items-center gap-2 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs text-slate-700 hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-200 dark:hover:text-indigo-200"
-                        >
-                            {card.actionLabel}
-                        </button>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => onTabChange(card.actionTab)}
+                                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs text-slate-700 hover:border-indigo-400 hover:text-indigo-600 dark:border-slate-700 dark:text-slate-200 dark:hover:text-indigo-200"
+                            >
+                                {card.actionLabel}
+                            </button>
+                            <AdminGuideButton
+                                title={card.title}
+                                content={`${card.description}. Use "${card.actionLabel}" from this summary card to move directly into the live admin module.`}
+                                affected="Admins reviewing module status and opening the next workflow from the dashboard."
+                                tone="indigo"
+                            />
+                        </div>
                     </article>
                 ))}
             </div>
@@ -229,6 +346,9 @@ export default function DashboardHome({ universities, exams, users, onTabChange 
                 <p className="inline-flex items-center gap-2 font-semibold"><ShieldCheck className="h-4 w-4" /> System check</p>
                 <p className="mt-1">
                     DB: <span className="font-semibold">{summary.systemStatus.db}</span> - Last check: {new Date(summary.systemStatus.timeUTC).toLocaleString()}
+                </p>
+                <p className="mt-1">
+                    Security alerts: <span className="font-semibold">{valueText(summary.security.unreadAlerts)}</span> unread, <span className="font-semibold">{valueText(summary.security.criticalAlerts)}</span> critical
                 </p>
                 <p className="mt-1">
                     Source: <span className="font-semibold">{usingFallbackSummary ? 'fallback snapshot' : 'live summary'}</span>

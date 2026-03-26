@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Bell, ChevronLeft, ChevronRight, LogOut, Menu, Shield, X } from 'lucide-react';
+import { Bell, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, LogOut, Menu, Shield, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../hooks/useAuth';
 import { useModuleAccess } from '../../hooks/useModuleAccess';
@@ -31,6 +31,7 @@ export default function AdminShell({ title, description, children }: AdminShellP
     const [collapsed, setCollapsed] = useState(false);
     const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
     const [notifOpen, setNotifOpen] = useState(false);
+    const [quickGuidesOpen, setQuickGuidesOpen] = useState(false);
     const notifRef = useRef<HTMLDivElement>(null);
 
     const { user, logout } = useAuth();
@@ -118,6 +119,10 @@ export default function AdminShell({ title, description, children }: AdminShellP
     const currentRoute = `${location.pathname}${location.search}`;
     const pageGuide = useMemo(() => getAdminPageGuide(currentRoute), [currentRoute]);
     const quickPageGuides = useMemo(() => getAdminPageQuickGuides(currentRoute), [currentRoute]);
+
+    useEffect(() => {
+        setQuickGuidesOpen(false);
+    }, [currentRoute]);
     const alertItems = canReadActionableAlerts ? (alertsQuery.data?.items || []) : [];
     const unreadAlertCount = canReadActionableAlerts ? Number(alertsQuery.data?.unreadCount || 0) : 0;
 
@@ -477,18 +482,40 @@ export default function AdminShell({ title, description, children }: AdminShellP
                             </div>
                         </div>
                         {quickPageGuides.length > 0 ? (
-                            <div className="border-t border-slate-200 px-4 py-2 sm:px-6 dark:border-slate-800">
-                                <div className="flex flex-wrap items-center gap-2">
-                                    {quickPageGuides.map((guide) => (
-                                        <div key={guide.title} className="inline-flex">
-                                            <AdminGuideButton
-                                                {...guide}
-                                                variant="full"
-                                                tone="indigo"
-                                                actionLabel="View guide"
-                                            />
+                            <div className="border-t border-slate-200 px-4 py-3 sm:px-6 dark:border-slate-800">
+                                <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-950/35">
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <div>
+                                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                                                Guide Shortcuts
+                                            </p>
+                                            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                                                {quickPageGuides.length} quick explanation{quickPageGuides.length === 1 ? '' : 's'} for this page.
+                                            </p>
                                         </div>
-                                    ))}
+                                        <button
+                                            type="button"
+                                            onClick={() => setQuickGuidesOpen((prev) => !prev)}
+                                            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                                        >
+                                            {quickGuidesOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                            {quickGuidesOpen ? 'Hide Guides' : 'Open Guides'}
+                                        </button>
+                                    </div>
+                                    {quickGuidesOpen ? (
+                                        <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-200/80 pt-3 dark:border-slate-800">
+                                            {quickPageGuides.map((guide) => (
+                                                <div key={guide.title} className="inline-flex">
+                                                    <AdminGuideButton
+                                                        {...guide}
+                                                        variant="full"
+                                                        tone="indigo"
+                                                        actionLabel="Open guide"
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : null}
                                 </div>
                             </div>
                         ) : null}

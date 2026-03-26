@@ -1232,16 +1232,16 @@ export default function AdminNewsItemsSection({
 
             <AnimatePresence>
                 {actionDialog ? (
-                    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/65 p-3 backdrop-blur-[2px] md:items-center">
+                    <div className="fixed inset-0 z-[80] flex items-end justify-center overflow-y-auto bg-slate-950/65 p-3 backdrop-blur-[2px] md:items-center md:p-5">
                         <button type="button" className="absolute inset-0 cursor-default" onClick={closeActionDialog} aria-label="Close action dialog" />
                         <motion.div
                             initial={{ opacity: 0, y: 18, scale: 0.98 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: 12, scale: 0.98 }}
                             transition={{ duration: 0.18 }}
-                            className="relative z-[81] w-full max-w-2xl rounded-[1.75rem] border border-slate-200/80 bg-white/96 p-5 shadow-[0_28px_90px_rgba(2,6,23,0.3)] dark:border-slate-700/80 dark:bg-slate-950/96"
+                            className="relative z-[81] my-auto flex max-h-[calc(100vh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-[1.75rem] border border-slate-200/80 bg-white/96 shadow-[0_28px_90px_rgba(2,6,23,0.3)] dark:border-slate-700/80 dark:bg-slate-950/96 md:max-h-[calc(100vh-3rem)]"
                         >
-                            <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start justify-between gap-3 px-5 pb-0 pt-5">
                                 <div className="space-y-1">
                                     <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-600 dark:text-cyan-300">
                                         News action flow
@@ -1263,7 +1263,7 @@ export default function AdminNewsItemsSection({
                                 </button>
                             </div>
 
-                            <div className="mt-4 space-y-4">
+                            <div className="mt-4 flex-1 space-y-4 overflow-y-auto px-5 pb-5">
                                 <div className="rounded-2xl border border-slate-200/80 bg-slate-100/75 p-4 dark:border-slate-700/80 dark:bg-slate-900/60">
                                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
                                         Selected item
@@ -1641,7 +1641,7 @@ export default function AdminNewsItemsSection({
                                 ) : null}
                             </div>
 
-                            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/80 pt-4 dark:border-slate-800/80">
+                            <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/80 bg-white/90 px-5 py-4 dark:border-slate-800/80 dark:bg-slate-950/90">
                                 <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                                     <CircleOff className="h-4 w-4" />
                                     <span>{dialogFooterNote(actionDialog.mode)}</span>

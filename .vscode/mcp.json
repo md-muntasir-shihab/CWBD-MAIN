@@ -4,8 +4,7 @@
       "id": "coderabbit-api-key",
       "type": "promptString",
       "description": "CodeRabbit API Key",
-      "password": true,
-      "default": "cr-f0345f3297aa7efc339471b39c16db295d4e964edb647133d7f03979c4"
+      "password": true
     }
   ],
   "servers": {

@@ -445,6 +445,7 @@ export function AdminExamsPage() {
     const [_editingCenterId, _setEditingCenterId] = useState<string | null>(null);
     const [_examCenterForm, _setExamCenterForm] = useState<ExamCenterFormState>(createDefaultExamCenterForm());
     const [_settingsForm, _setSettingsForm] = useState<ExamCenterSettings>(DEFAULT_EXAM_CENTER_SETTINGS);
+    const [_savedSettingsForm, _setSavedSettingsForm] = useState<ExamCenterSettings>(DEFAULT_EXAM_CENTER_SETTINGS);
 
     const importWizardTemplateId = _importWizardTemplateId;
     const setImportWizardTemplateId = _setImportWizardTemplateId;
@@ -477,6 +478,7 @@ export function AdminExamsPage() {
     const setExamCenterForm = _setExamCenterForm;
     const settingsForm = _settingsForm;
     const setSettingsForm = _setSettingsForm;
+    const savedSettingsForm = _savedSettingsForm;
 
     // --- Legacy state (kept for result import/export) ---
     const [groupId, setGroupId] = useState('');
@@ -766,6 +768,7 @@ export function AdminExamsPage() {
         mutationFn: updateExamCenterSettings,
         onSuccess: async (payload) => {
             _setSettingsForm(payload);
+            _setSavedSettingsForm(payload);
             toast.success('Exam Center settings updated.');
             await qc.invalidateQueries({ queryKey: ['admin-exam-center-settings'] });
         },
@@ -821,8 +824,12 @@ export function AdminExamsPage() {
     useEffect(() => {
         if (examCenterSettingsQuery.data) {
             _setSettingsForm(examCenterSettingsQuery.data);
+            _setSavedSettingsForm(examCenterSettingsQuery.data);
         }
     }, [examCenterSettingsQuery.data]);
+
+    const isExamCenterSettingsDirty = JSON.stringify(settingsForm) !== JSON.stringify(savedSettingsForm);
+    const resetExamCenterSettings = () => _setSettingsForm(savedSettingsForm);
 
     const openEdit = useCallback(async (examId: string) => {
         setSelectedExamId(examId);
@@ -1240,6 +1247,9 @@ export function AdminExamsPage() {
                 {centerView === 'imports' ? (
                     <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
                         <div className="admin-panel-bg rounded-2xl p-5 space-y-4">
+                            <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4 text-sm text-cyan-900 dark:text-cyan-100">
+                                Upload the result sheet, review the detected columns, then save reusable mapping profiles or templates for the next import run.
+                            </div>
                             <div className="flex items-center gap-2">
                                 <ArrowRightLeft className="h-4 w-4 text-primary" />
                                 <h3 className="text-lg font-semibold text-text dark:text-dark-text">External Result Import Wizard</h3>
@@ -1337,6 +1347,9 @@ export function AdminExamsPage() {
                                     <FileSpreadsheet className="h-4 w-4 text-primary" />
                                     <h3 className="text-lg font-semibold text-text dark:text-dark-text">Preview Summary</h3>
                                 </div>
+                                <p className="text-sm text-text-muted">
+                                    Need a sample sheet first? Use the template buttons in the result import/export section or save a reusable import template below.
+                                </p>
                                 {importWizardPreview ? (
                                     <>
                                         <div className="grid grid-cols-2 gap-3">
@@ -1739,9 +1752,72 @@ export function AdminExamsPage() {
 
                 {centerView === 'settings' ? (
                     <div className="admin-panel-bg rounded-2xl p-5 space-y-4">
-                        <div className="flex items-center gap-2">
-                            <Settings2 className="h-4 w-4 text-primary" />
-                            <h3 className="text-lg font-semibold text-text dark:text-dark-text">Exam Center Settings</h3>
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                                <Settings2 className="h-4 w-4 text-primary" />
+                                <div>
+                                    <h3 className="text-lg font-semibold text-text dark:text-dark-text">Exam Center Settings</h3>
+                                    <p className="text-xs text-text-muted">
+                                        Import automation, profile sync defaults, notification triggers, and external import control.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                {isExamCenterSettingsDirty ? (
+                                    <span className="rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-300">
+                                        Unsaved changes
+                                    </span>
+                                ) : (
+                                    <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
+                                        Saved state
+                                    </span>
+                                )}
+                                {isExamCenterSettingsDirty ? (
+                                    <button type="button" onClick={resetExamCenterSettings} className="btn-secondary text-sm">
+                                        Reset
+                                    </button>
+                                ) : null}
+                                <button type="button" onClick={() => examCenterSettingsQuery.refetch()} className="btn-secondary text-sm">
+                                    Reload
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => updateExamCenterSettingsMutation.mutate(settingsForm)}
+                                    disabled={!isExamCenterSettingsDirty || updateExamCenterSettingsMutation.isPending}
+                                    className="btn-primary text-sm disabled:opacity-50"
+                                >
+                                    {updateExamCenterSettingsMutation.isPending ? 'Saving...' : 'Save Settings'}
+                                </button>
+                            </div>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200/70 bg-slate-50/80 p-4 text-sm text-text-muted dark:border-slate-700/70 dark:bg-slate-900/40 dark:text-dark-text/70">
+                            These settings control how import runs create centers, sync mapped profile fields, and notify students after result operations.
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                            <div className="rounded-xl border border-card-border p-4">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">Sync Mode</p>
+                                <p className="mt-2 text-sm font-semibold text-text dark:text-dark-text">
+                                    {settingsForm.defaultSyncMode === 'fill_missing_only' ? 'Fill missing only' : 'Overwrite mapped fields'}
+                                </p>
+                            </div>
+                            <div className="rounded-xl border border-card-border p-4">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">Center Creation</p>
+                                <p className="mt-2 text-sm font-semibold text-text dark:text-dark-text">
+                                    {settingsForm.autoCreateExamCenters ? 'Auto-create enabled' : 'Manual only'}
+                                </p>
+                            </div>
+                            <div className="rounded-xl border border-card-border p-4">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">Student Alerts</p>
+                                <p className="mt-2 text-sm font-semibold text-text dark:text-dark-text">
+                                    {settingsForm.notifyStudentsOnSync ? 'Sync alerts on' : 'Sync alerts off'}
+                                </p>
+                            </div>
+                            <div className="rounded-xl border border-card-border p-4">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-muted">External Imports</p>
+                                <p className="mt-2 text-sm font-semibold text-text dark:text-dark-text">
+                                    {settingsForm.allowExternalImports ? 'Allowed' : 'Blocked'}
+                                </p>
+                            </div>
                         </div>
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <label className="block">
@@ -1777,10 +1853,6 @@ export function AdminExamsPage() {
                                     size="sm"
                                 />
                             </div>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            <button type="button" onClick={() => updateExamCenterSettingsMutation.mutate(settingsForm)} className="btn-primary">Save Settings</button>
-                            <button type="button" onClick={() => examCenterSettingsQuery.refetch()} className="btn-secondary">Reload</button>
                         </div>
                     </div>
                 ) : null}
@@ -2221,6 +2293,9 @@ export function AdminExamsPage() {
                 {/* Import/export section */}
                 <div className="admin-panel-bg rounded-xl p-5 space-y-4">
                     <h3 className="text-base font-bold text-text dark:text-dark-text">Result Import/Export</h3>
+                    <div className="rounded-2xl border border-indigo-500/15 bg-indigo-500/5 p-4 text-sm text-text-muted dark:text-dark-text/70">
+                        Download a demo template first if you need a column layout example. External import mode supports mapping before final import.
+                    </div>
                     <label className="block">
                         <span className="text-xs font-semibold uppercase text-text-muted">Select Exam</span>
                         <select value={selectedExamId} onChange={(e) => setSelectedExamId(e.target.value)} className="admin-input mt-1">

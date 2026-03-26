@@ -43,6 +43,8 @@ import {
   expireSubscriptionForUser,
   toggleAutoRenewForUser,
 } from '../services/subscriptionLifecycleService';
+import { resolveSubscriptionContactUserIds } from '../services/subscriptionContactCenterService';
+import { computeStudentProfileScore } from '../services/studentProfileScoreService';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -220,6 +222,12 @@ router.post('/students-v2/create', ...adminAuth, async (req: Request, res: Respo
     if (present_address) profileData['present_address'] = present_address;
 
     const profile = await StudentProfile.create(profileData);
+    const scoreResult = computeStudentProfileScore(
+      profile.toObject() as unknown as Record<string, unknown>,
+      user.toObject() as unknown as Record<string, unknown>,
+    );
+    profile.profile_completion_percentage = scoreResult.score;
+    await profile.save();
 
     const normalizedGroupIds = Array.isArray(groupIds)
       ? groupIds.filter((id) => mongoose.Types.ObjectId.isValid(String(id))).map((id) => String(id))
@@ -2164,60 +2172,8 @@ router.get('/import-export-logs', ...adminAuth, async (req: Request, res: Respon
 // ============================================================================
 
 async function resolveAudienceCount(rules?: Record<string, unknown>): Promise<number> {
-  if (!rules || Object.keys(rules).length === 0) {
-    return User.countDocuments({ role: 'student' });
-  }
-
-  const profileQuery: Record<string, unknown> = {};
-  if (rules['departments'] && Array.isArray(rules['departments']) && (rules['departments'] as string[]).length > 0) {
-    profileQuery['department'] = { $in: rules['departments'] };
-  }
-  if (rules['batches'] && Array.isArray(rules['batches']) && (rules['batches'] as string[]).length > 0) {
-    profileQuery['hsc_batch'] = { $in: rules['batches'] };
-  }
-  if (rules['sscBatches'] && Array.isArray(rules['sscBatches']) && (rules['sscBatches'] as string[]).length > 0) {
-    profileQuery['ssc_batch'] = { $in: rules['sscBatches'] };
-  }
-  if (rules['profileScoreRange']) {
-    const range = rules['profileScoreRange'] as { min?: number; max?: number };
-    const scoreFilter: Record<string, number> = {};
-    if (range.min !== undefined) scoreFilter['$gte'] = range.min;
-    if (range.max !== undefined) scoreFilter['$lte'] = range.max;
-    if (Object.keys(scoreFilter).length > 0) profileQuery['profile_completion_percentage'] = scoreFilter;
-  }
-
-  let userIds: mongoose.Types.ObjectId[] | null = null;
-
-  if (Object.keys(profileQuery).length > 0) {
-    const profs = await StudentProfile.find(profileQuery).select('user_id').lean();
-    userIds = profs.map((p) => p.user_id as mongoose.Types.ObjectId);
-  }
-
-  const userQuery: Record<string, unknown> = { role: 'student' };
-  if (rules['statuses'] && Array.isArray(rules['statuses']) && (rules['statuses'] as string[]).length > 0) {
-    userQuery['status'] = { $in: rules['statuses'] };
-  }
-  if (userIds !== null) {
-    userQuery['_id'] = { $in: userIds };
-  }
-
-  // Plan code filter
-  if (rules['planCodes'] && Array.isArray(rules['planCodes']) && (rules['planCodes'] as string[]).length > 0) {
-    const subs = await UserSubscription.find({
-      status: 'active',
-    }).populate('planId', 'code').lean();
-    const matchingSubs = subs.filter((s) => {
-      const plan = s.planId as unknown as Record<string, unknown>;
-      return plan && (rules['planCodes'] as string[]).includes(String(plan['code']));
-    });
-    const subUserIds = matchingSubs.map((s) => s.userId);
-    const existing = userQuery['_id'] as { $in: mongoose.Types.ObjectId[] } | undefined;
-    userQuery['_id'] = existing
-      ? { $in: existing.$in.filter((id) => subUserIds.some((sid) => String(sid) === String(id))) }
-      : { $in: subUserIds };
-  }
-
-  return User.countDocuments(userQuery);
+  const userIds = await resolveSubscriptionContactUserIds(rules || {});
+  return userIds.length;
 }
 
 export default router;

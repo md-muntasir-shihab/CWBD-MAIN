@@ -39,6 +39,14 @@ export interface IStudentGroup extends Document {
         departments?: string[];
         statuses?: string[];
         planCodes?: string[];
+        planIds?: string[];
+        groupIds?: string[];
+        bucket?: string;
+        hasPhone?: boolean;
+        hasEmail?: boolean;
+        hasGuardian?: boolean;
+        paymentDue?: boolean;
+        renewalThresholdDays?: number;
         profileScoreRange?: { min?: number; max?: number };
     };
     meta?: Record<string, unknown>;
@@ -83,6 +91,14 @@ const StudentGroupSchema = new Schema<IStudentGroup>(
             departments: [String],
             statuses: [String],
             planCodes: [String],
+            planIds: [String],
+            groupIds: [String],
+            bucket: { type: String, trim: true, default: '' },
+            hasPhone: { type: Boolean, default: undefined },
+            hasEmail: { type: Boolean, default: undefined },
+            hasGuardian: { type: Boolean, default: undefined },
+            paymentDue: { type: Boolean, default: undefined },
+            renewalThresholdDays: { type: Number, default: undefined },
             profileScoreRange: {
                 min: { type: Number },
                 max: { type: Number },

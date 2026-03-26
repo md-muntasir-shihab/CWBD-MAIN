@@ -33,7 +33,7 @@ export const mockPublicContactSettings: PublicSettingsContactResponse = {
         ],
     },
     footer: {
-        shortNote: "By contacting us, you agree to CampusWay terms and privacy policy.",
+        shortNote: "By contacting us, you agree to CampusWay About, Terms, and Privacy pages.",
     },
 };
 

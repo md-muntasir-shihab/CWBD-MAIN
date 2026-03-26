@@ -1,7 +1,32 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { seededCreds } from './helpers';
 
-const baseApi = (process.env.E2E_API_BASE_URL || 'http://localhost:5003').replace(/\/$/, '');
+const baseApi = (process.env.E2E_API_BASE_URL || 'http://127.0.0.1:5003').replace(/\/$/, '');
+
+async function readAccessTokenFromSession(page: Page): Promise<string | null> {
+    const result = await page.evaluate(async () => {
+        const response = await fetch('/api/auth/refresh', {
+            method: 'POST',
+            credentials: 'include',
+        });
+        const text = await response.text();
+        let body: unknown = text;
+        try {
+            body = text ? JSON.parse(text) : {};
+        } catch {
+            body = {};
+        }
+
+        return {
+            status: response.status,
+            token: typeof (body as { token?: unknown })?.token === 'string'
+                ? (body as { token: string }).token
+                : null,
+        };
+    });
+
+    return result.status === 200 ? result.token : null;
+}
 
 test.describe('Auth Session Security', () => {
     test('new login invalidates old student session', async ({ browser, request }) => {
@@ -36,9 +61,7 @@ test.describe('Auth Session Security', () => {
         }
         expect(loggedIn).toBeTruthy();
 
-        const oldToken = await page1.evaluate(
-            () => sessionStorage.getItem('campusway-token') || localStorage.getItem('campusway-token')
-        );
+        const oldToken = await readAccessTokenFromSession(page1);
         expect(oldToken).toBeTruthy();
 
         const context2 = await browser.newContext();
@@ -61,7 +84,7 @@ test.describe('Auth Session Security', () => {
         if (sessionCheck.status() === 401) {
             await expect
                 .poll(
-                    async () => page1.evaluate(() => localStorage.getItem('campusway-token')),
+                    async () => readAccessTokenFromSession(page1),
                     { timeout: 15000, intervals: [500, 1000, 1500] }
                 )
                 .toBeNull();

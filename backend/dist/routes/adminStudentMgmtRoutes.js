@@ -68,6 +68,8 @@ const studentImportExportService_1 = require("../services/studentImportExportSer
 const adminStudentUnifiedService_1 = require("../services/adminStudentUnifiedService");
 const groupMembershipService = __importStar(require("../services/groupMembershipService"));
 const subscriptionLifecycleService_1 = require("../services/subscriptionLifecycleService");
+const subscriptionContactCenterService_1 = require("../services/subscriptionContactCenterService");
+const studentProfileScoreService_1 = require("../services/studentProfileScoreService");
 const router = (0, express_1.Router)();
 const upload = (0, multer_1.default)({ storage: multer_1.default.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 // All routes require admin auth
@@ -226,6 +228,9 @@ router.post('/students-v2/create', ...adminAuth, async (req, res) => {
         if (present_address)
             profileData['present_address'] = present_address;
         const profile = await StudentProfile_1.default.create(profileData);
+        const scoreResult = (0, studentProfileScoreService_1.computeStudentProfileScore)(profile.toObject(), user.toObject());
+        profile.profile_completion_percentage = scoreResult.score;
+        await profile.save();
         const normalizedGroupIds = Array.isArray(groupIds)
             ? groupIds.filter((id) => mongoose_1.default.Types.ObjectId.isValid(String(id))).map((id) => String(id))
             : [];
@@ -2069,57 +2074,8 @@ router.get('/import-export-logs', ...adminAuth, async (req, res) => {
 // AUDIENCE RESOLUTION HELPER
 // ============================================================================
 async function resolveAudienceCount(rules) {
-    if (!rules || Object.keys(rules).length === 0) {
-        return User_1.default.countDocuments({ role: 'student' });
-    }
-    const profileQuery = {};
-    if (rules['departments'] && Array.isArray(rules['departments']) && rules['departments'].length > 0) {
-        profileQuery['department'] = { $in: rules['departments'] };
-    }
-    if (rules['batches'] && Array.isArray(rules['batches']) && rules['batches'].length > 0) {
-        profileQuery['hsc_batch'] = { $in: rules['batches'] };
-    }
-    if (rules['sscBatches'] && Array.isArray(rules['sscBatches']) && rules['sscBatches'].length > 0) {
-        profileQuery['ssc_batch'] = { $in: rules['sscBatches'] };
-    }
-    if (rules['profileScoreRange']) {
-        const range = rules['profileScoreRange'];
-        const scoreFilter = {};
-        if (range.min !== undefined)
-            scoreFilter['$gte'] = range.min;
-        if (range.max !== undefined)
-            scoreFilter['$lte'] = range.max;
-        if (Object.keys(scoreFilter).length > 0)
-            profileQuery['profile_completion_percentage'] = scoreFilter;
-    }
-    let userIds = null;
-    if (Object.keys(profileQuery).length > 0) {
-        const profs = await StudentProfile_1.default.find(profileQuery).select('user_id').lean();
-        userIds = profs.map((p) => p.user_id);
-    }
-    const userQuery = { role: 'student' };
-    if (rules['statuses'] && Array.isArray(rules['statuses']) && rules['statuses'].length > 0) {
-        userQuery['status'] = { $in: rules['statuses'] };
-    }
-    if (userIds !== null) {
-        userQuery['_id'] = { $in: userIds };
-    }
-    // Plan code filter
-    if (rules['planCodes'] && Array.isArray(rules['planCodes']) && rules['planCodes'].length > 0) {
-        const subs = await UserSubscription_1.default.find({
-            status: 'active',
-        }).populate('planId', 'code').lean();
-        const matchingSubs = subs.filter((s) => {
-            const plan = s.planId;
-            return plan && rules['planCodes'].includes(String(plan['code']));
-        });
-        const subUserIds = matchingSubs.map((s) => s.userId);
-        const existing = userQuery['_id'];
-        userQuery['_id'] = existing
-            ? { $in: existing.$in.filter((id) => subUserIds.some((sid) => String(sid) === String(id))) }
-            : { $in: subUserIds };
-    }
-    return User_1.default.countDocuments(userQuery);
+    const userIds = await (0, subscriptionContactCenterService_1.resolveSubscriptionContactUserIds)(rules || {});
+    return userIds.length;
 }
 exports.default = router;
 //# sourceMappingURL=adminStudentMgmtRoutes.js.map

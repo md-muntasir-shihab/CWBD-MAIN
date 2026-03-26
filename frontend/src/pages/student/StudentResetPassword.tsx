@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
-import { GraduationCap, ArrowRight, Loader2, KeyRound } from 'lucide-react';
+import { GraduationCap, ArrowRight, Loader2, KeyRound, LifeBuoy } from 'lucide-react';
 
 export default function StudentResetPassword() {
     const [searchParams] = useSearchParams();
@@ -12,7 +12,15 @@ export default function StudentResetPassword() {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
+    const [resetError, setResetError] = useState('');
     const navigate = useNavigate();
+    const contactAdminHref = useMemo(() => (
+        `/contact?${new URLSearchParams({
+            topic: 'password-reset',
+            subject: 'Password reset support needed',
+            message: 'I opened an invalid or expired student password reset link. Please verify my account and guide me through the next recovery step.',
+        }).toString()}`
+    ), []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -33,6 +41,7 @@ export default function StudentResetPassword() {
         }
 
         setLoading(true);
+        setResetError('');
         try {
             await api.post('/auth/reset-password', { token, newPassword: password });
             setSuccess(true);
@@ -42,7 +51,11 @@ export default function StudentResetPassword() {
                 navigate('/login');
             }, 3000);
         } catch (err: any) {
-            toast.error(err.response?.data?.message || 'Failed to reset password');
+            const message = String(err?.response?.data?.message || 'Failed to reset password');
+            if (/invalid|expired|token/i.test(message)) {
+                setResetError('This link is no longer usable. Contact the admin team to verify the account and continue recovery.');
+            }
+            toast.error(message);
         } finally {
             setLoading(false);
         }
@@ -56,13 +69,25 @@ export default function StudentResetPassword() {
                         <KeyRound className="h-8 w-8 text-red-600 dark:text-rose-300" />
                     </div>
                     <h2 className="mb-2 text-2xl font-bold text-slate-900 dark:text-white">Invalid Reset Link</h2>
-                    <p className="mb-8 text-slate-500 dark:text-slate-300">This password reset link appears to be invalid or missing the required token.</p>
-                    <Link
-                        to="/student/forgot-password"
-                        className="block w-full rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white transition-colors hover:bg-indigo-700"
-                    >
-                        Request New Link
-                    </Link>
+                    <p className="mb-4 text-slate-500 dark:text-slate-300">
+                        This reset link is invalid or missing the required token. Student password recovery is handled
+                        through verified admin support.
+                    </p>
+                    <div className="space-y-3">
+                        <Link
+                            to={contactAdminHref}
+                            className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 font-bold text-white transition-colors hover:bg-indigo-700"
+                        >
+                            <LifeBuoy className="h-4 w-4" />
+                            Contact Admin
+                        </Link>
+                        <Link
+                            to="/login"
+                            className="block w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900/60"
+                        >
+                            Back to Login
+                        </Link>
+                    </div>
                 </div>
             </div>
         );
@@ -105,6 +130,10 @@ export default function StudentResetPassword() {
                     {!success ? (
                         <form onSubmit={handleSubmit} className="space-y-5">
                             <div className="space-y-4">
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-300">
+                                    This page still supports valid admin-issued reset links. If the link expires, use the
+                                    contact form so the admin team can verify your account manually.
+                                </div>
                                 <div>
                                     <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200">New Password</label>
                                     <input
@@ -128,6 +157,16 @@ export default function StudentResetPassword() {
                                     />
                                 </div>
                             </div>
+
+                            {resetError ? (
+                                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                                    <p>{resetError}</p>
+                                    <Link to={contactAdminHref} className="mt-2 inline-flex items-center gap-1 font-semibold hover:underline">
+                                        Contact admin support
+                                        <ArrowRight className="h-4 w-4" />
+                                    </Link>
+                                </div>
+                            ) : null}
 
                             <button
                                 type="submit"

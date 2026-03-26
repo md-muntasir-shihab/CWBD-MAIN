@@ -75,13 +75,11 @@ import {
     AdminStudentsMgmtPage,
     AdminStudentCreatePage,
     AdminStudentImportExportPage,
-    AdminStudentAudiencesPage,
     AdminStudentCrmTimelinePage,
     AdminStudentWeakTopicsPage,
     AdminStudentMgmtDetailPage,
     AdminStudentGroupsV2Page,
     AdminStudentGroupDetailPage,
-    AdminNotificationCenterPage,
     AdminNotificationCenterEmbeddedPage,
     AdminProfileRequestsPage,
     AdminStudentSettingsPage,
@@ -90,10 +88,8 @@ import {
     AdminSubscriptionsV2Page,
 } from './pages/AdminCorePages';
 import CampaignConsolePage from './pages/admin/campaigns/CampaignConsolePage';
+import SubscriptionContactCenterPage from './pages/admin/campaigns/SubscriptionContactCenterPage';
 import AdminHelpCenterPage from './pages/admin/help-center/AdminHelpCenterPage';
-import NotificationTestSendPage from './pages/admin/notifications/NotificationTestSendPage';
-import NotificationTriggersPage from './pages/admin/notifications/NotificationTriggersPage';
-import DataHubPage from './pages/admin/datahub/DataHubPage';
 import TeamAccessConsolePage from './pages/admin/team/TeamAccessConsolePage';
 import MemberDetailPage from './pages/admin/team/MemberDetailPage';
 import RoleDetailPage from './pages/admin/team/RoleDetailPage';
@@ -190,7 +186,7 @@ function resolveRouteTitle(pathname: string, siteName: string, defaultTitle: str
     if (pathname === '/__cw_admin__/notification-center') return withSite('Admin Actionable Alerts');
     if (pathname === '/__cw_admin__/help-center') return withSite('Admin Help Center');
     if (pathname === '/__cw_admin__/settings/notifications') return withSite('Admin Notification Settings');
-    if (pathname === '/__cw_admin__/notifications/test-send') return withSite('Admin Notification Test Send');
+    if (pathname === '/__cw_admin__/notifications/test-send') return withSite('Admin Campaign Platform');
     if (pathname === '/__cw_admin__/notifications/triggers') return withSite('Admin Notification Triggers');
     if (pathname.startsWith('/__cw_admin__/campaigns')) return withSite('Admin Campaign Platform');
     if (pathname === '/__cw_admin__/reports') return withSite('Admin Reports');
@@ -248,27 +244,16 @@ function RouteScrollReset() {
             }
         }
 
-        const resetScroll = () => {
-            const scrollingElement = document.scrollingElement;
-            if (scrollingElement) {
-                scrollingElement.scrollTop = 0;
-                scrollingElement.scrollLeft = 0;
-            }
-            document.documentElement.scrollTop = 0;
-            document.documentElement.scrollLeft = 0;
-            document.body.scrollTop = 0;
-            document.body.scrollLeft = 0;
-            window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-        };
-
-        resetScroll();
-        const frame = window.requestAnimationFrame(resetScroll);
-        const timers = [50, 140, 260, 420, 700, 1000, 1600, 2200].map((delay) => window.setTimeout(resetScroll, delay));
-
-        return () => {
-            window.cancelAnimationFrame(frame);
-            timers.forEach((timer) => window.clearTimeout(timer));
-        };
+        const scrollingElement = document.scrollingElement;
+        if (scrollingElement) {
+            scrollingElement.scrollTop = 0;
+            scrollingElement.scrollLeft = 0;
+        }
+        document.documentElement.scrollTop = 0;
+        document.documentElement.scrollLeft = 0;
+        document.body.scrollTop = 0;
+        document.body.scrollLeft = 0;
+        window.scrollTo(0, 0);
     }, [location.hash, location.pathname, location.search]);
 
     return null;
@@ -407,7 +392,7 @@ export default function App() {
                                 <Route path={adminUi('universities/import')} element={<AdminUniversitiesPage />} />
                                 <Route path={adminUi('universities/export')} element={<AdminUniversitiesPage />} />
                                 <Route path={adminUi('universities/:id/edit')} element={<AdminUniversitiesPage />} />
-                                <Route path={ADMIN_PATHS.news} element={<Navigate to={adminUi('news/pending')} replace />} />
+                                <Route path={ADMIN_PATHS.news} element={<Navigate to={adminUi('news/dashboard')} replace />} />
                                 <Route path={adminUi('news/*')} element={<AdminNewsConsole />} />
                                 <Route path={ADMIN_PATHS.exams} element={<AdminExamsPage />} />
                                 <Route path={ADMIN_PATHS.questionBank} element={<AdminQuestionBankPage />} />
@@ -472,7 +457,7 @@ export default function App() {
                                     <Route path="import-export" element={<AdminStudentImportExportPage />} />
                                     <Route path="groups" element={<AdminStudentGroupsV2Page />} />
                                     <Route path="groups/:id" element={<AdminStudentGroupDetailPage />} />
-                                    <Route path="audiences" element={<AdminStudentAudiencesPage />} />
+                                    <Route path="audiences" element={<Navigate to={`${ADMIN_PATHS.campaignsContactCenter}?tab=members`} replace />} />
                                     <Route path="crm-timeline" element={<AdminStudentCrmTimelinePage />} />
                                     <Route path="weak-topics" element={<AdminStudentWeakTopicsPage />} />
                                     <Route path="profile-requests" element={<AdminProfileRequestsPage />} />
@@ -484,19 +469,20 @@ export default function App() {
                                 <Route path={adminUi('students-v2')} element={<Navigate to={adminUi('student-management/list')} replace />} />
                                 <Route path={adminUi('students-v2/:id')} element={<Navigate to={adminUi('student-management/list')} replace />} />
                                 <Route path={adminUi('student-groups-v2')} element={<Navigate to={adminUi('student-management/groups')} replace />} />
-                                <Route path={adminUi('notification-center')} element={<AdminNotificationCenterPage />} />
+                                <Route path={adminUi('notification-center')} element={<Navigate to={`${ADMIN_PATHS.campaignsDashboard}?view=notifications`} replace />} />
                                 {/* Campaign Platform */}
-                                <Route path={ADMIN_PATHS.notificationTestSend} element={<NotificationTestSendPage />} />
-                                <Route path={ADMIN_PATHS.notificationTriggers} element={<NotificationTriggersPage />} />
+                                <Route path={ADMIN_PATHS.notificationTestSend} element={<Navigate to={ADMIN_PATHS.campaignsNew} replace />} />
+                                <Route path={ADMIN_PATHS.notificationTriggers} element={<Navigate to={`${ADMIN_PATHS.campaignsDashboard}?view=triggers`} replace />} />
                                 <Route path={ADMIN_PATHS.campaignsDashboard} element={<CampaignConsolePage />} />
                                 <Route path={ADMIN_PATHS.campaignsList} element={<CampaignConsolePage />} />
                                 <Route path={ADMIN_PATHS.campaignsNew} element={<CampaignConsolePage />} />
+                                <Route path={ADMIN_PATHS.campaignsContactCenter} element={<SubscriptionContactCenterPage />} />
                                 <Route path={ADMIN_PATHS.campaignsTemplates} element={<CampaignConsolePage />} />
                                 <Route path={ADMIN_PATHS.campaignsSettings} element={<CampaignConsolePage />} />
                                 <Route path={ADMIN_PATHS.campaignsLogs} element={<CampaignConsolePage />} />
                                 {/* Data Hub */}
-                                <Route path={ADMIN_PATHS.dataHub} element={<DataHubPage />} />
-                                <Route path={ADMIN_PATHS.dataHubHistory} element={<DataHubPage />} />
+                                <Route path={ADMIN_PATHS.dataHub} element={<Navigate to={`${ADMIN_PATHS.campaignsContactCenter}?tab=export`} replace />} />
+                                <Route path={ADMIN_PATHS.dataHubHistory} element={<Navigate to={`${ADMIN_PATHS.campaignsContactCenter}?tab=logs`} replace />} />
                                 {/* Team & Access Control */}
                                 <Route path={ADMIN_PATHS.teamMembers} element={<TeamAccessConsolePage />} />
                                 <Route path={adminUi('team/members/:id')} element={<MemberDetailPage />} />

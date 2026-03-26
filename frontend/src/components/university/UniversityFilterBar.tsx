@@ -88,32 +88,48 @@ export default function UniversityFilterBar({
                         onChange={(e) => setSort(e.target.value as UniversityCardSort)}
                         className="input-field h-10"
                     >
-                        <option value="closing_soon">Closing Soon</option>
-                        <option value="exam_soon">Exam Soon</option>
                         <option value="name_asc">Name (A-Z)</option>
                         <option value="name_desc">Name (Z-A)</option>
+                        <option value="closing_soon">Closing Soon</option>
+                        <option value="exam_soon">Exam Soon</option>
                     </select>
                 </div>
             </div>
 
             {/* Mobile filters */}
-            <div className={`${!hideCategoryTabs ? 'mt-2.5' : ''} md:hidden`}>
-                <div className="flex items-center gap-2">
-                    <div className="relative min-w-0 flex-1">
-                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
-                        <input
-                            value={search}
-                            onChange={(event) => setSearch(event.target.value)}
-                            placeholder="Search by name..."
-                            className="input-field h-9 w-full pl-9 pr-3 text-sm"
-                            aria-label="Search universities"
-                        />
+            <div className={`${!hideCategoryTabs ? 'mt-2.5' : ''} md:hidden space-y-2`}>
+                <div className="relative min-w-0">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
+                    <input
+                        value={search}
+                        onChange={(event) => setSearch(event.target.value)}
+                        placeholder="Search by name..."
+                        className="input-field h-9 w-full pl-9 pr-3 text-sm"
+                        aria-label="Search universities"
+                    />
+                </div>
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
+                    <div className="min-w-0">
+                        <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.18em] text-text-muted dark:text-dark-text/50">
+                            Sort By
+                        </label>
+                        <select
+                            value={sort}
+                            onChange={(event) => setSort(event.target.value as UniversityCardSort)}
+                            className="input-field h-9 w-full text-sm"
+                            aria-label="Sort universities"
+                        >
+                            <option value="name_asc">Name (A-Z)</option>
+                            <option value="name_desc">Name (Z-A)</option>
+                            <option value="closing_soon">Closing Soon</option>
+                            <option value="exam_soon">Exam Soon</option>
+                        </select>
                     </div>
                     <button
                         type="button"
                         onClick={onOpenMobileFilters}
-                        className="btn-outline text-xs h-9 gap-1.5 flex-shrink-0"
-                        aria-label="Open filter panel"
+                        className="btn-outline h-9 gap-1.5 px-3 text-xs font-semibold flex-shrink-0"
+                        aria-label="Open more filters"
                     >
                         <SlidersHorizontal className="h-3.5 w-3.5" />
                         Filters

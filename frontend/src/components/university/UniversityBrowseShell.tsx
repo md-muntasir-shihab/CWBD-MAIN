@@ -26,10 +26,21 @@ const UNIVERSITY_SORT_OPTIONS: UniversityCardSort[] = [
     'exam_soon',
 ];
 
-function normalizeUniversitySort(value: string, fallback: UniversityCardSort = 'closing_soon'): UniversityCardSort {
+function normalizeUniversitySort(value: string, fallback: UniversityCardSort = 'name_asc'): UniversityCardSort {
     return UNIVERSITY_SORT_OPTIONS.includes(value as UniversityCardSort)
         ? (value as UniversityCardSort)
         : fallback;
+}
+
+function resolvePublicDefaultSort(value: string | undefined): UniversityCardSort {
+    const normalized = normalizeUniversitySort(value || '', 'name_asc');
+    if (normalized === 'nearest_deadline' || normalized === 'closing_soon') {
+        return 'name_asc';
+    }
+    if (normalized === 'alphabetical') {
+        return 'name_asc';
+    }
+    return normalized;
 }
 
 interface UniversityBrowseShellProps {
@@ -64,8 +75,8 @@ export default function UniversityBrowseShell({
     const categories = useMemo(() => sortCategories(categoriesQuery.data || []), [categoriesQuery.data]);
     const defaultCategoryFromAdmin = String(homeSettingsQuery.data?.universityDashboard?.defaultCategory || '').trim();
     const showAllCategories = Boolean(homeSettingsQuery.data?.universityDashboard?.showAllCategories);
-    const adminDefaultSort: UniversityCardSort = normalizeUniversitySort(
-        homeSettingsQuery.data?.universityCardConfig?.defaultSort || 'closing_soon',
+    const adminDefaultSort: UniversityCardSort = resolvePublicDefaultSort(
+        homeSettingsQuery.data?.universityCardConfig?.defaultSort,
     );
     const sortFromUrl = normalizeUniversitySort(searchParams.get('sort') || '', adminDefaultSort);
 
@@ -105,7 +116,7 @@ export default function UniversityBrowseShell({
         if (nextParams === currentParams) return;
 
         setSearchParams(params, { replace: true });
-    }, [fixedCategory, fixedCluster, searchParams, selectedCategory, selectedCluster, search, sort, setSearchParams]);
+    }, [adminDefaultSort, fixedCategory, fixedCluster, searchParams, selectedCategory, selectedCluster, search, sort, setSearchParams]);
 
     useEffect(() => {
         const timeout = window.setTimeout(() => {
@@ -190,7 +201,15 @@ export default function UniversityBrowseShell({
         if (!exists && categories[0]) setSelectedCategory(categories[0].categoryName);
     }, [categories, selectedCategory, fixedCategory, showAllCategories]);
 
-    const activeCategory = fixedCategory || selectedCategory || '';
+    const activeCategory = useMemo(() => {
+        if (fixedCategory) return fixedCategory;
+        if (selectedCategory.trim()) return selectedCategory;
+        if (showAllCategories && categoryFromUrl.trim().toLowerCase() === 'all') return 'all';
+        if (defaultCategoryFromAdmin && categories.some((item) => item.categoryName === defaultCategoryFromAdmin)) {
+            return defaultCategoryFromAdmin;
+        }
+        return categories[0]?.categoryName || '';
+    }, [categories, categoryFromUrl, defaultCategoryFromAdmin, fixedCategory, selectedCategory, showAllCategories]);
     const activeCategoryMeta = useMemo(
         () => categories.find((item) => item.categoryName === activeCategory) || null,
         [categories, activeCategory],
@@ -200,12 +219,19 @@ export default function UniversityBrowseShell({
         [activeCategoryMeta],
     );
 
-    useEffect(() => {
-        if (!selectedCluster) return;
-        if (fixedCluster) return;
-        if (!activeCategoryMeta) return;
-        if (!clusters.includes(selectedCluster)) setSelectedCluster('');
+    const effectiveCluster = useMemo(() => {
+        if (fixedCluster) return fixedCluster;
+        if (!selectedCluster) return '';
+        if (!activeCategoryMeta) return '';
+        return clusters.includes(selectedCluster) ? selectedCluster : '';
     }, [activeCategoryMeta, clusters, fixedCluster, selectedCluster]);
+
+    useEffect(() => {
+        if (!selectedCluster || fixedCluster || !activeCategoryMeta) return;
+        if (!effectiveCluster) {
+            setSelectedCluster('');
+        }
+    }, [activeCategoryMeta, effectiveCluster, fixedCluster, selectedCluster]);
 
     useEffect(() => {
         syncUrlState({});
@@ -213,7 +239,7 @@ export default function UniversityBrowseShell({
 
     const universitiesQuery = useUniversities({
         category: activeCategory,
-        clusterGroup: fixedCluster || selectedCluster || undefined,
+        clusterGroup: effectiveCluster || undefined,
         q: debouncedSearch.trim() || undefined,
         sort,
     });
@@ -234,7 +260,7 @@ export default function UniversityBrowseShell({
     );
     const animationLevel = homeSettingsQuery.data?.ui?.animationLevel || 'minimal';
     const cardConfig = homeSettingsQuery.data?.universityCardConfig;
-    const hasActiveFilters = Boolean(search.trim() || selectedCluster);
+    const hasActiveFilters = Boolean(search.trim() || effectiveCluster);
 
     return (
         <div className="section-container py-6 sm:py-8 overflow-x-hidden">
@@ -254,7 +280,7 @@ export default function UniversityBrowseShell({
                 sort={sort}
                 setSort={setSort}
                 clusters={clusters}
-                selectedCluster={selectedCluster}
+                selectedCluster={effectiveCluster}
                 setSelectedCluster={setSelectedCluster}
                 hasActiveFilters={hasActiveFilters}
                 onOpenMobileFilters={() => setFilterOpen(true)}
@@ -289,7 +315,7 @@ export default function UniversityBrowseShell({
                     items={mappedItems as unknown as Record<string, unknown>[]}
                     config={cardConfig}
                     animationLevel={animationLevel}
-                    loading={universitiesQuery.isLoading && !universitiesQuery.isPlaceholderData}
+                    loading={universitiesQuery.isLoading || (universitiesQuery.isFetching && universitiesQuery.isPlaceholderData)}
                     emptyText="No universities in this category."
                     sort={sort}
                     cardVariant={cardVariant}
@@ -305,7 +331,7 @@ export default function UniversityBrowseShell({
                 sort={sort}
                 setSort={setSort}
                 clusters={clusters}
-                selectedCluster={selectedCluster}
+                selectedCluster={effectiveCluster}
                 setSelectedCluster={setSelectedCluster}
             />
         </div>

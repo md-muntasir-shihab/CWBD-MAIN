@@ -13,6 +13,14 @@ const Question_1 = __importDefault(require("../models/Question"));
 const User_1 = __importDefault(require("../models/User"));
 const ManualPayment_1 = __importDefault(require("../models/ManualPayment"));
 const SupportTicket_1 = __importDefault(require("../models/SupportTicket"));
+const ContactMessage_1 = __importDefault(require("../models/ContactMessage"));
+const Resource_1 = __importDefault(require("../models/Resource"));
+const NotificationJob_1 = __importDefault(require("../models/NotificationJob"));
+const UserSubscription_1 = __importDefault(require("../models/UserSubscription"));
+const SubscriptionPlan_1 = __importDefault(require("../models/SubscriptionPlan"));
+const TeamInvite_1 = __importDefault(require("../models/TeamInvite"));
+const TeamRole_1 = __importDefault(require("../models/TeamRole"));
+const SecurityAlertLog_1 = __importDefault(require("../models/SecurityAlertLog"));
 const adminGetDashboardSummary = async (_req, res) => {
     try {
         const now = new Date();
@@ -20,7 +28,10 @@ const adminGetDashboardSummary = async (_req, res) => {
         startOfToday.setHours(0, 0, 0, 0);
         const endOfToday = new Date(startOfToday);
         endOfToday.setDate(endOfToday.getDate() + 1);
-        const [totalUniversities, activeUniversities, featuredUniversities, homeSettings, pendingNews, publishedToday, liveExams, upcomingExams, totalQuestions, totalActiveStudents, suspendedStudents, pendingPaymentStudents, paidToday, unreadSupportTickets,] = await Promise.all([
+        const renewalDueUntil = new Date(now);
+        renewalDueUntil.setDate(renewalDueUntil.getDate() + 7);
+        const staffRoles = ['superadmin', 'admin', 'moderator', 'editor', 'viewer', 'support_agent', 'finance_agent'];
+        const [totalUniversities, activeUniversities, featuredUniversities, homeSettings, pendingNews, publishedToday, liveExams, upcomingExams, totalQuestions, totalActiveStudents, suspendedStudents, pendingPaymentStudents, pendingPaymentApprovals, paidToday, unreadSupportTickets, unreadContactMessages, publicResources, featuredResources, totalCampaigns, queuedOrProcessingCampaigns, failedCampaignsToday, activeSubscribers, renewalDueSubscribers, activePlans, activeStaff, pendingInvites, activeRoles, unreadSecurityAlerts, criticalSecurityAlerts,] = await Promise.all([
             University_1.default.countDocuments({}),
             University_1.default.countDocuments({ isActive: true, isArchived: { $ne: true } }),
             University_1.default.countDocuments({ featured: true }),
@@ -33,7 +44,15 @@ const adminGetDashboardSummary = async (_req, res) => {
             User_1.default.countDocuments({ role: 'student', status: 'active' }),
             User_1.default.countDocuments({ role: 'student', status: 'suspended' }),
             User_1.default.countDocuments({ role: 'student', status: 'pending' }),
-            ManualPayment_1.default.countDocuments({ date: { $gte: startOfToday, $lt: endOfToday } }),
+            ManualPayment_1.default.countDocuments({ status: 'pending' }),
+            ManualPayment_1.default.countDocuments({
+                status: 'paid',
+                $or: [
+                    { paidAt: { $gte: startOfToday, $lt: endOfToday } },
+                    { paidAt: { $exists: false }, date: { $gte: startOfToday, $lt: endOfToday } },
+                    { paidAt: null, date: { $gte: startOfToday, $lt: endOfToday } },
+                ],
+            }),
             SupportTicket_1.default.countDocuments({
                 $or: [
                     { unreadCountForAdmin: { $gt: 0 } },
@@ -43,6 +62,32 @@ const adminGetDashboardSummary = async (_req, res) => {
                     },
                 ],
             }),
+            ContactMessage_1.default.countDocuments({ unreadByAdmin: true }),
+            Resource_1.default.countDocuments({
+                isPublic: true,
+                publishDate: { $lte: now },
+                $or: [{ expiryDate: { $exists: false } }, { expiryDate: null }, { expiryDate: { $gt: now } }],
+            }),
+            Resource_1.default.countDocuments({
+                isPublic: true,
+                isFeatured: true,
+                publishDate: { $lte: now },
+                $or: [{ expiryDate: { $exists: false } }, { expiryDate: null }, { expiryDate: { $gt: now } }],
+            }),
+            NotificationJob_1.default.countDocuments({ isTestSend: { $ne: true } }),
+            NotificationJob_1.default.countDocuments({ isTestSend: { $ne: true }, status: { $in: ['queued', 'processing'] } }),
+            NotificationJob_1.default.countDocuments({ isTestSend: { $ne: true }, status: 'failed', updatedAt: { $gte: startOfToday, $lt: endOfToday } }),
+            UserSubscription_1.default.countDocuments({ status: 'active', expiresAtUTC: { $gt: now } }),
+            UserSubscription_1.default.countDocuments({
+                status: 'active',
+                expiresAtUTC: { $gt: now, $lte: renewalDueUntil },
+            }),
+            SubscriptionPlan_1.default.countDocuments({ enabled: true, isArchived: { $ne: true } }),
+            User_1.default.countDocuments({ role: { $in: staffRoles }, status: 'active' }),
+            TeamInvite_1.default.countDocuments({ status: { $in: ['pending', 'sent'] } }),
+            TeamRole_1.default.countDocuments({ isActive: true }),
+            SecurityAlertLog_1.default.countDocuments({ isRead: false }),
+            SecurityAlertLog_1.default.countDocuments({ isRead: false, severity: 'critical' }),
         ]);
         const highlightedCategories = Array.isArray(homeSettings?.highlightedCategories)
             ? homeSettings.highlightedCategories.filter((item) => item?.enabled !== false).length
@@ -61,6 +106,7 @@ const adminGetDashboardSummary = async (_req, res) => {
             99: 'down',
         };
         const db = dbStateMap[mongoose_1.default.connection.readyState] || 'down';
+        const unreadSupportMessages = unreadSupportTickets + unreadContactMessages;
         res.json({
             universities: {
                 total: totalUniversities,
@@ -89,11 +135,41 @@ const adminGetDashboardSummary = async (_req, res) => {
                 suspended: suspendedStudents,
             },
             payments: {
-                pendingApprovals: 0,
+                pendingApprovals: pendingPaymentApprovals,
                 paidToday,
             },
+            financeCenter: {
+                pendingApprovals: pendingPaymentApprovals,
+                paidToday,
+            },
+            subscriptions: {
+                activeSubscribers,
+                renewalDue: renewalDueSubscribers,
+                activePlans,
+            },
+            resources: {
+                publicResources,
+                featuredResources,
+            },
+            campaigns: {
+                totalCampaigns,
+                queuedOrProcessing: queuedOrProcessingCampaigns,
+                failedToday: failedCampaignsToday,
+            },
             supportCenter: {
-                unreadMessages: unreadSupportTickets,
+                unreadMessages: unreadSupportMessages,
+                unreadTickets: unreadSupportTickets,
+                unreadContactMessages,
+            },
+            teamAccess: {
+                activeStaff,
+                pendingInvites,
+                activeRoles,
+            },
+            security: {
+                unreadAlerts: unreadSecurityAlerts,
+                criticalAlerts: criticalSecurityAlerts,
+                db,
             },
             systemStatus: {
                 db,

@@ -9,7 +9,7 @@ export default defineConfig({
     workers: Number(process.env.PW_WORKERS || 1),
     reporter: [['list'], ['html', { outputFolder: '../qa-artifacts/playwright-report', open: 'never' }]],
     use: {
-        baseURL: process.env.E2E_BASE_URL || 'http://localhost:5175',
+        baseURL: process.env.E2E_BASE_URL || 'http://127.0.0.1:5175',
         trace: 'on-first-retry',
         screenshot: 'only-on-failure',
         video: 'retain-on-failure',

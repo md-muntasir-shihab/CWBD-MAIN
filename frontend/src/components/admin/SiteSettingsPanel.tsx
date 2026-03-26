@@ -97,6 +97,10 @@ const defaultSettings: SiteSettingsForm = {
     staticPages: createDefaultWebsiteStaticPages(),
 };
 
+function deepEqual(a: unknown, b: unknown): boolean {
+    return JSON.stringify(a) === JSON.stringify(b);
+}
+
 export default function SiteSettingsPanel() {
     const queryClient = useQueryClient();
     const runtimeFlags = useAdminRuntimeFlags();
@@ -106,6 +110,9 @@ export default function SiteSettingsPanel() {
     const [faviconFile, setFaviconFile] = useState<File | null>(null);
     const [previewLogo, setPreviewLogo] = useState('');
     const [previewFavicon, setPreviewFavicon] = useState('');
+    const originalSettingsRef = useRef<SiteSettingsForm>(defaultSettings);
+    const originalLogoRef = useRef('');
+    const originalFaviconRef = useRef('');
 
     const logoRef = useRef<HTMLInputElement>(null);
     const faviconRef = useRef<HTMLInputElement>(null);
@@ -117,7 +124,7 @@ export default function SiteSettingsPanel() {
     useEffect(() => {
         if (!settingsQuery.data) return;
         const data = settingsQuery.data;
-        setSettings({
+        const nextSettings = {
             ...defaultSettings,
             ...data,
             socialLinks: {
@@ -137,9 +144,15 @@ export default function SiteSettingsPanel() {
                 ...(data.pricingUi || {}),
             },
             staticPages: mergeWebsiteStaticPages(data.staticPages),
-        });
+        };
+        originalSettingsRef.current = nextSettings;
+        originalLogoRef.current = data.logo || '';
+        originalFaviconRef.current = data.favicon || '';
+        setSettings(nextSettings);
         setPreviewLogo(data.logo || '');
         setPreviewFavicon(data.favicon || '');
+        setLogoFile(null);
+        setFaviconFile(null);
     }, [settingsQuery.data]);
 
     const saveMutation = useMutation({
@@ -190,6 +203,14 @@ export default function SiteSettingsPanel() {
 
     const onSave = async () => {
         await saveMutation.mutateAsync();
+    };
+
+    const handleReset = () => {
+        setSettings(originalSettingsRef.current);
+        setPreviewLogo(originalLogoRef.current);
+        setPreviewFavicon(originalFaviconRef.current);
+        setLogoFile(null);
+        setFaviconFile(null);
     };
 
     if (settingsQuery.isLoading) {
@@ -285,6 +306,40 @@ export default function SiteSettingsPanel() {
         );
     }
 
+    const isDirty = !deepEqual(settings, originalSettingsRef.current) || Boolean(logoFile) || Boolean(faviconFile);
+    const summaryCards = [
+        {
+            title: 'Branding',
+            value: settings.websiteName || 'Not set',
+            detail: previewLogo ? 'Logo ready' : 'Logo missing',
+        },
+        {
+            title: 'Contact',
+            value: settings.contactEmail || 'Email missing',
+            detail: settings.contactPhone || 'Phone missing',
+        },
+        {
+            title: 'Theme',
+            value: settings.theme.modeDefault,
+            detail: `${settings.theme.animationLevel} motion`,
+        },
+        {
+            title: 'Social Links',
+            value: `${Object.values(settings.socialLinks).filter(Boolean).length} active`,
+            detail: settings.socialUi.clusterEnabled ? 'Cluster enabled' : 'Cluster hidden',
+        },
+        {
+            title: 'Pricing',
+            value: settings.pricingUi.currencyCode || 'BDT',
+            detail: settings.pricingUi.displayMode === 'symbol' ? 'Symbol mode' : 'Code mode',
+        },
+        {
+            title: 'Subscription CTA',
+            value: settings.subscriptionLoggedOutCtaMode === 'login' ? 'Login' : 'Contact',
+            detail: settings.subscriptionPageTitle || 'Subscription Plans',
+        },
+    ];
+
     const renderToggleCard = (
         title: string,
         checked: boolean,
@@ -345,9 +400,55 @@ export default function SiteSettingsPanel() {
                         />
                     </div>
                 </div>
-                <button onClick={onSave} disabled={saveMutation.isPending} className="bg-gradient-to-r from-indigo-600 to-cyan-600 text-white text-sm px-6 py-2 rounded-xl flex items-center gap-2 hover:opacity-90 disabled:opacity-50">
-                    {saveMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                    {isDirty ? (
+                        <span className="rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-200">
+                            Unsaved changes
+                        </span>
+                    ) : (
+                        <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200">
+                            Saved state
+                        </span>
+                    )}
+                    {isDirty ? (
+                        <button
+                            onClick={handleReset}
+                            className="rounded-xl border border-indigo-500/20 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-indigo-400/40 hover:bg-slate-900/60"
+                        >
+                            Reset
+                        </button>
+                    ) : null}
+                    <button onClick={onSave} disabled={saveMutation.isPending || !isDirty} className="bg-gradient-to-r from-indigo-600 to-cyan-600 text-white text-sm px-6 py-2 rounded-xl flex items-center gap-2 hover:opacity-90 disabled:opacity-50">
+                        {saveMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        {isDirty ? 'Save Changes' : 'Saved'}
+                    </button>
+                </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {summaryCards.map((card) => (
+                    <div key={card.title} className="rounded-2xl border border-indigo-500/10 bg-slate-900/55 p-4">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">{card.title}</p>
+                        <p className="mt-2 text-sm font-semibold text-white">{card.value}</p>
+                        <p className="mt-1 text-xs text-slate-400">{card.detail}</p>
+                    </div>
+                ))}
+            </div>
+
+            <div className="rounded-2xl border border-indigo-500/10 bg-slate-950/45 px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <p className="text-sm font-semibold text-white">Global settings workspace</p>
+                        <p className="text-xs text-slate-400">
+                            Branding, public contact, theme, pricing, subscription copy, and static pages stay in one save cycle.
+                        </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-xs text-slate-300">
+                        <span className="rounded-full border border-indigo-500/15 bg-slate-900/70 px-3 py-1">No route changes</span>
+                        <span className="rounded-full border border-indigo-500/15 bg-slate-900/70 px-3 py-1">Public-facing impact</span>
+                        <span className="rounded-full border border-indigo-500/15 bg-slate-900/70 px-3 py-1">Save required</span>
+                    </div>
+                </div>
             </div>
 
             <div className="grid gap-6 xl:grid-cols-2">

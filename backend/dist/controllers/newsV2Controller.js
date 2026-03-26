@@ -79,6 +79,19 @@ const questionBank_1 = require("../utils/questionBank");
 const homeStream_1 = require("../realtime/homeStream");
 const studentDashboardStream_1 = require("../realtime/studentDashboardStream");
 const notificationOrchestrationService_1 = require("../services/notificationOrchestrationService");
+function publicNewsDiagnosticsEnabled() {
+    return process.env.ENABLE_PUBLIC_NEWS_DIAGNOSTICS === 'true' || process.env.NODE_ENV === 'test';
+}
+function ensurePublicNewsDiagnosticsEnabled(req, res) {
+    if (publicNewsDiagnosticsEnabled())
+        return true;
+    if (req.method === 'POST') {
+        res.status(404).json({ message: 'Not found' });
+        return false;
+    }
+    res.status(404).send('Not found');
+    return false;
+}
 const DEFAULT_NEWS_V2_SETTINGS = {
     pageTitle: 'Admission News & Updates',
     pageSubtitle: 'Latest verified admission updates, circulars, and deadlines.',
@@ -3618,6 +3631,8 @@ function getNewsDiagnosticArticles(host) {
 }
 async function getPublicNewsV2DiagnosticFeed(req, res) {
     try {
+        if (!ensurePublicNewsDiagnosticsEnabled(req, res))
+            return;
         const host = `${req.protocol}://${req.get('host') || 'localhost'}`;
         const articles = getNewsDiagnosticArticles(host);
         const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -3648,6 +3663,8 @@ async function getPublicNewsV2DiagnosticFeed(req, res) {
 }
 async function getPublicNewsV2DiagnosticArticle(req, res) {
     try {
+        if (!ensurePublicNewsDiagnosticsEnabled(req, res))
+            return;
         const slug = String(req.params.slug || '').trim();
         const host = `${req.protocol}://${req.get('host') || 'localhost'}`;
         const article = getNewsDiagnosticArticles(host).find((item) => item.key === slug);
@@ -3676,6 +3693,8 @@ async function getPublicNewsV2DiagnosticArticle(req, res) {
 }
 async function getPublicNewsV2DiagnosticDelivery(req, res) {
     try {
+        if (!ensurePublicNewsDiagnosticsEnabled(req, res))
+            return;
         const channel = String(req.params.channel || '').trim().toLowerCase();
         if (channel !== 'sms' && channel !== 'email') {
             res.status(404).json({ message: 'Diagnostic delivery channel not found' });

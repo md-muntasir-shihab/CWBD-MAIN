@@ -30,6 +30,7 @@ export declare function ensureUniversityClusterByName(name: unknown): Promise<{
     name: string;
 }>;
 export declare function syncUniversityCategorySharedConfig(categoryId: string, actorId?: string | null): Promise<UniversitySyncSummary>;
+export declare function renameUniversityCategoryReferences(categoryId: string, previousName: string, nextName: string): Promise<void>;
 export declare function syncUniversityClusterSharedConfig(clusterId: string, actorId?: string | null): Promise<UniversitySyncSummary>;
 export declare function syncManualClusterMembership(universityIds: Array<string | mongoose.Types.ObjectId>, clusterId?: string | null): Promise<void>;
 export declare function reconcileUniversityClusterAssignments(actorId?: string | null): Promise<UniversityClusterResolutionSummary>;

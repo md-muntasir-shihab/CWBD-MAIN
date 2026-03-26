@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { promises as fs } from 'fs';
 import path from 'path';
-import WebsiteSettings from '../models/WebsiteSettings';
+import WebsiteSettings, { normalizeWebsiteStaticPages } from '../models/WebsiteSettings';
 import HomePage from '../models/HomePage';
 import User from '../models/User';
 import Exam from '../models/Exam';
@@ -114,6 +114,11 @@ const ensureConfigs = async () => {
         settings.favicon = nextFavicon;
         settingsUpdated = true;
     }
+    const nextStaticPages = normalizeWebsiteStaticPages(settings.staticPages);
+    if (JSON.stringify(settings.staticPages || null) !== JSON.stringify(nextStaticPages)) {
+        settings.staticPages = nextStaticPages as any;
+        settingsUpdated = true;
+    }
     if (settingsUpdated) await settings.save();
     let home = await HomePage.findOne();
     if (!home) home = await HomePage.create({});
@@ -189,6 +194,7 @@ export const getSettings = async (req: Request, res: Response) => {
             ...base,
             siteName: String(base.websiteName || ''),
             logoUrl: String(base.logo || ''),
+            staticPages: normalizeWebsiteStaticPages(base.staticPages),
             socialLinks: {
                 ...DEFAULT_SOCIAL_LINKS,
                 ...(base.socialLinks || {}),
@@ -258,6 +264,13 @@ export const updateSettings = async (req: Request, res: Response) => {
             payload.pricingUi = { ...DEFAULT_PRICING_UI, ...(current?.pricingUi || {}), ...(parsedPricingUi as Record<string, unknown>) };
         } else if (payload.pricingUi !== undefined) {
             payload.pricingUi = { ...DEFAULT_PRICING_UI, ...(current?.pricingUi || {}) };
+        }
+
+        const parsedStaticPages = parseIfStringifiedObject(payload.staticPages);
+        if (parsedStaticPages && typeof parsedStaticPages === 'object') {
+            payload.staticPages = normalizeWebsiteStaticPages(parsedStaticPages, current?.staticPages as any);
+        } else if (payload.staticPages !== undefined) {
+            payload.staticPages = normalizeWebsiteStaticPages(current?.staticPages as any);
         }
 
         // Use findOneAndUpdate to ensure we update the single settings document

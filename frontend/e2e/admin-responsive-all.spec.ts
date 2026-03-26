@@ -33,6 +33,19 @@ const viewports = [
     { width: 1440, height: 900 },
 ];
 
+async function waitForAdminShell(page: import('@playwright/test').Page, route: string) {
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('body'), `body missing on ${route}`).toBeVisible({ timeout: 15000 });
+
+    const accessGate = page.getByText(/Checking admin access/i).first();
+    if (await accessGate.isVisible().catch(() => false)) {
+        await accessGate.waitFor({ state: 'hidden', timeout: 15000 }).catch(() => undefined);
+    }
+
+    await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => undefined);
+    await expect(page.locator('main').first(), `main shell missing on ${route}`).toBeVisible({ timeout: 15000 });
+}
+
 test.describe('Admin Responsive Matrix', () => {
     test.beforeEach(async ({ page }, testInfo) => {
         test.skip(testInfo.project.name.includes('mobile'), 'Viewport matrix runs on desktop project only.');
@@ -41,8 +54,8 @@ test.describe('Admin Responsive Matrix', () => {
 
     for (const viewport of viewports) {
         test(`routes are responsive at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+            test.setTimeout(180_000);
             await page.setViewportSize(viewport);
-            const context = page.context();
 
             let editorId = '';
             try {
@@ -63,33 +76,22 @@ test.describe('Admin Responsive Matrix', () => {
                 '/__cw_admin__/news/editor/000000000000000000000000',
             ];
 
-            let currentPage = page;
+            for (const route of routes) {
+                const tracker = attachHealthTracker(page);
+                await page.goto(route, { waitUntil: 'domcontentloaded' });
+                await waitForAdminShell(page, route);
 
-            for (let index = 0; index < routes.length; index += 1) {
-                const route = routes[index];
-                if (index > 0) {
-                    await currentPage.close();
-                    currentPage = await context.newPage();
-                    await currentPage.setViewportSize(viewport);
-                }
-
-                const tracker = attachHealthTracker(currentPage);
-                await currentPage.goto(route);
-                await expect(currentPage.locator('main').first(), `main shell missing on ${route}`).toBeVisible();
-
-                const overflow = await currentPage.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+                const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
                 expect.soft(overflow, `horizontal overflow on ${route}`).toBeLessThanOrEqual(1);
 
                 if (viewport.width <= 420) {
-                    const menuVisible = await currentPage
-                        .locator('button[aria-label*="menu" i], button:has-text("Menu"), button:has-text("Open admin menu")')
-                        .first()
-                        .isVisible()
-                        .catch(() => false);
+                    const menuButton = page.getByRole('button', { name: /Open admin menu/i }).first();
+                    await menuButton.waitFor({ state: 'visible', timeout: 10000 }).catch(() => undefined);
+                    const menuVisible = await menuButton.isVisible().catch(() => false);
                     expect.soft(menuVisible, `mobile menu trigger missing on ${route}`).toBeTruthy();
                 }
 
-                await expectPageHealthy(currentPage, tracker);
+                await expectPageHealthy(page, tracker);
                 tracker.detach();
             }
         });

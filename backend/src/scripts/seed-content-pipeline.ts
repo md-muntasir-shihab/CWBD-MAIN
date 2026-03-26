@@ -46,6 +46,17 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const PLACEHOLDER_BANNER = 'https://images.unsplash.com/photo-1498050108023-c5249f4df085';
 const PLACEHOLDER_NEWS = 'https://images.unsplash.com/photo-1504711434969-e33886168f5c';
 const PLACEHOLDER_RESOURCE = 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173';
+const SEEDED_PUBLIC_CONTACT_EMAIL = String(process.env.SEED_PUBLIC_CONTACT_EMAIL || '').trim();
+const SEEDED_PUBLIC_CONTACT_PHONE = String(process.env.SEED_PUBLIC_CONTACT_PHONE || '').trim();
+const SEEDED_PUBLIC_SOCIAL_LINKS = {
+    facebook: String(process.env.SEED_PUBLIC_FACEBOOK_URL || '').trim(),
+    whatsapp: String(process.env.SEED_PUBLIC_WHATSAPP_URL || '').trim(),
+    messenger: String(process.env.SEED_PUBLIC_MESSENGER_URL || '').trim(),
+    telegram: String(process.env.SEED_PUBLIC_TELEGRAM_URL || '').trim(),
+    twitter: String(process.env.SEED_PUBLIC_TWITTER_URL || '').trim(),
+    youtube: String(process.env.SEED_PUBLIC_YOUTUBE_URL || '').trim(),
+    instagram: String(process.env.SEED_PUBLIC_INSTAGRAM_URL || '').trim(),
+};
 
 type SeedContentPipelineOptions = {
     runLabel?: string;
@@ -116,6 +127,40 @@ function buildReachableExampleUrl(slug: string, kind: 'website' | 'admission'): 
     return kind === 'admission'
         ? `https://example.com/admission/${safeSlug}`
         : `https://example.com/universities/${safeSlug}`;
+}
+
+function buildSeededPublicSocialList(): Array<{
+    platform: string;
+    url: string;
+    description: string;
+    enabled: boolean;
+    placements: Array<'header' | 'footer' | 'home' | 'news' | 'contact'>;
+}> {
+    const placements: Array<'header' | 'footer' | 'home' | 'news' | 'contact'> = ['header', 'footer', 'home', 'news', 'contact'];
+
+    return [
+        {
+            platform: 'whatsapp',
+            url: SEEDED_PUBLIC_SOCIAL_LINKS.whatsapp,
+            description: 'WhatsApp support',
+            enabled: true,
+            placements,
+        },
+        {
+            platform: 'facebook',
+            url: SEEDED_PUBLIC_SOCIAL_LINKS.facebook,
+            description: 'Official Facebook page',
+            enabled: true,
+            placements,
+        },
+        {
+            platform: 'telegram',
+            url: SEEDED_PUBLIC_SOCIAL_LINKS.telegram,
+            description: 'Telegram community',
+            enabled: true,
+            placements,
+        },
+    ].filter((item) => Boolean(item.url));
 }
 
 function nowPlusDays(days: number): Date {
@@ -726,17 +771,9 @@ export async function seedContentPipeline(
             $set: {
                 websiteName: 'CampusWay',
                 motto: 'Admission prep and live updates in one place',
-                contactEmail: 'support@campusway.com',
-                contactPhone: '+8801700000000',
-                socialLinks: {
-                    facebook: 'https://facebook.com/campusway',
-                    whatsapp: 'https://wa.me/8801700000000',
-                    messenger: 'https://m.me/campusway',
-                    telegram: 'https://t.me/campusway',
-                    twitter: 'https://twitter.com/campusway',
-                    youtube: 'https://youtube.com/@campusway',
-                    instagram: 'https://instagram.com/campusway',
-                },
+                contactEmail: SEEDED_PUBLIC_CONTACT_EMAIL,
+                contactPhone: SEEDED_PUBLIC_CONTACT_PHONE,
+                socialLinks: SEEDED_PUBLIC_SOCIAL_LINKS,
                 subscriptionPageTitle: 'Subscription Plans',
                 subscriptionPageSubtitle: 'Choose a plan and unlock full exam experience.',
                 subscriptionDefaultBannerUrl: PLACEHOLDER_BANNER,
@@ -751,31 +788,9 @@ export async function seedContentPipeline(
         {
             $set: {
                 siteName: 'CampusWay',
-                contactEmail: 'support@campusway.com',
-                contactPhone: '+8801700000000',
-                socialLinks: [
-                    {
-                        platform: 'whatsapp',
-                        url: 'https://wa.me/8801700000000',
-                        description: 'WhatsApp support',
-                        enabled: true,
-                        placements: ['header', 'footer', 'home', 'news', 'contact'],
-                    },
-                    {
-                        platform: 'facebook',
-                        url: 'https://facebook.com/campusway',
-                        description: 'Official Facebook page',
-                        enabled: true,
-                        placements: ['header', 'footer', 'home', 'news', 'contact'],
-                    },
-                    {
-                        platform: 'telegram',
-                        url: 'https://t.me/campusway',
-                        description: 'Telegram community',
-                        enabled: true,
-                        placements: ['header', 'footer', 'home', 'news', 'contact'],
-                    },
-                ],
+                contactEmail: SEEDED_PUBLIC_CONTACT_EMAIL,
+                contactPhone: SEEDED_PUBLIC_CONTACT_PHONE,
+                socialLinks: buildSeededPublicSocialList(),
                 'featureFlags.subscriptionEngineV2': true,
                 'featureFlags.studentDashboardV2': true,
                 'featureFlags.studentManagementV2': true,

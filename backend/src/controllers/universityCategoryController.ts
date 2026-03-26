@@ -7,6 +7,7 @@ import { broadcastHomeStreamEvent } from '../realtime/homeStream';
 import {
     backfillUniversityTaxonomyIfNeeded,
     normalizeExamCenters,
+    renameUniversityCategoryReferences,
     syncUniversityCategorySharedConfig,
 } from '../services/universitySyncService';
 
@@ -138,6 +139,8 @@ export async function adminUpdateUniversityCategory(req: Request, res: Response)
             return;
         }
 
+        const previousName = String(category.name || '').trim();
+
         if (payload.name !== undefined) {
             const nextName = String(payload.name || '').trim();
             if (!nextName) {
@@ -162,6 +165,7 @@ export async function adminUpdateUniversityCategory(req: Request, res: Response)
         category.updatedBy = asObjectId((req as Request & { user?: { _id?: string } }).user?._id);
 
         await category.save();
+        await renameUniversityCategoryReferences(String(category._id), previousName, String(category.name || '').trim());
 
         broadcastHomeStreamEvent({
             type: 'category-updated',

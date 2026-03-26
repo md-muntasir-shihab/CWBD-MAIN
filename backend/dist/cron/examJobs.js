@@ -24,6 +24,10 @@ async function autoSubmitExpiredSession(session) {
             },
         });
         if (!result.ok) {
+            if (Number(result.statusCode || 0) === 423) {
+                console.info(`[CRON] Skipped locked attempt ${session._id}`);
+                return;
+            }
             console.warn(`[CRON] Skipped attempt ${session._id} -> ${result.statusCode}: ${result.message}`);
             return;
         }
@@ -55,6 +59,7 @@ function startExamCronJobs() {
                 const bufferTime = new Date(now.getTime() - 5000);
                 const expiredSessions = await ExamSession_1.default.find({
                     isActive: true,
+                    sessionLocked: { $ne: true },
                     expiresAt: { $lt: bufferTime },
                     status: { $in: ['in_progress', 'expired'] },
                 }).select('_id exam student attemptNo expiresAt status ipAddress').lean();
