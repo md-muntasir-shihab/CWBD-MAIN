@@ -25,7 +25,7 @@ export default function FinanceAuditLogPage() {
             ) : (
                 <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs">
+                            <table className="min-w-[600px] w-full text-left text-xs">
                             <thead className="bg-slate-50 dark:bg-slate-800">
                                 <tr>
                                     <th className="px-3 py-2 font-medium text-slate-500">Timestamp</th>
